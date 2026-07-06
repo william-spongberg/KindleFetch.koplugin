@@ -39,14 +39,10 @@ local function parseBookTable(html)
         local book = {}
         local cells = {}
 
-        logger.info("KindleFetch: new row found:", row)
-
         -- extract all table cells
         for cell in row:gmatch('<td[^>]*>(.-)</td>') do
             table.insert(cells, cell)
         end
-
-        logger.info("KindleFetch: cells found:", cells)
 
         if #cells >= 10 then
             -- Cell 0: Cover image + MD5
@@ -54,6 +50,9 @@ local function parseBookTable(html)
             -- book.cover_url = cells[1]:match('src="([^"]+)"')
             -- Cell 1: Title
             book.title = cells[2]:match('>([^<]+)</span>')
+            book.safe_title = book.title:gsub("%.[a-zA-Z0-9]+$", "") -- remove any existing file extensions
+            book.safe_title = book.title:gsub("%s*%([^)]*%)", "")  -- remove anything in parentheses
+
             -- Cell 2: Authors
             book.authors = cells[3]:match('>([^<]+)</span>')
             if (not book.authors or book.authors == "") then
@@ -76,8 +75,10 @@ local function parseBookTable(html)
             -- at minimum need title + md5 for a valid book
             if book.title and book.md5 then
                 table.insert(books, book)
-                logger.info("KindleFetch: new book found:", book)
+                logger.info("KindleFetch: new book found", book)
             end
+        else
+            logger.info("KindleFetch: skipped row with missing cells", row)
         end
     end
 

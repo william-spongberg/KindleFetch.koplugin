@@ -267,7 +267,7 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     local current_pid = {
         pid = pid
     }
-    local progress_widget = DownloadProgress.new(book.title, function()
+    local progress_widget = DownloadProgress.new(book.safe_title, function()
         killPid(current_pid.pid)
     end)
     progress_widget:show()

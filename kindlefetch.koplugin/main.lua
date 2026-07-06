@@ -42,12 +42,7 @@ end
 
 local function buildDownloadPath(book)
     local download_dir = getDownloadDirectory()
-    local title = book.title
-    
-    title = title:gsub("%.[a-zA-Z0-9]+$", "") -- remove any existing file extensions
-    title = title:gsub("%s*%([^)]*%)", "")  -- remove anything in parentheses
-
-    local filename = util.getSafeFilename(title .. "." .. book.file_type, download_dir)
+    local filename = util.getSafeFilename(book.safe_title .. "." .. book.file_type, download_dir)
     return download_dir .. "/" .. filename
 end
 
@@ -178,7 +173,7 @@ function KindleFetch:showResults(books)
         local book_text = book.title .. " by " .. book.authors
         local details = formatBookDetails(book)
         logger.info("KindleFetch: book details for", book.title, "=", details)
-        book_text = book_text .. " . " .. details
+        book_text = book_text .. " · " .. details
 
         table.insert(menu_items, {
             text = book_text,
