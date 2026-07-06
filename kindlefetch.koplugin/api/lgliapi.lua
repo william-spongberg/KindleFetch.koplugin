@@ -187,6 +187,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         if not tried_proxy and os.getenv("PROXY_URL") and os.getenv("PROXY_URL") ~= "" then
             local new_pid, new_exit_file, spawn_err = spawnCurlDownload(download_url, filepath, true)
             if not new_pid then
+                removeFile(filepath)
                 callback(false, spawn_err or "download failed and proxy retry could not start")
                 return
             end
@@ -197,11 +198,13 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
             return
         end
 
+        removeFile(filepath)
         callback(false, "download failed (curl exit code " .. tostring(exit_code) .. ")")
         return
     end
 
     if not isPidRunning(pid) then
+        removeFile(filepath)
         callback(false, "download process ended unexpectedly")
         return
     end
