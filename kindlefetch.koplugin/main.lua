@@ -47,7 +47,7 @@ local function buildDownloadPath(book)
     title = title:gsub("%.[a-zA-Z0-9]+$", "") -- remove any existing file extensions
     title = title:gsub("%s*%([^)]*%)", "")  -- remove anything in parentheses
 
-    local filename = util.getSafeFilename(book.title .. "." .. book.file_type, download_dir)
+    local filename = util.getSafeFilename(title .. "." .. book.file_type, download_dir)
     return download_dir .. "/" .. filename
 end
 
