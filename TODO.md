@@ -1,6 +1,7 @@
 # TODO
 
 - [ ] move to search tab
+- [ ] check curl version and update if needed
 - [ ] custom download location
 - [ ] custom language selection
 - [ ] more detailed error messages, especially for search failures
