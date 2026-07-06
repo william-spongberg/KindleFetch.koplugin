@@ -11,6 +11,9 @@ local LlgiAPI = {}
 LlgiAPI.base_url = "https://libgen.li"
 LlgiAPI.download_poll_interval = 0.5
 
+-- TODO: move the file functions into a dedicated util file
+-- TODO: move the curl functions into a dedicated curl file
+
 -- shell-escape a string for safe inclusion in a shell command
 local function shellQuote(str)
     return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
