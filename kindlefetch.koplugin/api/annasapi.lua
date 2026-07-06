@@ -97,9 +97,6 @@ function AnnasAPI:search(query)
     end
     logger.info("KindleFetch: search page fetched", #html, "bytes for", query)
 
-    -- debug
-    logger.info("KindleFetch: raw html", html)
-
     local books = parseBookTable(html)
     logger.info("KindleFetch: parsed", #books, "results for", query)
 
