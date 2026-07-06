@@ -3,7 +3,7 @@
 <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/stars/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github star tracker"></a>
 
 <img width="349" height="436" src="https://github.com/user-attachments/assets/c613b4f6-b9f6-4b42-85b7-dd7d3b0d6103" />
-<img width="349" height="436" alt="20260706_225105" src="https://github.com/user-attachments/assets/c0243316-8a56-4709-8b53-1e1b1df84e59" />
+<img width="349" height="436" src="https://github.com/user-attachments/assets/c0243316-8a56-4709-8b53-1e1b1df84e59" />
 
 Download books from Anna's Archive directly to your Kindle, entirely within the KOReader app.
 
@@ -70,12 +70,21 @@ The plugin is organised into (mostly) modular components:
 ## Usage
 
 1. Select Tools → Kindle Fetch from the main menu.
+<img width="349" height="436" src="https://github.com/user-attachments/assets/b2437c50-ef9c-4004-be2a-eee01ac83e1b" />
+<img width="349" height="436" src="https://github.com/user-attachments/assets/c68688f3-0dbf-429f-a9a0-6bff40f879da" />
 
 2. Enter a book title, author, or keyword in the search box.
 
+<img width="349" height="436" src="https://github.com/user-attachments/assets/c613b4f6-b9f6-4b42-85b7-dd7d3b0d6103" />
+
 3. Browse the results and tap a book to download.
 
+<img width="349" height="436" src="https://github.com/user-attachments/assets/c0243316-8a56-4709-8b53-1e1b1df84e59" />
+
 4. Monitor the download progress; tap Cancel to stop.
+
+<img width="349" height="436" src="https://github.com/user-attachments/assets/e761d261-a33f-4b7d-964b-765b65cadc0f" />
+<img width="349" height="436" src="https://github.com/user-attachments/assets/38d6c9f6-fdd9-43be-bf4b-bdd7c849f8cb" />
 
 Downloaded books are saved to your configured home directory.
 
