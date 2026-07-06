@@ -6,3 +6,4 @@
 - [ ] more detailed error messages, especially for search failures
 - [ ] keep awake while downloading
 - [ ] show book cover images
+- [ ] move utility functions in lgliapi.lua into their own files
