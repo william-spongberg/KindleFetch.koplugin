@@ -36,7 +36,7 @@ function DownloadProgress.new(title, on_cancel)
 
     -- download percentage
     self.status_widget = TextWidget:new{
-            text = status_text,
+            text = "",
             face = Font:getFace("cfont", 16),
             alignment = "center",
         }
