@@ -2,7 +2,7 @@
 
 - [ ] move to search tab
 - [ ] check curl version and update if needed
-- [ ] custom download location
+- [ ] custom download location (keep current method as default, but add button to pick download directory)
 - [ ] custom language selection
 - [ ] more detailed error messages, especially for search failures
 - [ ] keep awake while downloading
