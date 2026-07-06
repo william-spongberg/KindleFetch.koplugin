@@ -2,6 +2,9 @@
 
 <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/stars/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github star tracker"></a>
 
+<img width="442" height="551" src="https://github.com/user-attachments/assets/c613b4f6-b9f6-4b42-85b7-dd7d3b0d6103" />
+<img width="442" height="552" alt="20260706_225105" src="https://github.com/user-attachments/assets/c0243316-8a56-4709-8b53-1e1b1df84e59" />
+
 Download books from Anna's Archive directly to your Kindle, entirely within the KOReader app.
 
 ## Overview
