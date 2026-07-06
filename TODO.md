@@ -9,6 +9,6 @@
 - [ ] show book cover images
 - [ ] cache search results (with appropriate expiry)
 - [ ] add button to load more books
-- [ ] periodically (every week or so) scrape wikipedia or [shadow library](https://shadowlibraries.neocities.org/DirectDownloads/AnnasArchive/) for current Anna's Archive links
+- [ ] periodically (every week or so) scrape wikipedia or [shadow library](https://shadowlibraries.neocities.org/DirectDownloads/AnnasArchive/) for current Anna's Archive and Library Genesis links
 - [ ] change DNS to use cloudflare (1.1.1.1)
 - [ ] move utility functions in lgliapi.lua into their own files
