@@ -66,7 +66,7 @@ end
 function KindleFetch:addToMainMenu(menu_items)
     menu_items.kindlefetch = {
         text = _("Kindle Fetch"),
-        sorting_hint = "tools",
+        sorting_hint = "search",
         callback = function()
             self:setupUI()
         end

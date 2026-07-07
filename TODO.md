@@ -1,6 +1,6 @@
 # TODO
 
-- [ ] move to search tab
+- [x] move to search tab
 - [ ] check curl version and update if needed
 - [ ] custom download location (keep current method as default, but add button to pick download directory)
 - [ ] custom language selection
