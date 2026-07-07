@@ -2,7 +2,6 @@ local util = require("util")
 local logger = require("logger")
 local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
-local _ = require("gettext")
 
 local AnnasAPI = {}
 AnnasAPI.base_url = "https://annas-archive.gl"

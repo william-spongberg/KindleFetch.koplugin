@@ -1,7 +1,6 @@
 local http = require("socket.http")
 local ltn12 = require("ltn12")
 local logger = require("logger")
-local _ = require("gettext")
 
 local HttpUtil = {}
 
