@@ -339,7 +339,7 @@ local AVAILABLE_BOOK_TYPES = {{
 }}
 
 local function getSettingsFile()
-    return LuaSettings:open(DataStorage:getSettingsDir() .. "/kindlefetch.lua")
+    return LuaSettings:open(DataStorage:getSettingsDir() .. "/kindlefetch_settings.lua")
 end
 
 function KindleFetchSettings:load()
@@ -352,7 +352,7 @@ end
 -- util
 function KindleFetchSettings:getSetting(name)
     local settings_file = getSettingsFile()
-    return settings_file:readSetting(name) or DEFAULTS.name
+    return settings_file:readSetting(name) or DEFAULTS[name]
 end
 function KindleFetchSettings:setSetting(name, data)
     if type(data) ~= "table" then
