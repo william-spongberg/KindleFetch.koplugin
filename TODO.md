@@ -8,7 +8,7 @@
 - [ ] more detailed error messages, especially for search failures
 - [ ] keep awake while downloading
 - [ ] show book cover images
-- [ ] cache search results (with appropriate expiry)
+- [x] cache search results (with appropriate expiry)
 - [x] add button to load more books
 - [ ] periodically (every week or so) scrape wikipedia or [shadow library](https://shadowlibraries.neocities.org/DirectDownloads/AnnasArchive/) for current Anna's Archive and Library Genesis links
 - [x] move utility functions in lgliapi.lua into their own files

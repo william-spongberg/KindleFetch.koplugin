@@ -14,7 +14,7 @@ local StringUtil = require("util.stringutil")
 local AnnasAPI = require("api.annasapi")
 local LlgiAPI = require("api.lgliapi")
 local CurlUtil = require("util.curlutil")
-local KindleFetchSettings = require("util.settings")
+local KindleFetchSettings = require("settings.settings")
 local logger = require("logger")
 local _ = require("gettext")
 

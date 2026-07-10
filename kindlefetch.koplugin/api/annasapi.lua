@@ -2,7 +2,8 @@ local util = require("util")
 local logger = require("logger")
 local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
-local KindleFetchSettings = require("util.settings")
+local KindleFetchSettings = require("settings.settings")
+local SearchCache = require("cache.search_cache")
 
 local AnnasAPI = {}
 AnnasAPI.base_url = "https://annas-archive.gl"
@@ -70,6 +71,20 @@ function AnnasAPI:search(query, page)
     local file_types = KindleFetchSettings:getPreferredFileTypes()
     local book_types = KindleFetchSettings:getPreferredBookTypes()
 
+    -- check cache first
+    local cached = SearchCache:get(
+        query,
+        page,
+        languages,
+        file_types,
+        book_types
+    )
+
+    if cached then
+        logger.info("KindleFetch: cache hit for query:", query, ". Returned book: ", cached)
+        return cached
+    end
+
     -- build params
     local params = {"page=" .. tostring(page), "display=table", "src=lgli", "q=" .. util.urlEncode(query)}
     for _, lang in ipairs(languages) do
@@ -97,6 +112,16 @@ function AnnasAPI:search(query, page)
     -- parse into books
     local books = parseBookTable(html)
     logger.info("KindleFetch: parsed", #books, "books for", query)
+
+    -- add new query result to cache
+    SearchCache:set(
+        query,
+        page,
+        languages,
+        file_types,
+        book_types,
+        books
+    )
 
     return books
 end
