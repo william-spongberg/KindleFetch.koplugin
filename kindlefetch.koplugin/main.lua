@@ -114,13 +114,15 @@ function KindleFetch:performSearch()
     Notification:notify("Searching...", Notification.SOURCE_ALWAYS_SHOW, true)
 
     -- start search
-    local results, err = self:search(query)
+    self.current_search_query = query
+    self.current_page = 1
+    local results, err = self:search(query, self.current_page)
+    self.results = results
     if err then
         Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
         return
     end
 
-    -- TODO: more detailed
     if results == {} then
         logger.warn("KindleFetch: no books to show after search")
         Notification:notify("No results found", Notification.SOURCE_ALWAYS_SHOW)
@@ -131,15 +133,15 @@ function KindleFetch:performSearch()
     self:showResults(results)
 end
 
-function KindleFetch:search(query)
-    local books, err = AnnasAPI:search(query)
+function KindleFetch:search(query, page)
+    local books, err = AnnasAPI:search(query, page)
 
     if books == nil or type(books) ~= "table" then
         logger.warn("KindleFetch: API search failed for", query, err or "unknown error")
         return nil, err
     end
 
-    logger.info("KindleFetch: API returned", #books, "raw results for", query)
+    logger.info("KindleFetch: API returned", #books, "raw results for", query, "page", page)
 
     return books
 end
@@ -162,11 +164,11 @@ local function formatBookDetails(book)
     return table.concat(details, " · ")
 end
 
-function KindleFetch:showResults(books)
+function KindleFetch:showResults(results)
     local this = self
     local menu_items = {}
 
-    for _, book in ipairs(books) do
+    for _, book in ipairs(results) do
         local book_text = book.title .. " by " .. book.authors
         local details = formatBookDetails(book)
         logger.info("KindleFetch: book details for", book.title, "=", details)
@@ -184,7 +186,12 @@ function KindleFetch:showResults(books)
         })
     end
 
-    -- TODO: add menu item at the end to load more pages (if they exist)
+    table.insert(menu_items, {
+        text = _("Load more"),
+        callback = function()
+            this:loadMoreResults()
+        end
+    })
 
     local menu = Menu:new{
         item_table = menu_items,
@@ -194,7 +201,49 @@ function KindleFetch:showResults(books)
         width = this.dimen.w,
         height = this.dimen.h
     }
+    self.results_menu = menu
     UIManager:show(menu)
+end
+
+function KindleFetch:loadMoreResults()
+    self.current_page = self.current_page + 1
+
+    Notification:notify(
+        "Loading more books...",
+        Notification.SOURCE_ALWAYS_SHOW,
+        true
+    )
+
+    local books, err = self:search(
+        self.current_search_query,
+        self.current_page
+    )
+
+    if err then
+        Notification:notify(
+            "Error: " .. err,
+            Notification.SOURCE_ALWAYS_SHOW
+        )
+        self.current_page = self.current_page - 1
+        return
+    end
+
+    if #books == 0 then
+        Notification:notify(
+            "No more books found",
+            Notification.SOURCE_ALWAYS_SHOW
+        )
+        return
+    end
+
+    -- append new results
+    for _, book in ipairs(books) do
+        table.insert(self.results, book)
+    end
+
+    -- close old menu, show new results
+    UIManager:close(self.results_menu)
+    self:showResults(self.results)
 end
 
 local function buildDownloadPath(book)

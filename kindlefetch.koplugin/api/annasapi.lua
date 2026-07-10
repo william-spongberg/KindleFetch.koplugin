@@ -65,13 +65,13 @@ local function parseBookTable(html)
 end
 
 -- main search function
-function AnnasAPI:search(query)
+function AnnasAPI:search(query, page)
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
     local book_types = KindleFetchSettings:getPreferredBookTypes()
 
     -- build params
-    local params = {"page=1", "display=table", "src=lgli", "q=" .. util.urlEncode(query)}
+    local params = {"page=" .. tostring(page), "display=table", "src=lgli", "q=" .. util.urlEncode(query)}
     for _, lang in ipairs(languages) do
         table.insert(params, "lang=" .. util.urlEncode(lang))
     end
@@ -83,11 +83,11 @@ function AnnasAPI:search(query)
     end
 
     -- create url
-    local url = string.format("%s/search?%s", self.base_url, table.concat(params, "&"))
+    local annas_url = string.format("%s/search?%s", self.base_url, table.concat(params, "&"))
 
     -- fetch page
-    logger.info("KindleFetch: fetching search page", url)
-    local html, err = HttpUtil.getBody(url)
+    logger.info("KindleFetch: fetching search page", annas_url)
+    local html, err = HttpUtil.getBody(annas_url)
     if not html then
         logger.warn("KindleFetch: failed to fetch search page for", query, err or "unknown error")
         return nil, err
