@@ -1,5 +1,6 @@
 local logger = require("logger")
 local FileUtil = require("util.fileutil")
+local Notification = require("ui/widget/notification")
 
 local CurlUtil = {}
 
@@ -190,15 +191,22 @@ function CurlUtil.checkCurlVersion()
     end
 
     logger.warn("KindleFetch: curl version is below " .. min_version .. ", attempting installation")
+    Notification:notify("curl is outdated, updating curl...", Notification.SOURCE_ALWAYS_SHOW)
     local install_success = CurlUtil.installStaticCurl(min_version)
 
     if not install_success then
         logger.error("KindleFetch: failed to install static curl v" .. min_version)
+        Notification:notify("Failed to update curl", Notification.SOURCE_ALWAYS_SHOW)
         return false
     end
 
     -- verify the installation was successful
-    return CurlUtil.isCurlVersionOk(min_version)
+    if CurlUtil.isCurlVersionOk(min_version) then
+        Notification:notify("Successfully updated curl to v" .. min_version, Notification.SOURCE_ALWAYS_SHOW)
+        return true
+    else
+        return false
+    end
 end
 
 -- get the remote file size in bytes from a URL's Content-Length header

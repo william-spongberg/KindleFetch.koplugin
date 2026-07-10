@@ -15,6 +15,7 @@ local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
 local AnnasAPI = require("api.annasapi")
 local LlgiAPI = require("api.lgliapi")
+local CurlUtil = require("util.curlutil")
 local logger = require("logger")
 local _ = require("gettext")
 
@@ -56,6 +57,12 @@ function KindleFetch:onDispatcherRegisterActions()
 end
 
 function KindleFetch:init()
+    -- ensure curl is available and meets version requirements
+    if not CurlUtil.checkCurlVersion() then
+        Notification:notify("curl is not available or could not be installed", Notification.SOURCE_ALWAYS_SHOW)
+        return
+    end
+
     if self.dimen == nil then
         self.dimen = Screen:getSize()
     end

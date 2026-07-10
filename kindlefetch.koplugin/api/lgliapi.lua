@@ -108,12 +108,6 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     callback = callback or function()
     end
 
-    -- ensure curl is available and meets version requirements
-    if not CurlUtil.checkCurlVersion() then
-        callback(false, "curl is not available or could not be installed")
-        return
-    end
-
     logger.dbg("KindleFetch: starting download", {
         title = book.title,
         md5 = book.md5,
