@@ -42,6 +42,11 @@ local function compareVersions(v1, v2)
     return 0
 end
 
+-- TODO
+function CurlUtil.getRepoVersion()
+    -- curl -s https://api.github.com/repos/william-spongberg/KindleFetch.koplugin/releases/latest | grep '"tag_name":'
+end
+
 -- get the installed curl version
 function CurlUtil.getCurlVersion()
     local pipe = io.popen("curl --version 2>/dev/null", "r")
