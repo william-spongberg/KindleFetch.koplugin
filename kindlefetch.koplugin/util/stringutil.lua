@@ -1,3 +1,4 @@
+local util = require("util")
 
 local StringUtil = {}
 
@@ -27,8 +28,26 @@ function StringUtil.cleanEmojis(text)
     if not StringUtil.assertValidString(text) then
         return ""
     end
-    -- remove non-ASCII chars
-    return StringUtil.trim(string.gsub(text, "[^\x00-\x7F]", ""))
+
+    -- remove emojis (these are all put before book type)
+    text = text:gsub("📗", "")
+    text = text:gsub("📘", "")
+    text = text:gsub("📕", "")
+    text = text:gsub("📰", "")
+    text = text:gsub("💬", "")
+    text = text:gsub("📝", "")
+    text = text:gsub("🤨", "")
+    text = text:gsub("🎶", "")
+    text = text:gsub("✅", "")
+
+    return StringUtil.trim(text)
+end
+
+function StringUtil.convertHtmlToText(text)
+    if not StringUtil.assertValidString(text) then
+        return ""
+    end
+    return util.htmlEntitiesToUtf8(text)
 end
 
 function StringUtil.removeExtension(text)

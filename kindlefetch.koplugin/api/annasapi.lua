@@ -12,6 +12,7 @@ local function parseBookTable(html)
 
     -- clean html
     html = StringUtil.cleanEmojis(html)
+    html = StringUtil.convertHtmlToText(html)
 
     -- grab all table rows
     for row in html:gmatch('<tr class="group h%-full[^>]*>(.-)</tr>') do
@@ -28,8 +29,8 @@ local function parseBookTable(html)
             book.md5 = cells[1]:match('href="/md5/([a-f0-9]+)')
             -- book.cover_url = cells[1]:match('src="([^"]+)"')
             -- Cell 1: Title
-            book.title = cells[2]:match('>([^<]+)</span>')
-            book.safe_title = StringUtil.removeParentheses(StringUtil.removeExtension(book.title))
+            book.raw_title = cells[2]:match('>([^<]+)</span>')
+            book.title = StringUtil.removeParentheses(StringUtil.removeExtension(book.raw_title))
 
             -- Cell 2: Authors
             book.authors = cells[3]:match('>([^<]+)</span>')
@@ -65,8 +66,26 @@ end
 
 -- main search function
 function AnnasAPI:search(query)
-    local endpoint = string.format("%s/search?page=1&display=table&src=lgli&lang=en&q=%s", self.base_url,
-        util.urlEncode(query))
+    local languages = KindleFetchSettings:getPreferredLanguages()
+    local file_types = KindleFetchSettings:getPreferredFileTypes()
+
+    local params = {
+        "page=1",
+        "display=table",
+        "src=lgli",
+        "q=" .. util.urlEncode(query)
+    }
+
+    for _, lang in ipairs(languages) do
+        table.insert(params, "lang=" .. util.urlEncode(lang))
+    end
+
+    for _, ext in ipairs(file_types) do
+        table.insert(params, "ext=" .. util.urlEncode(ext))
+    end
+
+    local endpoint = string.format("%s/search?%s", self.base_url, table.concat(params, "&"))
+
     logger.info("KindleFetch: fetching search page", endpoint)
 
     local html, err = HttpUtil.getBody(endpoint)
@@ -74,10 +93,11 @@ function AnnasAPI:search(query)
         logger.warn("KindleFetch: failed to fetch search page for", query, err or "unknown error")
         return nil, err
     end
+
     logger.info("KindleFetch: search page fetched", #html, "bytes for", query)
 
     local books = parseBookTable(html)
-    logger.info("KindleFetch: parsed", #books, "results for", query)
+    logger.info("KindleFetch: parsed", #books, "books for", query)
 
     return books
 end

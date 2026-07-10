@@ -148,7 +148,7 @@ local function formatBookDetails(book)
     local details = {}
 
     local function addBookDetail(detail)
-        if not StringUtil.assertValidString(detail) then
+        if StringUtil.assertValidString(detail) then
             table.insert(details, detail)
         end
     end
@@ -199,7 +199,7 @@ end
 
 local function buildDownloadPath(book)
     local download_dir = KindleFetchSettings:getDownloadDir()
-    local filename = util.getSafeFilename(book.safe_title .. "." .. book.file_type, download_dir)
+    local filename = util.getSafeFilename(book.title .. "." .. book.file_type, download_dir)
     return download_dir .. "/" .. filename
 end
 
