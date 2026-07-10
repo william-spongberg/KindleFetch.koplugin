@@ -10,7 +10,8 @@ local KindleFetchSettings = {}
 local DEFAULTS = {
     download_dir = nil,
     preferred_languages = {"en"},
-    preferred_file_types = {"epub", "pdf", "cbr", "cbz"}
+    preferred_file_types = {"epub", "pdf", "cbr", "cbz"},
+    preferred_book_types = {"book_fiction", "book_comic"}
 }
 
 -- available settings
@@ -320,6 +321,22 @@ local COMIC_FILE_TYPES = {"cbr", "cbz"}
 local DOCUMENT_FILE_TYPES = {"pdf", "txt", "rtf", "doc", "docx", "odt", "djvu"}
 local IMAGE_FILE_TYPES = {"jpg", "tif", "pdb"}
 local WEB_FILE_TYPES = {"chm", "htm", "html", "htmlz", "mht"}
+local AVAILABLE_BOOK_TYPES = {{
+    text = "Book (fiction)",
+    code = "book_fiction"
+}, {
+    text = "Book (non-fiction)",
+    code = "book_nonfiction"
+}, {
+    text = "Book (unknown)",
+    code = "book_unknown"
+}, {
+    text = "Comic book",
+    code = "book_comic"
+}, {
+    text = "Standards document",
+    code = "standards_document"
+}}
 
 local function getSettingsFile()
     return LuaSettings:open(DataStorage:getSettingsDir() .. "/kindlefetch.lua")
@@ -329,6 +346,24 @@ function KindleFetchSettings:load()
     self:setDownloadDir(self:getDownloadDir())
     self:setPreferredLanguages(self:getPreferredLanguages())
     self:setPreferredFileTypes(self:getPreferredFileTypes())
+    self:setPreferredBookTypes(self:getPreferredBookTypes())
+end
+
+-- util
+function KindleFetchSettings:getSetting(name)
+    local settings_file = getSettingsFile()
+    return settings_file:readSetting(name) or DEFAULTS.name
+end
+function KindleFetchSettings:setSetting(name, data)
+    if type(data) ~= "table" then
+        data = {data}
+    end
+
+    local settings_file = getSettingsFile()
+    settings_file:saveSetting(name, data)
+    settings_file:flush()
+    logger.info("KindleFetch: updated", name, " to", table.concat(data, ", "))
+    return true
 end
 
 -- download_dir
@@ -342,12 +377,12 @@ function KindleFetchSettings:getDownloadDir()
 
         if download_dir == "" then
             download_dir = "/mnt/us/documents"
-            logger.warn("KindleFetchSettings: home directory not found, defaulting to", download_dir)
+            logger.warn("KindleFetch: home directory not found, defaulting to", download_dir)
         end
 
         if not FileUtil.isValidDirectory(download_dir) then
             download_dir = "/mnt/us"
-            logger.warn("KindleFetchSettings: documents directory does not exist, defaulting to", download_dir)
+            logger.warn("KindleFetch: documents directory does not exist, defaulting to", download_dir)
         end
     end
 
@@ -361,25 +396,16 @@ function KindleFetchSettings:setDownloadDir(path)
     local settings_file = getSettingsFile()
     settings_file:saveSetting("download_dir", path)
     settings_file:flush()
-    logger.info("KindleFetchSettings: download directory set to", path)
+    logger.info("KindleFetch: download directory set to", path)
     return true
 end
 
 -- preferred_languages
 function KindleFetchSettings:getPreferredLanguages()
-    local settings_file = getSettingsFile()
-    return settings_file:readSetting("preferred_languages") or DEFAULTS.preferred_languages
+    return KindleFetchSettings:getSetting("preferred_languages")
 end
 function KindleFetchSettings:setPreferredLanguages(languages)
-    if type(languages) ~= "table" then
-        languages = {languages}
-    end
-
-    local settings_file = getSettingsFile()
-    settings_file:saveSetting("preferred_languages", languages)
-    settings_file:flush()
-    logger.info("KindleFetchSettings: preferred languages set to", table.concat(languages, ", "))
-    return true
+    return KindleFetchSettings:setSetting("preferred_languages", languages)
 end
 function KindleFetchSettings:getAvailableLanguages()
     return AVAILABLE_LANGUAGES
@@ -387,19 +413,10 @@ end
 
 -- preferred_file_types
 function KindleFetchSettings:getPreferredFileTypes()
-    local settings_file = getSettingsFile()
-    return settings_file:readSetting("preferred_file_types") or DEFAULTS.preferred_file_types
+    return KindleFetchSettings:getSetting("preferred_file_types")
 end
 function KindleFetchSettings:setPreferredFileTypes(file_types)
-    if type(file_types) ~= "table" then
-        file_types = {file_types}
-    end
-
-    local settings_file = getSettingsFile()
-    settings_file:saveSetting("preferred_file_types", file_types)
-    settings_file:flush()
-    logger.info("KindleFetchSettings: preferred file types set to", table.concat(file_types, ", "))
-    return true
+    return KindleFetchSettings:setSetting("preferred_file_types", file_types)
 end
 function KindleFetchSettings:getEbookFileTypes()
     return EBOOK_FILE_TYPES
@@ -415,6 +432,17 @@ function KindleFetchSettings:getImageFileTypes()
 end
 function KindleFetchSettings:getWebFileTypes()
     return WEB_FILE_TYPES
+end
+
+-- preferred_book_types
+function KindleFetchSettings:getPreferredBookTypes()
+    return KindleFetchSettings:getSetting("preferred_book_types")
+end
+function KindleFetchSettings:setPreferredBookTypes(book_types)
+    return KindleFetchSettings:setSetting("preferred_book_types", book_types)
+end
+function KindleFetchSettings:getAvailableBookTypes()
+    return AVAILABLE_BOOK_TYPES
 end
 
 return KindleFetchSettings

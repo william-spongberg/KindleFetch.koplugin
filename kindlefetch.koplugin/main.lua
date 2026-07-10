@@ -57,7 +57,7 @@ function KindleFetch:addToMainMenu(menu_items)
         text = _("Kindle Fetch"),
         sorting_hint = "search",
         sub_item_table = {{
-            text = _("Search Books"),
+            text = _("Search Anna's Archive"),
             callback = function()
                 self:setupUI()
             end
@@ -222,6 +222,7 @@ function KindleFetch:showSettings()
     local download_dir = KindleFetchSettings:getDownloadDir()
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
+    local book_types = KindleFetchSettings:getPreferredBookTypes()
 
     local menu_items = {{
         text = _("Download Folder: ") .. download_dir,
@@ -239,6 +240,12 @@ function KindleFetch:showSettings()
         callback = function()
             UIManager:close(menu)
             this:changeFileTypes()
+        end
+    }, {
+        text = _("Preferred Book Types: ") .. table.concat(book_types, ", "),
+        callback = function()
+            UIManager:close(menu)
+            this:changeBookTypes()
         end
     }}
 
@@ -334,7 +341,7 @@ function KindleFetch:changeLanguages()
                 if #result > 0 then
                     local ok, err = KindleFetchSettings:setPreferredLanguages(result)
                     if ok then
-                        Notification:notify("File types updated", Notification.SOURCE_ALWAYS_SHOW)
+                        Notification:notify("Languages updated", Notification.SOURCE_ALWAYS_SHOW)
                         UIManager:close(menu)
                         KindleFetchSettings:load()
                         this:showSettings()
@@ -432,6 +439,70 @@ function KindleFetch:changeFileTypes()
                     end
                 else
                     Notification:notify("Select at least one file type", Notification.SOURCE_ALWAYS_SHOW)
+                end
+            end
+        }
+
+        UIManager:show(menu)
+    end
+
+    showMenu()
+end
+
+function KindleFetch:changeBookTypes()
+    local this = self
+
+    local book_types = KindleFetchSettings:getAvailableBookTypes()
+    local selected = {}
+
+    for _, content in ipairs(KindleFetchSettings:getPreferredBookTypes()) do
+        selected[content] = true
+    end
+
+    local function showMenu()
+        local menu
+        local items = {}
+
+        for _, content in ipairs(book_types) do
+            table.insert(items, {
+                text = string.format("%s %s", selected[content.code] and "☑" or "☐", content.text),
+                callback = function()
+                    selected[content.code] = not selected[content.code]
+                    UIManager:close(menu)
+                    showMenu()
+                end
+            })
+        end
+
+        menu = Menu:new{
+            title = _("Preferred Book Types"),
+            item_table = items,
+            covers_fullscreen = true,
+            is_borderless = true,
+            width = this.dimen.w,
+            height = this.dimen.h,
+
+            onClose = function()
+                local result = {}
+
+                for _, content in ipairs(book_types) do
+                    if selected[content.code] then
+                        table.insert(result, content.code)
+                    end
+                end
+
+                if #result > 0 then
+                    local ok, err = KindleFetchSettings:setPreferredBookTypes(result)
+                    if ok then
+                        Notification:notify("Book types updated", Notification.SOURCE_ALWAYS_SHOW)
+                        UIManager:close(menu)
+                        KindleFetchSettings:load()
+                        this:showSettings()
+                    else
+                        Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
+                    end
+                else
+                    Notification:notify("Select at least one book type", Notification.SOURCE_ALWAYS_SHOW)
                 end
             end
         }
