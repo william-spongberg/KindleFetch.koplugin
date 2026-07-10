@@ -2,36 +2,16 @@ local util = require("util")
 local logger = require("logger")
 local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
+local KindleFetchSettings = require("util.settings")
 
 local AnnasAPI = {}
 AnnasAPI.base_url = "https://annas-archive.gl"
-
-local function cleanEmojis(text)
-    StringUtil.assertValidString(text)
-
-    -- remove emojis
-    text = text:gsub("🚀", "")
-    text = text:gsub("📗", "")
-    text = text:gsub("📘", "")
-    text = text:gsub("📕", "")
-    text = text:gsub("📰", "")
-    text = text:gsub("💬", "")
-    text = text:gsub("📝", "")
-    text = text:gsub("🤨", "")
-    text = text:gsub("🎶", "")
-    text = text:gsub("✅", "")
-
-    -- convert to utf8
-    text = util.htmlEntitiesToUtf8(text)
-
-    return StringUtil.trim(text)
-end
 
 local function parseBookTable(html)
     local books = {}
 
     -- clean html
-    html = cleanEmojis(html)
+    html = StringUtil.cleanEmojis(html)
 
     -- grab all table rows
     for row in html:gmatch('<tr class="group h%-full[^>]*>(.-)</tr>') do
@@ -49,12 +29,11 @@ local function parseBookTable(html)
             -- book.cover_url = cells[1]:match('src="([^"]+)"')
             -- Cell 1: Title
             book.title = cells[2]:match('>([^<]+)</span>')
-            book.safe_title = book.title:gsub("%.[a-zA-Z0-9]+$", "") -- remove any existing file extensions
-            book.safe_title = book.title:gsub("%s*%([^)]*%)", "")  -- remove anything in parentheses
+            book.safe_title = StringUtil.removeParentheses(StringUtil.removeExtension(book.title))
 
             -- Cell 2: Authors
             book.authors = cells[3]:match('>([^<]+)</span>')
-            if (not book.authors or book.authors == "") then
+            if not StringUtil.assertValidString(book.authors) then
                 book.authors = "Unknown author"
             end
             -- Cell 3: Publisher
@@ -93,7 +72,7 @@ function AnnasAPI:search(query)
     local html, err = HttpUtil.getBody(endpoint)
     if not html then
         logger.warn("KindleFetch: failed to fetch search page for", query, err or "unknown error")
-        return {}, err
+        return nil, err
     end
     logger.info("KindleFetch: search page fetched", #html, "bytes for", query)
 
