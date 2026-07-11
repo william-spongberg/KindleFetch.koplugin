@@ -12,8 +12,6 @@ local LIBGEN_URL = "https://en.wikipedia.org/wiki/Library_Genesis"
 local function parseAnnasUrls(html)
     local urls = {}
 
-    logger.info("KindleFetch: html for parsing urls", html)
-
     for href in html:gmatch('<a[^>]-href="(https://annas%-archive%.[^"/]+/?[^"]*)"') do
         table.insert(urls, href)
         logger.info("KindleFetch: new Anna's Archive URL", href)
@@ -24,8 +22,6 @@ end
 
 local function parseLibgenUrls(html)
     local urls = {}
-
-    logger.info("KindleFetch: html for parsing urls", html)
 
     for domain in html:gmatch("<li>%s*(libgen%.[^<]+)%s*</li>") do
         local url = "https://" .. domain
