@@ -55,7 +55,9 @@ function DownloadPrompt.new(book, filepath, on_download)
             }
         }
     else
-        self.cover = nil
+        self.cover = HorizontalSpan:new{
+            width = COVER_SIZE
+        }
     end
 
     self.title = TextBoxWidget:new{
