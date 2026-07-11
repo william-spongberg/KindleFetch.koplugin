@@ -118,6 +118,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
         filepath = filepath
     })
     Notification:notify("Starting download...", Notification.SOURCE_ALWAYS_SHOW)
+    UIManager:forceRePaint()
 
     -- get urls from cache or scrape from wikipedia
     local base_urls = UrlApi:getLibgenUrls()
@@ -179,6 +180,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
 
     -- get file size
     Notification:notify("Checking file size...", Notification.SOURCE_ALWAYS_SHOW)
+    UIManager:forceRePaint()
     local total_size = CurlUtil.getRemoteFileSize(download_url)
     if total_size then
         logger.dbg("KindleFetch: file size found", total_size)
@@ -233,6 +235,8 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     end
 
     -- download book image
+    Notification:notify("Getting book cover...", Notification.SOURCE_ALWAYS_SHOW)
+    UIManager:forceRePaint()
     self:downloadBookImage(book)
 
     -- show download prompt to let user choose folder and confirm
@@ -275,7 +279,6 @@ function LlgiAPI:downloadBookImage(book)
         md5 = book.md5,
         image_url = book.image_url
     })
-    Notification:notify("Getting book cover...", Notification.SOURCE_ALWAYS_SHOW)
     local image_data, err = HttpUtil.getBody(book.image_url)
     if not image_data then
         logger.warn("KindleFetch: failed to download book image", {
