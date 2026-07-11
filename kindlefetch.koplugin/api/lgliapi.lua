@@ -6,6 +6,7 @@ local HttpUtil = require("util.httputil")
 local StringUtil = require("util.stringutil")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
+local UrlApi = require("api.urlapi")
 local _ = require("gettext")
 
 local LlgiAPI = {}
@@ -19,7 +20,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         CurlUtil.killPid(pid)
         FileUtil.removeFile(exit_file)
         FileUtil.removeFile(filepath)
-        callback(false, "cancelled")
+        callback(false, "Cancelled")
         return
     end
 
@@ -42,8 +43,8 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         total_size = total_size
     })
 
+    -- check exit code
     local exit_code_str = FileUtil.readFile(exit_file)
-
     if exit_code_str then
         FileUtil.removeFile(exit_file)
         local exit_code = tonumber(exit_code_str)
@@ -76,7 +77,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
             local new_pid, new_exit_file, spawn_err = CurlUtil.spawnDownload(download_url, filepath, true)
             if not new_pid then
                 FileUtil.removeFile(filepath)
-                callback(false, spawn_err or "download failed and proxy retry could not start")
+                callback(false, spawn_err or "Download failed and proxy retry could not start")
                 return
             end
             UIManager:scheduleIn(LlgiAPI.download_poll_interval, function()
@@ -87,13 +88,14 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         end
 
         FileUtil.removeFile(filepath)
-        callback(false, "download failed (curl exit code " .. tostring(exit_code) .. ")")
+        callback(false, "Download failed (curl exit code " .. tostring(exit_code) .. ")")
         return
     end
 
+    -- exit early if process ends abruptly
     if not CurlUtil.isPidRunning(pid) then
         FileUtil.removeFile(filepath)
-        callback(false, "download process ended unexpectedly")
+        callback(false, "Download process ended unexpectedly")
         return
     end
 
@@ -114,29 +116,55 @@ function LlgiAPI:downloadBook(book, filepath, callback)
         filepath = filepath
     })
 
-    -- load ads page (to get key for download page)
-    local ads_page = string.format("%s/ads.php?md5=%s", self.base_url, book.md5)
-    logger.dbg("KindleFetch: fetching lgli ads page", ads_page)
-    local html = HttpUtil.getBody(ads_page)
-    if not html then
-        logger.warn("KindleFetch: failed to fetch lgli ads page", book.md5)
-        callback(false, "failed to fetch lgli page")
+    -- get urls from cache or scrape from wikipedia
+    local base_urls = UrlApi:getLibgenUrls()
+    if not base_urls then
+        callback(false, "No Libary Genesis urls available")
         return
     end
 
-    -- find download url
-    local download_path = html:match('href="([^"]*get%.php[^"]*)"')
-    if not download_path or download_path == "" then
-        logger.warn("KindleFetch: no lgli download link found", book.md5)
-        callback(false, "no lgli download link")
+    -- try each libgen url
+    local download_url
+    local last_err
+    for _, url in ipairs(base_urls) do
+        logger.dbg("KindleFetch: trying libgen url", url)
+
+        -- load ads page (to get key for download page)
+        local ads_page = string.format("%s/ads.php?md5=%s", url, book.md5)
+        logger.dbg("KindleFetch: fetching libgen ads page", ads_page)
+        local html, err = HttpUtil.getBody(ads_page)
+
+        -- find download url with key linked in ads page
+        if html then
+            local download_path = html:match('href="([^"]*get%.php[^"]*)"')
+
+            if download_path and download_path ~= "" then
+                download_url = url .. "/" .. download_path:gsub("^/", "")
+
+                logger.dbg("KindleFetch: resolved libgen download url", {
+                    title = book.title,
+                    md5 = book.md5,
+                    download_url = download_url
+                })
+
+                break
+            else
+                logger.warn("KindleFetch: no libgen download link found on url", url)
+                last_err = "No Library Genesis download link found"
+            end
+        else
+            logger.warn("KindleFetch: failed to fetch libgen ads page", {
+                url = url,
+                error = err
+            })
+            last_err = err
+        end
+    end
+
+    if not download_url then
+        callback(false, last_err or "All Library Genesis mirrors failed")
         return
     end
-    local download_url = self.base_url .. "/" .. download_path:gsub("^/", "")
-    logger.dbg("KindleFetch: resolved lgli download url", {
-        title = book.title,
-        md5 = book.md5,
-        download_url = download_url
-    })
 
     -- get file size
     local total_size = CurlUtil.getRemoteFileSize(download_url)
@@ -149,12 +177,16 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     -- create curl downloader
     local pid, exit_file, spawn_err = CurlUtil.spawnDownload(download_url, filepath, false)
     if not pid then
-        callback(false, spawn_err or "failed to start download")
+        callback(false, spawn_err or "Failed to spawn curl downloader")
         return
     end
+
+    -- store as table to force pass by reference
     local current_pid = {
         pid = pid
     }
+
+    -- create download widget
     local progress_widget = DownloadProgress.new(book.title, function()
         CurlUtil.killPid(current_pid.pid)
     end)

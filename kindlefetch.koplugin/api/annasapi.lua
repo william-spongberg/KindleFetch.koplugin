@@ -3,10 +3,10 @@ local logger = require("logger")
 local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
-local SearchCache = require("cache.search_cache")
+local SearchCache = require("cache.searchcache")
+local UrlApi = require("api.urlapi")
 
 local AnnasAPI = {}
-AnnasAPI.base_url = "https://annas-archive.gl"
 
 local function parseBookTable(html)
     local books = {}
@@ -72,16 +72,9 @@ function AnnasAPI:search(query, page)
     local book_types = KindleFetchSettings:getPreferredBookTypes()
 
     -- check cache first
-    local cached = SearchCache:get(
-        query,
-        page,
-        languages,
-        file_types,
-        book_types
-    )
+    local cached = SearchCache:get(query, page, languages, file_types, book_types)
 
     if cached then
-        logger.info("KindleFetch: cache hit for query:", query, ". Returned book: ", cached)
         return cached
     end
 
@@ -97,33 +90,42 @@ function AnnasAPI:search(query, page)
         table.insert(params, "content=" .. util.urlEncode(content))
     end
 
-    -- create url
-    local annas_url = string.format("%s/search?%s", self.base_url, table.concat(params, "&"))
-
-    -- fetch page
-    logger.info("KindleFetch: fetching search page", annas_url)
-    local html, err = HttpUtil.getBody(annas_url)
-    if not html then
-        logger.warn("KindleFetch: failed to fetch search page for", query, err or "unknown error")
-        return nil, err
+    -- get urls
+    local base_urls = UrlApi:getAnnasUrls()
+    if not base_urls then
+        return nil, "No Anna's Archive URLs available"
     end
-    logger.info("KindleFetch: search page fetched", #html, "bytes for", query)
 
-    -- parse into books
-    local books = parseBookTable(html)
-    logger.info("KindleFetch: parsed", #books, "books for", query)
+    local last_err
+    for _, url in ipairs(base_urls) do
+        local annas_url = string.format("%s/search?%s", url, table.concat(params, "&"))
 
-    -- add new query result to cache
-    SearchCache:set(
-        query,
-        page,
-        languages,
-        file_types,
-        book_types,
-        books
-    )
+        logger.info("KindleFetch: trying Anna's Archive url:", url)
 
-    return books
+        local html, err = HttpUtil.getBody(annas_url)
+
+        if html then
+            logger.info("KindleFetch: successfully fetched from url:", url)
+
+            local books = parseBookTable(html)
+            logger.info("KindleFetch: parsed", #books, "books for", query)
+
+            if books and #books > 0 then
+                -- add new query result to cache before returning
+                SearchCache:set(query, page, languages, file_types, book_types, books)
+                return books
+            end
+
+            return nil
+        end
+
+        logger.warn("KindleFetch: failed url:", url, err or "unknown error")
+        last_err = err
+
+        -- TODO: menu asking if you want to try next url
+    end
+
+    return nil, last_err or "All Anna's Archive mirrors failed"
 end
 
 return AnnasAPI

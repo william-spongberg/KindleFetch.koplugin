@@ -27,8 +27,10 @@ function HttpUtil.requestBody(request_url, proxy_url)
 end
 
 function HttpUtil.getBody(url)
+    logger.info("KindleFetch: fetching page for url", url)
     local body, err = HttpUtil.requestBody(url)
     if body then
+        logger.info("KindleFetch: page fetched", #body, "bytes return")
         return body
     end
 
@@ -42,6 +44,7 @@ function HttpUtil.getBody(url)
         end
     end
 
+    logger.warn("KindleFetch: failed to fetch page for", url, err or "unknown error")
     return nil, err
 end
 
