@@ -5,4 +5,3 @@
 - [ ] button to check for updates
 - [ ] update README with screenshots + new features/behaviours of the plugin
 - [ ] show warning if downloading books and user tries to exit
-- [x] replace logger infos with debug (.dbg)

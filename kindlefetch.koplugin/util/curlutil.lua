@@ -4,6 +4,9 @@ local Notification = require("ui/widget/notification")
 
 local CurlUtil = {}
 
+-- constants
+local VERSION_URL = "https://api.github.com/repos/william-spongberg/KindleFetch.koplugin/releases/latest"
+
 -- shell-escape a string for safe inclusion in a shell command
 function CurlUtil.shellQuote(str)
     return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
@@ -43,9 +46,32 @@ local function compareVersions(v1, v2)
     return 0
 end
 
--- TODO
 function CurlUtil.getRepoVersion()
-    -- curl -s https://api.github.com/repos/william-spongberg/KindleFetch.koplugin/releases/latest | grep '"tag_name":'
+    local cmd = "curl -s " .. VERSION_URL .. " | grep '\"tag_name\"'"
+    local handle = io.popen(cmd)
+    if not handle then
+        return nil
+    end
+
+    local output = handle:read("*a")
+    handle:close()
+
+    -- output:  "tag_name": "v0.1"
+    local tag = output:match('"tag_name"%s*:%s*"([^"]+)"')
+
+    if not tag then
+        return nil
+    end
+
+    tag = tag:gsub("^v", "")
+
+    local major, minor, patch = tag:match("(%d+)%.(%d+)%.?(%d*)")
+
+    return {
+        major = tonumber(major) or 0,
+        minor = tonumber(minor) or 0,
+        patch = tonumber(patch) or 0,
+    }
 end
 
 -- get the installed curl version
