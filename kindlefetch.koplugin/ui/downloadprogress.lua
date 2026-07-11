@@ -2,7 +2,9 @@ local Blitbuffer = require("ffi/blitbuffer")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
+local HorizontalGroup = require("ui/widget/horizontalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
+local HorizontalSpan = require("ui/widget/horizontalspan")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
@@ -13,6 +15,7 @@ local Size = require("ui/size")
 local Geom = require("ui/geometry")
 local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
+local _ = require("gettext")
 
 local DownloadProgress = {}
 DownloadProgress.__index = DownloadProgress
@@ -33,52 +36,55 @@ function DownloadProgress.new(title, on_cancel)
         text = title,
         face = Font:getFace("cfont", 18),
         width = CONTENT_WIDTH,
-        alignment = "center",
+        alignment = "center"
     }
 
     -- download percentage
     self.status_widget = TextWidget:new{
-            text = "",
-            face = Font:getFace("cfont", 16),
-            alignment = "center",
-        }
+        text = "",
+        face = Font:getFace("cfont", 16),
+        width = CONTENT_WIDTH,
+        alignment = "center"
+    }
 
-    -- progress bar
+    self.status_container = CenterContainer:new{
+        dimen = Geom:new{
+            w = CONTENT_WIDTH,
+            h = 25
+        },
+        self.status_widget
+    }
+
     self.bar_widget = ProgressWidget:new{
         width = CONTENT_WIDTH,
         height = Screen:scaleBySize(16),
-        percentage = 0,
+        percentage = 0
     }
 
     -- cancel button
     self.cancel_button = Button:new{
-        text = "Cancel",
+        text = _("Cancel"),
         callback = function()
             self:cancel()
-        end,
-        width = Screen:scaleBySize(60),
-        bordersize = Size.border.button,
-        margin = Size.margin.small,
-        padding = Size.padding.button,
+        end
     }
 
     -- hide button
     self.hide_button = Button:new{
-        text = "Hide",
+        text = _("Hide"),
         callback = function()
             self:toggleVisibility()
-        end,
-        width = Screen:scaleBySize(45),
-        bordersize = Size.border.button,
-        margin = Size.margin.small,
-        padding = Size.padding.button,
+        end
     }
 
     -- button group
     self.button_group = HorizontalGroup:new{
         align = "center",
-        self.hide_button,
         self.cancel_button,
+        HorizontalSpan:new{
+            width = Size.padding.default
+        },
+        self.hide_button
     }
 
     self.frame = FrameContainer:new{
@@ -86,24 +92,31 @@ function DownloadProgress.new(title, on_cancel)
         bordersize = Size.border.window,
         padding = Size.padding.large,
         width = CONTENT_WIDTH + Size.padding.large * 2,
+
         VerticalGroup:new{
             align = "center",
             self.text_widget,
-            VerticalSpan:new{ width = Size.padding.default },
+            VerticalSpan:new{
+                width = Size.padding.default
+            },
             self.bar_widget,
-            VerticalSpan:new{ width = Size.padding.small },
-            self.status_widget,
-            VerticalSpan:new{ width = Size.padding.default },
-            self.button_group,
+            VerticalSpan:new{
+                width = Size.padding.small
+            },
+            self.status_container,
+            VerticalSpan:new{
+                width = Size.padding.large
+            },
+            self.button_group
         }
     }
 
     self.container = CenterContainer:new{
         dimen = Geom:new{
             w = Screen:getWidth(),
-            h = Screen:getHeight(),
+            h = Screen:getHeight()
         },
-        self.frame,
+        self.frame
     }
 
     return self
@@ -154,7 +167,7 @@ function DownloadProgress:cancel()
     if self.on_cancel then
         self.on_cancel()
     end
-    
+
     self:close()
 end
 
