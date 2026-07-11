@@ -362,7 +362,7 @@ function KindleFetchSettings:setSetting(name, data)
     local settings_file = getSettingsFile()
     settings_file:saveSetting(name, data)
     settings_file:flush()
-    logger.info("KindleFetch: updated", name, " to", table.concat(data, ", "))
+    logger.dbg("KindleFetch: updated", name, " to", table.concat(data, ", "))
     return true
 end
 
@@ -396,7 +396,7 @@ function KindleFetchSettings:setDownloadDir(path)
     local settings_file = getSettingsFile()
     settings_file:saveSetting("download_dir", path)
     settings_file:flush()
-    logger.info("KindleFetch: download directory set to", path)
+    logger.dbg("KindleFetch: download directory set to", path)
     return true
 end
 

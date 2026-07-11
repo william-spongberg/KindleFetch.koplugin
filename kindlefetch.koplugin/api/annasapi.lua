@@ -31,8 +31,8 @@ local function parseBookTable(html)
             book.md5 = cells[1]:match('href="/md5/([a-f0-9]+)')
             book.image_url = cells[1]:match('src="([^"]+)"')
 
-            logger.info("KindleFetch: cells[1]", cells[1])
-            logger.info("KindleFetch: image url", book.image_url)
+            logger.dbg("KindleFetch: cells[1]", cells[1])
+            logger.dbg("KindleFetch: image url", book.image_url)
 
             -- Cell 1: Title
             local raw_title = cells[2]:match('>([^<]+)</span>')
@@ -64,7 +64,7 @@ local function parseBookTable(html)
             -- at minimum need title + md5 + file type for a valid book
             if book.title and book.md5 and book.file_type then
                 table.insert(books, book)
-                logger.info("KindleFetch: new book found", book)
+                logger.dbg("KindleFetch: new book found", book)
             else
                 logger.warn("KindleFetch: skipped book with missing features", book)
             end
@@ -113,15 +113,15 @@ function AnnasAPI:search(query, page, retrying)
     for _, url in ipairs(base_urls) do
         local annas_url = string.format("%s/search?%s", url, table.concat(params, "&"))
 
-        logger.info("KindleFetch: trying Anna's Archive url:", url)
+        logger.dbg("KindleFetch: trying Anna's Archive url:", url)
 
         local html, err = HttpUtil.getBody(annas_url)
 
         if html then
-            logger.info("KindleFetch: successfully fetched from url:", url)
+            logger.dbg("KindleFetch: successfully fetched from url:", url)
 
             local books = parseBookTable(html)
-            logger.info("KindleFetch: parsed", #books, "books for", query)
+            logger.dbg("KindleFetch: parsed", #books, "books for", query)
 
             if books and #books > 0 then
                 -- add new query result to cache before returning

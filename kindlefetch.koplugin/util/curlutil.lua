@@ -89,7 +89,7 @@ function CurlUtil.isCurlVersionOk(min_version)
     local cmp = compareVersions(current_version, min_version_parsed)
     local is_ok = cmp >= 0
 
-    logger.info("KindleFetch: curl version check", {
+    logger.dbg("KindleFetch: curl version check", {
         current = current_version_str,
         minimum = min_version,
         is_ok = is_ok
@@ -101,12 +101,12 @@ end
 -- install static curl from moparisthebest/static-curl releases
 -- basically adds safe guards around the sh script given here https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
 function CurlUtil.installStaticCurl(target_version)
-    logger.info("KindleFetch: attempting to install static curl v" .. target_version)
+    logger.dbg("KindleFetch: attempting to install static curl v" .. target_version)
 
     -- create staging directory
     local staging_dir = "/mnt/us/bin"
     local mkdir_cmd = string.format("mkdir -p %s", CurlUtil.shellQuote(staging_dir))
-    logger.info("KindleFetch: creating staging directory", mkdir_cmd)
+    logger.dbg("KindleFetch: creating staging directory", mkdir_cmd)
     if os.execute(mkdir_cmd .. " 2>/dev/null") ~= 0 then
         logger.error("KindleFetch: failed to create staging directory", staging_dir)
         return false
@@ -119,7 +119,7 @@ function CurlUtil.installStaticCurl(target_version)
         "https://github.com/moparisthebest/static-curl/releases/download/v%s/%s",
         target_version, curl_filename)
 
-    logger.info("KindleFetch: downloading static curl", download_url)
+    logger.dbg("KindleFetch: downloading static curl", download_url)
 
     local download_cmd = string.format(
         "curl -fL -o %s %s",
@@ -143,7 +143,7 @@ function CurlUtil.installStaticCurl(target_version)
     local system_curl = "/usr/bin/curl"
     local backup_curl = "/usr/bin/curl.system.bak"
 
-    logger.info("KindleFetch: remounting rootfs as read-write")
+    logger.dbg("KindleFetch: remounting rootfs as read-write")
     if os.execute("mntroot rw 2>/dev/null") ~= 0 then
         logger.error("KindleFetch: failed to remount rootfs as read-write")
         return false
@@ -151,14 +151,14 @@ function CurlUtil.installStaticCurl(target_version)
 
     -- backup original curl if not already backed up
     if os.execute(string.format("test -f %s", CurlUtil.shellQuote(backup_curl))) ~= 0 then
-        logger.info("KindleFetch: backing up system curl")
+        logger.dbg("KindleFetch: backing up system curl")
         if os.execute(string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(system_curl), CurlUtil.shellQuote(backup_curl))) ~= 0 then
             logger.warn("KindleFetch: failed to backup system curl (continuing anyway)")
         end
     end
 
     -- install new curl
-    logger.info("KindleFetch: installing static curl to " .. system_curl)
+    logger.dbg("KindleFetch: installing static curl to " .. system_curl)
     if os.execute(string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(system_curl))) ~= 0 then
         logger.error("KindleFetch: failed to install static curl")
         os.execute("mntroot ro 2>/dev/null")
@@ -171,13 +171,13 @@ function CurlUtil.installStaticCurl(target_version)
     end
 
     -- remount as read-only
-    logger.info("KindleFetch: remounting rootfs as read-only")
+    logger.dbg("KindleFetch: remounting rootfs as read-only")
     if os.execute("mntroot ro 2>/dev/null") ~= 0 then
         logger.error("KindleFetch: failed to remount rootfs as read-only")
         return false
     end
 
-    logger.info("KindleFetch: static curl installation completed successfully")
+    logger.dbg("KindleFetch: static curl installation completed successfully")
     return true
 end
 
@@ -186,7 +186,7 @@ function CurlUtil.checkCurlVersion()
     local min_version = "8.17.0"
 
     if CurlUtil.isCurlVersionOk(min_version) then
-        logger.info("KindleFetch: curl version is sufficient", min_version)
+        logger.dbg("KindleFetch: curl version is sufficient", min_version)
         return true
     end
 
@@ -255,7 +255,7 @@ function CurlUtil.spawnDownload(download_url, filepath, use_proxy)
         "(curl -sL -f %s-A 'Mozilla/5.0' --retry 2 --retry-delay 2 --connect-timeout 15 -o %s %s; echo $? > %s) >/dev/null 2>&1 & echo $!",
         proxy_flag, CurlUtil.shellQuote(filepath), CurlUtil.shellQuote(download_url), CurlUtil.shellQuote(exit_file))
 
-    logger.info("KindleFetch: curl command", cmd)
+    logger.dbg("KindleFetch: curl command", cmd)
 
     local pipe = io.popen(cmd, "r")
     if not pipe then

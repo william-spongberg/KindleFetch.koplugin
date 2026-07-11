@@ -35,7 +35,7 @@ function KindleFetchCache:count()
 end
 
 function KindleFetchCache:delete(key)
-    logger.info("KindleFetch: deleting cache entry:", key)
+    logger.dbg("KindleFetch: deleting cache entry:", key)
 
     self.cache[key] = nil
 end
@@ -89,7 +89,7 @@ function KindleFetchCache:get(...)
     self:load()
 
     local key = self.makeKey(...)
-    logger.info("KindleFetch: checking cache for key:", key)
+    logger.dbg("KindleFetch: checking cache for key:", key)
 
     local entry = self.cache[key]
     if not entry then
@@ -98,14 +98,14 @@ function KindleFetchCache:get(...)
 
     local age = os.time() - entry.timestamp
     if self.expiry and age > self.expiry then
-        logger.info("KindleFetch: cache expired for key:", key, "age:", age, "seconds")
+        logger.dbg("KindleFetch: cache expired for key:", key, "age:", age, "seconds")
 
         self:delete(key)
         self:save()
         return nil
     end
 
-    logger.info("KindleFetch: cache hit for key:", key, "returned", entry.value)
+    logger.dbg("KindleFetch: cache hit for key:", key, "returned", entry.value)
     return entry.value
 end
 
@@ -119,12 +119,12 @@ function KindleFetchCache:set(value, ...)
         value = value
     }
 
-    logger.info("KindleFetch: stored cache entry:", key, "with", value)
+    logger.dbg("KindleFetch: stored cache entry:", key, "with", value)
     self:save()
 end
 
 function KindleFetchCache:clear()
-    logger.info("KindleFetch: clearing cache")
+    logger.dbg("KindleFetch: clearing cache")
 
     self.cache = {}
     self:save()

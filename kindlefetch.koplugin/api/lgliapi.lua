@@ -41,7 +41,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
                 total_size / (1024 * 1024)))
     end
 
-    logger.info("KindleFetch: download progress", {
+    logger.dbg("KindleFetch: download progress", {
         title = book.title,
         md5 = book.md5,
         bytes_downloaded = bytes_downloaded,
@@ -58,7 +58,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         -- check if completed successfully
         if exit_code == 0 and final_size > 0 then
             progress_widget:update(1, "100%")
-            logger.info("KindleFetch: lgli download completed", {
+            logger.dbg("KindleFetch: lgli download completed", {
                 title = book.title,
                 md5 = book.md5,
                 filepath = filepath,
@@ -112,7 +112,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
 end
 
 function LlgiAPI:_startDownload(book, filepath, callback, retrying)
-    logger.info("KindleFetch: starting download", {
+    logger.dbg("KindleFetch: starting download", {
         title = book.title,
         md5 = book.md5,
         filepath = filepath
@@ -181,7 +181,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     Notification:notify("Checking file size...", Notification.SOURCE_ALWAYS_SHOW)
     local total_size = CurlUtil.getRemoteFileSize(download_url)
     if total_size then
-        logger.info("KindleFetch: file size found", total_size)
+        logger.dbg("KindleFetch: file size found", total_size)
     else
         logger.warn("KindleFetch: could not determine remote size")
     end
@@ -245,7 +245,7 @@ end
 
 function LlgiAPI:downloadBookImage(book)
     if book.image_path then
-        logger.info("KindleFetch: book image already downloaded", {
+        logger.dbg("KindleFetch: book image already downloaded", {
             title = book.title,
             md5 = book.md5,
             image_url = book.image_url,
@@ -270,7 +270,7 @@ function LlgiAPI:downloadBookImage(book)
     end
 
     -- fetch image data
-    logger.info("KindleFetch: downloading book image", {
+    logger.dbg("KindleFetch: downloading book image", {
         title = book.title,
         md5 = book.md5,
         image_url = book.image_url
@@ -285,7 +285,7 @@ function LlgiAPI:downloadBookImage(book)
         })
         return
     end
-    logger.info("KindleFetch: book image downloaded successfully", {
+    logger.dbg("KindleFetch: book image downloaded successfully", {
         title = book.title,
         md5 = book.md5,
         url = book.image_url,

@@ -34,7 +34,7 @@ end
 function DownloadPrompt.new(book, filepath, on_download)
     local self = setmetatable({}, DownloadPrompt)
 
-    logger.info("KindleFetch: params given to DownloadPrompt", book, filepath)
+    logger.dbg("KindleFetch: params given to DownloadPrompt", book, filepath)
 
     self.book = book
     self.filepath = filepath

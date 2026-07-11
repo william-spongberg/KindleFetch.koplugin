@@ -113,7 +113,7 @@ function KindleFetch:performSearch()
         return
     end
 
-    logger.info("KindleFetch: starting search for", query)
+    logger.dbg("KindleFetch: starting search for", query)
     Notification:notify("Searching...", Notification.SOURCE_ALWAYS_SHOW, true)
 
     -- start search
@@ -144,7 +144,7 @@ function KindleFetch:search(query, page)
         return nil, err
     end
 
-    logger.info("KindleFetch: API returned", #books, "raw results for", query, "page", page)
+    logger.dbg("KindleFetch: API returned", #books, "raw results for", query, "page", page)
 
     return books
 end
@@ -174,7 +174,7 @@ function KindleFetch:showResults(results)
     for _, book in ipairs(results) do
         local book_text = book.title .. " by " .. book.authors
         local details = formatBookDetails(book)
-        logger.info("KindleFetch: book details for", book.title, "=", details)
+        logger.dbg("KindleFetch: book details for", book.title, "=", details)
         book_text = book_text .. " · " .. details
 
         table.insert(menu_items, {

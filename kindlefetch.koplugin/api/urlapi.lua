@@ -14,7 +14,7 @@ local function parseAnnasUrls(html)
 
     for href in html:gmatch('<a[^>]-href="(https://annas%-archive%.[^"/]+/?[^"]*)"') do
         table.insert(urls, href)
-        logger.info("KindleFetch: new Anna's Archive URL", href)
+        logger.dbg("KindleFetch: new Anna's Archive URL", href)
     end
 
     return #urls > 0 and urls or nil
@@ -26,7 +26,7 @@ local function parseLibgenUrls(html)
     for domain in html:gmatch("<li>%s*(libgen%.[^<]+)%s*</li>") do
         local url = "https://" .. domain
         table.insert(urls, url)
-        logger.info("KindleFetch: new LibGen URL", domain)
+        logger.dbg("KindleFetch: new LibGen URL", domain)
     end
 
     return #urls > 0 and urls or nil

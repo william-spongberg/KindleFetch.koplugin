@@ -7,7 +7,7 @@ return KindleFetchCache:new{
     max_entries = 100,
 
     makeKey = function(...)
-        logger.info("KindleFetch: data for makeKey:", ...)
+        logger.dbg("KindleFetch: data for makeKey:", ...)
         local query, page, languages, file_types, book_types = ...
 
         return table.concat({query, tostring(page), table.concat(languages, ","),
