@@ -8,6 +8,7 @@ local KindleFetchSettings = {}
 
 -- default settings
 local DEFAULTS = {
+    version = {0, 1, 0},
     download_dir = nil,
     preferred_languages = {"en"},
     preferred_file_types = {"epub", "pdf", "cbr", "cbz"},
@@ -364,6 +365,11 @@ function KindleFetchSettings:setSetting(name, data)
     settings_file:flush()
     logger.dbg("KindleFetch: updated", name, " to", table.concat(data, ", "))
     return true
+end
+
+-- version
+function KindleFetchSettings:getVersion()
+    return KindleFetchSettings:getSetting("version")
 end
 
 -- download_dir
