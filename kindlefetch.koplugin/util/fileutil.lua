@@ -1,5 +1,6 @@
 local StringUtil = require("util.stringutil")
 local lfs = require("libs/libkoreader-lfs")
+local logger = require("logger")
 
 local FileUtil = {}
 
@@ -16,6 +17,17 @@ function FileUtil.getSize(path)
     local size = f:seek("end")
     f:close()
     return size or 0
+end
+
+function FileUtil.createFile(path, data)    
+    local file = io.open(path, "wb")
+    if not file then
+        logger.warn("KindleFetch: could not write to file", path)
+        return nil
+    end
+    
+    file:write(data)
+    file:close()
 end
 
 -- read a small text file and returns its trimmed contents, or nil if the file doesn't exist yet
@@ -42,6 +54,15 @@ function FileUtil.removeFile(path)
     if path then
         os.remove(path)
     end
+end
+
+-- check whether file exists
+function FileUtil.isValidFile(path)
+    if not StringUtil.assertValidString(path) then
+        return
+    end
+
+    return lfs.attributes(path, "mode") == "file"
 end
 
 -- check whether folder exists

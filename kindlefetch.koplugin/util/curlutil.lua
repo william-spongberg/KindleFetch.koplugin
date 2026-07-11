@@ -106,7 +106,7 @@ function CurlUtil.installStaticCurl(target_version)
     -- create staging directory
     local staging_dir = "/mnt/us/bin"
     local mkdir_cmd = string.format("mkdir -p %s", CurlUtil.shellQuote(staging_dir))
-    logger.dbg("KindleFetch: creating staging directory", mkdir_cmd)
+    logger.info("KindleFetch: creating staging directory", mkdir_cmd)
     if os.execute(mkdir_cmd .. " 2>/dev/null") ~= 0 then
         logger.error("KindleFetch: failed to create staging directory", staging_dir)
         return false

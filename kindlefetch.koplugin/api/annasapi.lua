@@ -29,11 +29,16 @@ local function parseBookTable(html)
         if #cells >= 10 then
             -- Cell 0: Cover image + MD5
             book.md5 = cells[1]:match('href="/md5/([a-f0-9]+)')
-            -- book.cover_url = cells[1]:match('src="([^"]+)"')
-            -- Cell 1: Title
-            book.raw_title = cells[2]:match('>([^<]+)</span>')
-            book.title = StringUtil.removeParentheses(StringUtil.removeExtension(book.raw_title))
+            book.image_url = cells[1]:match('src="([^"]+)"')
 
+            logger.info("KindleFetch: cells[1]", cells[1])
+            logger.info("KindleFetch: image url", book.image_url)
+
+            -- Cell 1: Title
+            local raw_title = cells[2]:match('>([^<]+)</span>')
+            if not raw_title:find("file:") then
+                book.title = StringUtil.removeParentheses(StringUtil.removeExtension(raw_title))
+            end
             -- Cell 2: Authors
             book.authors = cells[3]:match('>([^<]+)</span>')
             if not StringUtil.assertValidString(book.authors) then
@@ -52,14 +57,19 @@ local function parseBookTable(html)
             book.file_type = cells[10]:match('>([^<]+)</span>')
             -- Cell 10: File size
             book.file_size = cells[11]:match('>([^<]+)</span>')
+            if not book.file_size then
+                book.file_size = "0"
+            end
 
-            -- at minimum need title + md5 for a valid book
-            if book.title and book.md5 then
+            -- at minimum need title + md5 + file type for a valid book
+            if book.title and book.md5 and book.file_type then
                 table.insert(books, book)
                 logger.info("KindleFetch: new book found", book)
+            else
+                logger.warn("KindleFetch: skipped book with missing features", book)
             end
         else
-            logger.info("KindleFetch: skipped row with missing cells", row)
+            logger.warn("KindleFetch: skipped row with missing cells", row)
         end
     end
 
@@ -115,7 +125,7 @@ function AnnasAPI:search(query, page, retrying)
 
             if books and #books > 0 then
                 -- add new query result to cache before returning
-                SearchCache:set(query, page, languages, file_types, book_types, books)
+                SearchCache:set(books, query, page, languages, file_types, book_types)
                 return books
             end
 

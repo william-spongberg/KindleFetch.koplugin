@@ -46,7 +46,7 @@ function UrlApi:getUrls(key, url, parse)
     local urls = parse(html)
 
     if urls then
-        UrlCache:set(key, urls)
+        UrlCache:set(urls, key)
         return urls
     end
 

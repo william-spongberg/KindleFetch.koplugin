@@ -50,18 +50,6 @@ function DownloadProgress.new(title, on_cancel)
         percentage = 0,
     }
 
-    -- hide/show button
-    self.hide_button = Button:new{
-        text = "Hide",
-        callback = function()
-            self:toggleVisibility()
-        end,
-        width = Screen:scaleBySize(60),
-        bordersize = Size.border.button,
-        margin = Size.margin.small,
-        padding = Size.padding.button,
-    }
-
     -- cancel button
     self.cancel_button = Button:new{
         text = "Cancel",
@@ -69,6 +57,18 @@ function DownloadProgress.new(title, on_cancel)
             self:cancel()
         end,
         width = Screen:scaleBySize(60),
+        bordersize = Size.border.button,
+        margin = Size.margin.small,
+        padding = Size.padding.button,
+    }
+
+    -- hide button
+    self.hide_button = Button:new{
+        text = "Hide",
+        callback = function()
+            self:toggleVisibility()
+        end,
+        width = Screen:scaleBySize(45),
         bordersize = Size.border.button,
         margin = Size.margin.small,
         padding = Size.padding.button,

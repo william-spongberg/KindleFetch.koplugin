@@ -245,7 +245,6 @@ end
 
 function KindleFetch:downloadBook(book)
     local filepath = buildDownloadPath(book)
-    Notification:notify("Checking: " .. book.title, Notification.SOURCE_ALWAYS_SHOW, true)
     LlgiAPI:downloadBook(book, filepath, function(ok, err)
         if ok then
             Notification:notify("Downloaded " .. book.title, Notification.SOURCE_ALWAYS_SHOW, true)

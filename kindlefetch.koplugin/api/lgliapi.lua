@@ -1,13 +1,16 @@
 local util = require("util")
 local UIManager = require("ui/uimanager")
+local Notification = require("ui/widget/notification")
 local logger = require("logger")
 local DownloadProgress = require("ui.downloadprogress")
+local DownloadPrompt = require("ui.downloadprompt")
 local HttpUtil = require("util.httputil")
 local StringUtil = require("util.stringutil")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
 local UrlApi = require("api.urlapi")
 local UrlCache = require("cache.urlcache")
+local CoverCache = require("cache.covercache")
 local _ = require("gettext")
 
 local LlgiAPI = {}
@@ -38,7 +41,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
                 total_size / (1024 * 1024)))
     end
 
-    logger.dbg("KindleFetch: download progress", {
+    logger.info("KindleFetch: download progress", {
         title = book.title,
         md5 = book.md5,
         bytes_downloaded = bytes_downloaded,
@@ -108,20 +111,13 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
     end)
 end
 
-function LlgiAPI:downloadBook(book, filepath, callback, retrying)
-    callback = callback or function()
-    end
-    retrying = retrying or false
-
-    if LlgiAPI.active_downloads[book.md5] then
-        callback(false, "this book is already downloading")
-    end
-
-    logger.dbg("KindleFetch: starting download", {
+function LlgiAPI:_startDownload(book, filepath, callback, retrying)
+    logger.info("KindleFetch: starting download", {
         title = book.title,
         md5 = book.md5,
         filepath = filepath
     })
+    Notification:notify("Starting download...", Notification.SOURCE_ALWAYS_SHOW)
 
     -- get urls from cache or scrape from wikipedia
     local base_urls = UrlApi:getLibgenUrls()
@@ -174,7 +170,7 @@ function LlgiAPI:downloadBook(book, filepath, callback, retrying)
     if not download_url then
         -- scrape new urls since all current have failed, and search again
         if not retrying then
-            LlgiAPI:downloadBook(book, filepath, callback, true)
+            LlgiAPI:_startDownload(book, filepath, callback, true)
         end
 
         callback(false, last_err or "all Library Genesis mirrors failed")
@@ -182,6 +178,7 @@ function LlgiAPI:downloadBook(book, filepath, callback, retrying)
     end
 
     -- get file size
+    Notification:notify("Checking file size...", Notification.SOURCE_ALWAYS_SHOW)
     local total_size = CurlUtil.getRemoteFileSize(download_url)
     if total_size then
         logger.info("KindleFetch: file size found", total_size)
@@ -215,16 +212,89 @@ function LlgiAPI:downloadBook(book, filepath, callback, retrying)
         callback = callback
     }
 
-    -- schedule download check
     UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
         pollDownload(book, filepath, pid, exit_file, download_url, false, total_size, progress_widget, current_pid,
             function(ok, err)
                 progress_widget:close()
-                LlgiAPI.active_downloads[book.md5] = nil  -- cleanup after download finishes
+                LlgiAPI.active_downloads[book.md5] = nil -- cleanup after download finishes
                 UIManager:forceRePaint()
                 callback(ok, err)
             end)
     end)
+end
+
+function LlgiAPI:downloadBook(book, filepath, callback)
+    callback = callback or function()
+    end
+
+    if LlgiAPI.active_downloads[book.md5] then
+        callback(false, "this book is already downloading")
+        return
+    end
+
+    -- download book image
+    self:downloadBookImage(book)
+
+    -- show download prompt to let user choose folder and confirm
+    local prompt = DownloadPrompt.new(book, filepath, function(confirmed_filepath)
+        self:_startDownload(book, confirmed_filepath, callback, false)
+    end)
+
+    prompt:show()
+end
+
+function LlgiAPI:downloadBookImage(book)
+    if book.image_path then
+        logger.info("KindleFetch: book image already downloaded", {
+            title = book.title,
+            md5 = book.md5,
+            image_url = book.image_url,
+            image = book.image_path
+        })
+        return
+    end
+
+    if not book.image_url then
+        logger.warn("KindleFetch: no image url available", {
+            title = book.title,
+            md5 = book.md5,
+            image_url = book.image_url
+        })
+        return
+    end
+
+    -- check cache
+    local tmp_path = CoverCache:get(book.md5)
+    if tmp_path then
+        book.image_path = tmp_path
+    end
+
+    -- fetch image data
+    logger.info("KindleFetch: downloading book image", {
+        title = book.title,
+        md5 = book.md5,
+        image_url = book.image_url
+    })
+    Notification:notify("Getting book cover...", Notification.SOURCE_ALWAYS_SHOW)
+    local image_data, err = HttpUtil.getBody(book.image_url)
+    if not image_data then
+        logger.warn("KindleFetch: failed to download book image", {
+            title = book.title,
+            md5 = book.md5,
+            error = err
+        })
+        return
+    end
+    logger.info("KindleFetch: book image downloaded successfully", {
+        title = book.title,
+        md5 = book.md5,
+        url = book.image_url,
+        size = #image_data
+    })
+
+    -- save to cache and update path
+    CoverCache:set(book.md5, image_data)
+    book.image_path = CoverCache:getPath(book.md5)
 end
 
 function LlgiAPI:getActiveDownloads()
