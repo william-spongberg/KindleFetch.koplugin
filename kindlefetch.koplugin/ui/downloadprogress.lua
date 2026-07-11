@@ -3,6 +3,7 @@ local CenterContainer = require("ui/widget/container/centercontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
+local HorizontalGroup = require("ui/widget/horizontalgroup")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
 local ProgressWidget = require("ui/widget/progresswidget")
@@ -25,6 +26,7 @@ function DownloadProgress.new(title, on_cancel)
 
     self.cancelled = false
     self.on_cancel = on_cancel
+    self.is_visible = true
 
     -- title
     self.text_widget = TextBoxWidget:new{
@@ -48,16 +50,35 @@ function DownloadProgress.new(title, on_cancel)
         percentage = 0,
     }
 
+    -- hide/show button
+    self.hide_button = Button:new{
+        text = "Hide",
+        callback = function()
+            self:toggleVisibility()
+        end,
+        width = Screen:scaleBySize(60),
+        bordersize = Size.border.button,
+        margin = Size.margin.small,
+        padding = Size.padding.button,
+    }
+
     -- cancel button
     self.cancel_button = Button:new{
         text = "Cancel",
         callback = function()
             self:cancel()
         end,
-        width = Screen:scaleBySize(120),
+        width = Screen:scaleBySize(60),
         bordersize = Size.border.button,
         margin = Size.margin.small,
         padding = Size.padding.button,
+    }
+
+    -- button group
+    self.button_group = HorizontalGroup:new{
+        align = "center",
+        self.hide_button,
+        self.cancel_button,
     }
 
     self.frame = FrameContainer:new{
@@ -73,7 +94,7 @@ function DownloadProgress.new(title, on_cancel)
             VerticalSpan:new{ width = Size.padding.small },
             self.status_widget,
             VerticalSpan:new{ width = Size.padding.default },
-            self.cancel_button,
+            self.button_group,
         }
     }
 
@@ -89,13 +110,29 @@ function DownloadProgress.new(title, on_cancel)
 end
 
 function DownloadProgress:show()
+    if not self.is_visible then
+        return
+    end
     UIManager:show(self.container)
+    UIManager:forceRePaint()
+end
+
+-- toggle visibility of the progress widget
+function DownloadProgress:toggleVisibility()
+    self.is_visible = not self.is_visible
+    if self.is_visible then
+        self.hide_button:setText("Hide")
+        UIManager:show(self.container)
+    else
+        self.hide_button:setText("Show")
+        UIManager:close(self.container)
+    end
     UIManager:forceRePaint()
 end
 
 -- update percentage text and force repaint
 function DownloadProgress:update(percentage, status_text)
-    if self.cancelled then
+    if self.cancelled or not self.is_visible then
         return
     end
     self.bar_widget.percentage = percentage
@@ -122,7 +159,11 @@ function DownloadProgress:cancel()
 end
 
 function DownloadProgress:close()
+    if not self.is_visible then
+        return
+    end
     UIManager:close(self.container)
+    UIManager:setDirty(self.container, "ui")
     UIManager:forceRePaint()
 end
 

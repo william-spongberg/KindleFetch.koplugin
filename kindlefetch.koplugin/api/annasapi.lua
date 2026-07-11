@@ -4,6 +4,7 @@ local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
+local UrlCache = require("cache.urlcache")
 local UrlApi = require("api.urlapi")
 
 local AnnasAPI = {}
@@ -66,7 +67,9 @@ local function parseBookTable(html)
 end
 
 -- main search function
-function AnnasAPI:search(query, page)
+function AnnasAPI:search(query, page, retrying)
+    retrying = retrying or false
+
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
     local book_types = KindleFetchSettings:getPreferredBookTypes()
@@ -93,7 +96,7 @@ function AnnasAPI:search(query, page)
     -- get urls
     local base_urls = UrlApi:getAnnasUrls()
     if not base_urls then
-        return nil, "No Anna's Archive URLs available"
+        return nil, "no Anna's Archive URLs available"
     end
 
     local last_err
@@ -122,10 +125,16 @@ function AnnasAPI:search(query, page)
         logger.warn("KindleFetch: failed url:", url, err or "unknown error")
         last_err = err
 
-        -- TODO: menu asking if you want to try next url
+        -- invalidate the url cache
+        UrlCache:clear()
     end
 
-    return nil, last_err or "All Anna's Archive mirrors failed"
+    -- scrape new urls since all current have failed, and search again
+    if not retrying then
+        AnnasAPI:search(query, page, true)
+    end
+
+    return nil, last_err or "all Anna's Archive mirrors failed"
 end
 
 return AnnasAPI

@@ -1,7 +1,7 @@
 local Dispatcher = require("dispatcher")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
-local CheckButton = require("ui/widget/checkbutton")
+local ConfirmBox = require("ui/widget/confirmbox")
 local Screen = require("device").screen
 local Input = require("device").input
 local UIManager = require("ui/uimanager")
@@ -50,6 +50,9 @@ function KindleFetch:init()
     -- register to main menu
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
+
+    -- register exit hook to warn about active downloads
+    self:registerExitHook()
 end
 
 function KindleFetch:addToMainMenu(menu_items)
@@ -208,31 +211,19 @@ end
 function KindleFetch:loadMoreResults()
     self.current_page = self.current_page + 1
 
-    Notification:notify(
-        "Loading more books...",
-        Notification.SOURCE_ALWAYS_SHOW,
-        true
-    )
+    Notification:notify("Loading more books...", Notification.SOURCE_ALWAYS_SHOW, true)
 
-    local books, err = self:search(
-        self.current_search_query,
-        self.current_page
-    )
+    local books, err = self:search(self.current_search_query, self.current_page)
 
     if err then
-        Notification:notify(
-            "Error: " .. err,
-            Notification.SOURCE_ALWAYS_SHOW
-        )
+        Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
         self.current_page = self.current_page - 1
         return
     end
 
     if #books == 0 then
-        Notification:notify(
-            "No more books found",
-            Notification.SOURCE_ALWAYS_SHOW
-        )
+        Notification:notify("No more books found", Notification.SOURCE_ALWAYS_SHOW)
+        self.current_page = self.current_page - 1
         return
     end
 
@@ -254,10 +245,10 @@ end
 
 function KindleFetch:downloadBook(book)
     local filepath = buildDownloadPath(book)
-    Notification:notify("Downloading: " .. book.title, Notification.SOURCE_ALWAYS_SHOW, true)
+    Notification:notify("Checking: " .. book.title, Notification.SOURCE_ALWAYS_SHOW, true)
     LlgiAPI:downloadBook(book, filepath, function(ok, err)
         if ok then
-            Notification:notify("Saved to " .. filepath, Notification.SOURCE_ALWAYS_SHOW, true)
+            Notification:notify("Downloaded " .. book.title, Notification.SOURCE_ALWAYS_SHOW, true)
         else
             Notification:notify(err and ("Download failed: " .. err) or "Download failed",
                 Notification.SOURCE_ALWAYS_SHOW, true)

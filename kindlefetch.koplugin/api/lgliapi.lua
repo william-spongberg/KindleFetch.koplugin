@@ -7,12 +7,14 @@ local StringUtil = require("util.stringutil")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
 local UrlApi = require("api.urlapi")
+local UrlCache = require("cache.urlcache")
 local _ = require("gettext")
 
 local LlgiAPI = {}
+LlgiAPI.active_downloads = {}
 
-LlgiAPI.base_url = "https://libgen.li"
-LlgiAPI.download_poll_interval = 0.5
+-- constants
+local DOWNLOAD_POLL_INTERVAL = 0.5
 
 local function pollDownload(book, filepath, pid, exit_file, download_url, tried_proxy, total_size, progress_widget,
     current_pid, callback)
@@ -20,7 +22,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         CurlUtil.killPid(pid)
         FileUtil.removeFile(exit_file)
         FileUtil.removeFile(filepath)
-        callback(false, "Cancelled")
+        callback(false, "cancelled")
         return
     end
 
@@ -77,10 +79,10 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
             local new_pid, new_exit_file, spawn_err = CurlUtil.spawnDownload(download_url, filepath, true)
             if not new_pid then
                 FileUtil.removeFile(filepath)
-                callback(false, spawn_err or "Download failed and proxy retry could not start")
+                callback(false, spawn_err or "download failed and proxy retry could not start")
                 return
             end
-            UIManager:scheduleIn(LlgiAPI.download_poll_interval, function()
+            UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
                 pollDownload(book, filepath, new_pid, new_exit_file, download_url, true, total_size, progress_widget,
                     current_pid, callback)
             end)
@@ -88,26 +90,31 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         end
 
         FileUtil.removeFile(filepath)
-        callback(false, "Download failed (curl exit code " .. tostring(exit_code) .. ")")
+        callback(false, "download failed (curl exit code " .. tostring(exit_code) .. ")")
         return
     end
 
     -- exit early if process ends abruptly
     if not CurlUtil.isPidRunning(pid) then
         FileUtil.removeFile(filepath)
-        callback(false, "Download process ended unexpectedly")
+        callback(false, "download process ended unexpectedly")
         return
     end
 
     -- schedule download check
-    UIManager:scheduleIn(LlgiAPI.download_poll_interval, function()
+    UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
         pollDownload(book, filepath, pid, exit_file, download_url, tried_proxy, total_size, progress_widget,
             current_pid, callback)
     end)
 end
 
-function LlgiAPI:downloadBook(book, filepath, callback)
+function LlgiAPI:downloadBook(book, filepath, callback, retrying)
     callback = callback or function()
+    end
+    retrying = retrying or false
+
+    if LlgiAPI.active_downloads[book.md5] then
+        callback(false, "this book is already downloading")
     end
 
     logger.dbg("KindleFetch: starting download", {
@@ -119,7 +126,7 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     -- get urls from cache or scrape from wikipedia
     local base_urls = UrlApi:getLibgenUrls()
     if not base_urls then
-        callback(false, "No Libary Genesis urls available")
+        callback(false, "no Libary Genesis urls available")
         return
     end
 
@@ -150,7 +157,7 @@ function LlgiAPI:downloadBook(book, filepath, callback)
                 break
             else
                 logger.warn("KindleFetch: no libgen download link found on url", url)
-                last_err = "No Library Genesis download link found"
+                last_err = "no Library Genesis download link found"
             end
         else
             logger.warn("KindleFetch: failed to fetch libgen ads page", {
@@ -158,11 +165,19 @@ function LlgiAPI:downloadBook(book, filepath, callback)
                 error = err
             })
             last_err = err
+
+            -- invalidate the url cache
+            UrlCache:clear()
         end
     end
 
     if not download_url then
-        callback(false, last_err or "All Library Genesis mirrors failed")
+        -- scrape new urls since all current have failed, and search again
+        if not retrying then
+            LlgiAPI:downloadBook(book, filepath, callback, true)
+        end
+
+        callback(false, last_err or "all Library Genesis mirrors failed")
         return
     end
 
@@ -177,7 +192,7 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     -- create curl downloader
     local pid, exit_file, spawn_err = CurlUtil.spawnDownload(download_url, filepath, false)
     if not pid then
-        callback(false, spawn_err or "Failed to spawn curl downloader")
+        callback(false, spawn_err or "failed to spawn curl downloader")
         return
     end
 
@@ -192,15 +207,47 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     end)
     progress_widget:show()
 
+    -- track this download
+    LlgiAPI.active_downloads[book.md5] = {
+        book = book,
+        filepath = filepath,
+        progress_widget = progress_widget,
+        callback = callback
+    }
+
     -- schedule download check
-    UIManager:scheduleIn(LlgiAPI.download_poll_interval, function()
+    UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
         pollDownload(book, filepath, pid, exit_file, download_url, false, total_size, progress_widget, current_pid,
             function(ok, err)
                 progress_widget:close()
+                LlgiAPI.active_downloads[book.md5] = nil  -- cleanup after download finishes
                 UIManager:forceRePaint()
                 callback(ok, err)
             end)
     end)
+end
+
+function LlgiAPI:getActiveDownloads()
+    local downloads = {}
+    for id, download_info in pairs(self.active_downloads) do
+        table.insert(downloads, {
+            id = id,
+            title = download_info.book.title,
+            filepath = download_info.filepath,
+            md5 = download_info.book.md5,
+            widget = download_info.progress_widget
+        })
+    end
+    return downloads
+end
+
+function LlgiAPI:cancelAllDownloads()
+    for id, download_info in pairs(self.active_downloads) do
+        download_info.progress_widget.cancelled = true
+        download_info.progress_widget:close()
+        FileUtil.removeFile(download_info.filepath)
+    end
+    self.active_downloads = {}
 end
 
 return LlgiAPI
