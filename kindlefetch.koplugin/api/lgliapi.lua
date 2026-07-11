@@ -93,7 +93,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         end
 
         FileUtil.removeFile(filepath)
-        callback(false, "download failed (curl exit code " .. tostring(exit_code) .. ")")
+        callback(false, CurlUtil.getErrorMeaning(exit_code))
         return
     end
 

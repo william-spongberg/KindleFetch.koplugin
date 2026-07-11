@@ -6,6 +6,31 @@ local CurlUtil = {}
 
 -- constants
 local VERSION_URL = "https://api.github.com/repos/william-spongberg/KindleFetch.koplugin/releases/latest"
+local CURL_ERRORS = {
+    [1]  = "unsupported protocol",
+    [3]  = "malformed URL",
+    [5]  = "could not resolve proxy",
+    [6]  = "could not resolve host",
+    [7]  = "failed to connect to server",
+    [18] = "partial file transfer (download interrupted)",
+    [19] = "HTTP range request error",
+    [22] = "HTTP error response",
+    [23] = "failed writing downloaded data",
+    [26] = "failed reading local data",
+    [27] = "out of memory",
+    [28] = "request timed out",
+    [35] = "TLS/SSL connection failed",
+    [36] = "transfer was stopped",
+    [37] = "failed to open local file",
+    [47] = "too many redirects",
+    [52] = "server returned an empty response",
+    [55] = "failed sending network data",
+    [56] = "failed receiving network data",
+    [60] = "TLS certificate verification failed",
+    [61] = "unsupported TLS/SSL feature",
+    [67] = "authentication failed",
+    [78] = "requested resource was not found",
+}
 
 -- shell-escape a string for safe inclusion in a shell command
 function CurlUtil.shellQuote(str)
@@ -27,6 +52,10 @@ local function parseVersion(version_str)
         patch = tonumber(patch),
         str = version_str
     }
+end
+
+function CurlUtil.getErrorMeaning(exit_code)
+    return CURL_ERRORS[exit_code] or "(curl exit code " .. tostring(exit_code) .. ")"
 end
 
 -- compare two version tables: returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2
