@@ -31,18 +31,22 @@ KindleFetch integrates Anna's Archive and Library Genesis into KOReader, allowin
 ### Downloading books
 
 #### Search → Kindle Fetch → Search Anna's Archive
+
 <img width="400" height="533" alt="FileManager_2026-07-12_135936" src="https://github.com/user-attachments/assets/7cbd408b-a778-48d0-b2cf-faef8fc8064e" />
 <img width="400" height="533" alt="FileManager_2026-07-12_135944" src="https://github.com/user-attachments/assets/01568d65-a1ae-4701-b7af-567f57df1f92" />
 <img width="400" height="533" alt="FileManager_2026-07-12_135948" src="https://github.com/user-attachments/assets/dc877805-3e67-4a37-b5c8-ea8e08889e4c" />
 
 1. Enter a book title, author, or keyword in the search box.
+
 <img width="400" height="533" alt="FileManager_2026-07-12_140149" src="https://github.com/user-attachments/assets/e37fbc60-4f32-4f36-839f-b3982fea40e5" />
 
 2. Browse the results and tap a book to download. Optionally, adjust the download location first.
+
 <img width="400" height="533" alt="FileManager_2026-07-12_140202" src="https://github.com/user-attachments/assets/d3db33a4-e8c7-4f0b-afe2-1c6fbfc0d627" />
 <img width="400" height="533" alt="FileManager_2026-07-12_140227" src="https://github.com/user-attachments/assets/3e65dba9-85ec-4224-80b9-420e86036c69" />
 
 4. Confirm the download and monitor progress; tap Hide to run in background or Cancel to stop.
+
 <img width="400" height="533" alt="FileManager_2026-07-12_140244" src="https://github.com/user-attachments/assets/025dfd55-4044-4bde-a4dd-da733595fba9" />
 
 Downloaded books are saved to your configured download directory.
@@ -52,13 +56,16 @@ Downloaded books are saved to your configured download directory.
 ### Settings
 
 #### Search → Kindle Fetch → Settings
+
 <img width="400" height="533" alt="FileManager_2026-07-12_135952" src="https://github.com/user-attachments/assets/604b71ca-f5e2-447c-a215-a71623cf27a8" />
 
 - **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`)
+
 <img width="400" height="533" alt="FileManager_2026-07-12_135959" src="https://github.com/user-attachments/assets/a866e96d-0ac1-4bde-a815-38e0fbfbe57a" />
 <img width="400" height="533" alt="FileManager_2026-07-12_140015" src="https://github.com/user-attachments/assets/649f50aa-c81c-486e-a38c-c2351db9f720" />
 
 - **Preferred Languages**: Choose which languages to prioritise in search results
+
 <img width="400" height="533" alt="FileManager_2026-07-12_140024" src="https://github.com/user-attachments/assets/6b629965-bb15-4d09-8e63-ec77fe9c260d" />
 
 
@@ -68,10 +75,12 @@ Downloaded books are saved to your configured download directory.
   - Documents: PDF, TXT, RTF, DOC, DOCX, ODT, DJVU
   - Images: JPG, TIF, PDB
   - Web: CHM, HTM, HTML, HTMLZ, MHT
+
 <img width="400" height="533" alt="FileManager_2026-07-12_140030" src="https://github.com/user-attachments/assets/2f4cff54-240e-49d6-9293-3982f0a0523b" />
 
 
 - **Preferred Book Types**: Filter by fiction, non-fiction, unknown, comics, or standards documents
+
 <img width="400" height="533" alt="FileManager_2026-07-12_140038" src="https://github.com/user-attachments/assets/1576b6c1-f5b0-4fd8-b907-841080495950" />
 
 
