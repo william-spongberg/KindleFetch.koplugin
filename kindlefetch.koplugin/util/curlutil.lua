@@ -168,7 +168,7 @@ function CurlUtil.installStaticCurl(target_version)
     end
 
     -- download static curl
-    local curl_filename = "curl-static-armhf"
+    local curl_filename = "curl-armhf"
     local curl_path = staging_dir .. "/" .. curl_filename
     local download_url = string.format(
         "https://github.com/moparisthebest/static-curl/releases/download/v%s/%s",
