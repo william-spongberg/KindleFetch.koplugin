@@ -221,7 +221,7 @@ function KindleFetch:loadMoreResults()
         return
     end
 
-    if #books == 0 then
+    if not books then
         Notification:notify("No more books found", Notification.SOURCE_ALWAYS_SHOW)
         self.current_page = self.current_page - 1
         return
