@@ -127,6 +127,7 @@ function DownloadProgress:show()
         return
     end
     UIManager:show(self.container)
+    UIManager:setDirty(self.container, "ui")
     UIManager:forceRePaint()
 end
 
