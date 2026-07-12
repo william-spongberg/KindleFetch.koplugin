@@ -140,6 +140,7 @@ function DownloadProgress:toggleVisibility()
         self.hide_button:setText("Show")
         UIManager:close(self.container)
     end
+    UIManager:setDirty(self.container, "ui")
     UIManager:forceRePaint()
 end
 
