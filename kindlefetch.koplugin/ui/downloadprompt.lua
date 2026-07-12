@@ -161,13 +161,11 @@ end
 function DownloadPrompt:show()
     UIManager:show(self.container)
     UIManager:setDirty(self.container, "ui")
-    UIManager:forceRePaint()
 end
 
 function DownloadPrompt:close()
     UIManager:close(self.container)
     UIManager:setDirty(self.container, "ui")
-    UIManager:forceRePaint()
 end
 
 return DownloadPrompt

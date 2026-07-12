@@ -128,7 +128,6 @@ function DownloadProgress:show()
     end
     UIManager:show(self.container)
     UIManager:setDirty(self.container, "ui")
-    UIManager:forceRePaint()
 end
 
 -- toggle visibility of the progress widget
@@ -142,7 +141,6 @@ function DownloadProgress:toggleVisibility()
         UIManager:close(self.container)
     end
     UIManager:setDirty(self.container, "ui")
-    UIManager:forceRePaint()
 end
 
 -- update percentage text and force repaint
@@ -155,7 +153,6 @@ function DownloadProgress:update(percentage, status_text)
         self.status_widget:setText(status_text)
     end
     UIManager:setDirty(self.container, "ui")
-    UIManager:forceRePaint()
 end
 
 function DownloadProgress:cancel()
@@ -179,7 +176,6 @@ function DownloadProgress:close()
     end
     UIManager:close(self.container)
     UIManager:setDirty(self.container, "ui")
-    UIManager:forceRePaint()
 end
 
 return DownloadProgress

@@ -21,32 +21,28 @@ function SettingsPage:showSettings()
         text = _("Download Folder: ") .. download_dir,
         callback = function()
             UIManager:close(menu)
-            UIManager:setDirty(menu, "ui")
-            UIManager:forceRePaint()
+            UIManager:setDirty(menu, "full")
             this:changeDownloadFolder()
         end
     }, {
         text = _("Preferred Languages: ") .. table.concat(languages, ", "),
         callback = function()
             UIManager:close(menu)
-            UIManager:setDirty(menu, "ui")
-            UIManager:forceRePaint()
+            UIManager:setDirty(menu, "full")
             this:changeLanguages()
         end
     }, {
         text = _("Preferred File Types: ") .. table.concat(file_types, ", "),
         callback = function()
             UIManager:close(menu)
-            UIManager:setDirty(menu, "ui")
-            UIManager:forceRePaint()
+            UIManager:setDirty(menu, "full")
             this:changeFileTypes()
         end
     }, {
         text = _("Preferred Book Types: ") .. table.concat(book_types, ", "),
         callback = function()
             UIManager:close(menu)
-            UIManager:setDirty(menu, "ui")
-            UIManager:forceRePaint()
+            UIManager:setDirty(menu, "full")
             this:changeBookTypes()
         end
     }}
@@ -59,8 +55,7 @@ function SettingsPage:showSettings()
         height = this.dimen.h
     }
     UIManager:show(menu)
-    UIManager:setDirty(menu, "ui")
-    UIManager:forceRePaint()
+    UIManager:setDirty(menu, "full")
 end
 
 function SettingsPage:changeDownloadFolder()
@@ -101,8 +96,7 @@ function SettingsPage:changeLanguages()
                 callback = function()
                     selected[lang.code] = not selected[lang.code]
                     UIManager:close(menu)
-                    UIManager:setDirty(menu, "ui")
-                    UIManager:forceRePaint()
+                    UIManager:setDirty(menu, "full")
                     showMenu()
                 end
             })
@@ -130,9 +124,7 @@ function SettingsPage:changeLanguages()
                     if ok then
                         Notification:notify("Languages updated", Notification.SOURCE_ALWAYS_SHOW)
                         UIManager:close(menu)
-                        UIManager:setDirty(menu, "ui")
-                        UIManager:forceRePaint()
-                        KindleFetchSettings:load()
+                        UIManager:setDirty(menu, "full")
                         this:showSettings()
                     else
                         Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
@@ -144,8 +136,7 @@ function SettingsPage:changeLanguages()
         }
 
         UIManager:show(menu)
-        UIManager:setDirty(menu, "ui")
-        UIManager:forceRePaint()
+        UIManager:setDirty(menu, "full")
     end
 
     showMenu()
@@ -193,8 +184,7 @@ function SettingsPage:changeFileTypes()
                     callback = function()
                         selected[ext] = not selected[ext]
                         UIManager:close(menu)
-                        UIManager:setDirty(menu, "ui")
-                        UIManager:forceRePaint()
+                        UIManager:setDirty(menu, "full")
                         showMenu()
                     end
                 })
@@ -225,8 +215,7 @@ function SettingsPage:changeFileTypes()
                     if ok then
                         Notification:notify("File types updated", Notification.SOURCE_ALWAYS_SHOW)
                         UIManager:close(menu)
-                        UIManager:setDirty(menu, "ui")
-                        UIManager:forceRePaint()
+                        UIManager:setDirty(menu, "full")
                         KindleFetchSettings:load()
                         this:showSettings()
                     else
@@ -239,8 +228,7 @@ function SettingsPage:changeFileTypes()
         }
 
         UIManager:show(menu)
-        UIManager:setDirty(menu, "ui")
-        UIManager:forceRePaint()
+        UIManager:setDirty(menu, "full")
     end
 
     showMenu()
@@ -266,8 +254,7 @@ function SettingsPage:changeBookTypes()
                 callback = function()
                     selected[content.code] = not selected[content.code]
                     UIManager:close(menu)
-                    UIManager:setDirty(menu, "ui")
-                    UIManager:forceRePaint()
+                    UIManager:setDirty(menu, "full")
                     showMenu()
                 end
             })
@@ -295,8 +282,7 @@ function SettingsPage:changeBookTypes()
                     if ok then
                         Notification:notify("Book types updated", Notification.SOURCE_ALWAYS_SHOW)
                         UIManager:close(menu)
-                        UIManager:setDirty(menu, "ui")
-                        UIManager:forceRePaint()
+                        UIManager:setDirty(menu, "full")
                         KindleFetchSettings:load()
                         this:showSettings()
                     else
@@ -309,8 +295,7 @@ function SettingsPage:changeBookTypes()
         }
 
         UIManager:show(menu)
-        UIManager:setDirty(menu, "ui")
-        UIManager:forceRePaint()
+        UIManager:setDirty(menu, "full")
     end
 
     showMenu()

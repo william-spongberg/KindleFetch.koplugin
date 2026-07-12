@@ -84,7 +84,6 @@ function KindleFetch:setupUI()
             callback = function()
                 UIManager:close(this.search_box)
                 UIManager:setDirty(this.search_box, "ui")
-                UIManager:forceRePaint()
             end
         }, {
             text = "Search",
@@ -95,7 +94,6 @@ function KindleFetch:setupUI()
     }
     UIManager:show(self.search_box)
     UIManager:setDirty(self.search_box, "ui")
-    UIManager:forceRePaint()
 end
 
 function KindleFetch:performSearch()
@@ -210,8 +208,7 @@ function KindleFetch:showResults(results)
     self.results_menu = menu
 
     UIManager:show(menu)
-    UIManager:setDirty(menu, "ui")
-    UIManager:forceRePaint()
+    UIManager:setDirty(menu, "full")
 end
 
 function KindleFetch:loadMoreResults()
@@ -240,8 +237,7 @@ function KindleFetch:loadMoreResults()
 
     -- close old menu, show new results
     UIManager:close(self.results_menu)
-    UIManager:setDirty(self.results_menu, "ui")
-    UIManager:forceRePaint()
+    UIManager:setDirty(self.results_menu, "full")
     
     self:showResults(self.results)
 end
