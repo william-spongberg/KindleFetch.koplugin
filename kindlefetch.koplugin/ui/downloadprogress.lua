@@ -127,7 +127,7 @@ function DownloadProgress:show()
         return
     end
     UIManager:show(self.container)
-    UIManager:setDirty(self.container, "ui")
+    UIManager:setDirty(self.container, "full")
 end
 
 -- toggle visibility of the progress widget
@@ -175,7 +175,7 @@ function DownloadProgress:close()
         return
     end
     UIManager:close(self.container)
-    UIManager:setDirty(self.container, "ui")
+    UIManager:setDirty(self.container, "full")
 end
 
 return DownloadProgress

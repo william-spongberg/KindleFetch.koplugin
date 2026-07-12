@@ -160,12 +160,12 @@ end
 
 function DownloadPrompt:show()
     UIManager:show(self.container)
-    UIManager:setDirty(self.container, "ui")
+    UIManager:setDirty(self.container, "full")
 end
 
 function DownloadPrompt:close()
     UIManager:close(self.container)
-    UIManager:setDirty(self.container, "ui")
+    UIManager:setDirty(self.container, "full")
 end
 
 return DownloadPrompt
