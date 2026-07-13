@@ -5,3 +5,4 @@
 - [ ] make book cover larger on tap
 - [ ] tap outside book details widget to close it
 - [ ] setting to automatically extend download path by author and/or book name (e.g. for book series)
+- [ ] add topics to github
