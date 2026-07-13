@@ -22,9 +22,11 @@ KindleFetch integrates Anna's Archive and Library Genesis into KOReader, allowin
 
 ## Installation
 
-1. Download the latest release from the [Releases](https://github.com/william-spongberg/KindleFetch.koplugin/releases) tab
+1. Ensure you have the latest stable release of KOReader installed (the nightly release has been known to cause issues with this plugin)
 
-2. Unzip and move its contents into the `plugins` folder of KOReader
+2. Download the latest release from the [Releases](https://github.com/william-spongberg/KindleFetch.koplugin/releases) tab
+
+3. Unzip and move its contents into the `plugins` folder of KOReader
 
 ## Usage
 
