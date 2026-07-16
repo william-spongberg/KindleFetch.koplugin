@@ -122,7 +122,7 @@ function AnnasAPI:search(query, page, retrying)
             local books = parseBookTable(html)
             logger.dbg("KindleFetch: parsed", #books, "books for", query)
 
-            if books and #books > 0 then
+            if books then
                 -- add new query result to cache before returning
                 SearchCache:set(books, query, page, languages, file_types, book_types)
                 return books
@@ -132,7 +132,7 @@ function AnnasAPI:search(query, page, retrying)
         end
 
         logger.warn("KindleFetch: failed url:", url, err or "unknown error")
-        last_err = err
+        last_err = err or "unknown error"
 
         -- delete from url cache
         UrlApi:deleteAnnasUrl(url)
