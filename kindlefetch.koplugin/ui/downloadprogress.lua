@@ -66,7 +66,8 @@ function DownloadProgress.new(title, on_cancel)
         text = _("Cancel"),
         callback = function()
             self:cancel()
-        end
+        end,
+        padding = Size.padding.default
     }
 
     -- hide button
@@ -74,7 +75,8 @@ function DownloadProgress.new(title, on_cancel)
         text = _("Hide"),
         callback = function()
             self:toggleVisibility()
-        end
+        end,
+        padding = Size.padding.default
     }
 
     -- button group
