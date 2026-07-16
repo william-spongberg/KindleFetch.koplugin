@@ -6,3 +6,4 @@
 - [ ] tap outside book details widget to close it
 - [ ] setting to automatically extend download path by author and/or book name (e.g. for book series)
 - [ ] add topics to github
+- [ ] add development info. devs to create .env file with path to repo clone + koreader install
