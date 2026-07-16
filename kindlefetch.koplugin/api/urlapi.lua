@@ -6,13 +6,15 @@ local logger = require("logger")
 local UrlApi = {}
 
 -- constants
+local ANNAS_KEY = "annas-archive"
+local LIBGEN_KEY = "libgen"
 local ANNAS_URL = "https://en.wikipedia.org/wiki/Anna%27s_Archive"
 local LIBGEN_URL = "https://en.wikipedia.org/wiki/Library_Genesis"
 
 local function parseAnnasUrls(html)
     local urls = {}
 
-    for href in html:gmatch('<a[^>]-href="(https://annas%-archive%.[^"/]+/?[^"]*)"') do
+    for href in html:gmatch('<a[^>]-href="(https://annas%-archive%.[^"/]+)/?["]') do
         table.insert(urls, href)
         logger.dbg("KindleFetch: new Anna's Archive URL", href)
     end
@@ -54,11 +56,19 @@ function UrlApi:getUrls(key, url, parse)
 end
 
 function UrlApi:getAnnasUrls()
-    return UrlApi:getUrls("annas-archive", ANNAS_URL, parseAnnasUrls)
+    return self:getUrls(ANNAS_KEY, ANNAS_URL, parseAnnasUrls)
+end
+
+function UrlApi:deleteAnnasUrl(url)
+    return UrlCache:deleteValueFromKey(url, ANNAS_KEY)
 end
 
 function UrlApi:getLibgenUrls()
-    return UrlApi:getUrls("libgen", LIBGEN_URL, parseLibgenUrls)
+    return self:getUrls(LIBGEN_KEY, LIBGEN_URL, parseLibgenUrls)
+end
+
+function UrlApi:deleteLibgenUrl(url)
+    return UrlCache:deleteValueFromKey(url, LIBGEN_KEY)
 end
 
 return UrlApi

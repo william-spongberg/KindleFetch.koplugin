@@ -130,4 +130,37 @@ function KindleFetchCache:clear()
     self:save()
 end
 
+function KindleFetchCache:deleteValueFromKey(value, ...)
+    self:load()
+    local key = self.makeKey(...)
+    local entry = self.cache[key]
+    
+    if not entry then
+        logger.dbg("KindleFetch: cache key not found:", key)
+        return
+    end
+    
+    local values = entry.value
+    if type(values) ~= "table" then
+        logger.dbg("KindleFetch: cached value is not a table for key:", key)
+        return
+    end
+    
+    -- remove specific value from list
+    for i, v in ipairs(values) do
+        if v == value then
+            logger.dbg("KindleFetch: removing url from cache:", value)
+            table.remove(values, i)
+            break
+        end
+    end
+    
+    -- delete cache key if no values remain
+    if #values == 0 then
+        self:delete(key)
+    end
+    
+    self:save()
+end
+
 return KindleFetchCache
