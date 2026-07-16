@@ -1,17 +1,21 @@
 local logger = require("logger")
 local FileUtil = require("util.fileutil")
 local Notification = require("ui/widget/notification")
+local Device = require("device")
+local UIManager = require("ui/uimanager")
+local lfs = require("libs/libkoreader-lfs")
+local DataStorage = require("datastorage")
 
 local CurlUtil = {}
 
 -- constants
-local VERSION_URL = "https://api.github.com/repos/william-spongberg/KindleFetch.koplugin/releases/latest"
+local TMP_DIR = DataStorage:getSettingsDir() .. "/tmp/"
 local CURL_ERRORS = {
-    [1]  = "unsupported protocol",
-    [3]  = "malformed URL",
-    [5]  = "could not resolve proxy",
-    [6]  = "could not resolve host",
-    [7]  = "failed to connect to server",
+    [1] = "unsupported protocol",
+    [3] = "malformed URL",
+    [5] = "could not resolve proxy",
+    [6] = "could not resolve host",
+    [7] = "failed to connect to server",
     [18] = "partial file transfer (download interrupted)",
     [19] = "HTTP range request error",
     [22] = "HTTP error response",
@@ -29,244 +33,39 @@ local CURL_ERRORS = {
     [60] = "TLS certificate verification failed",
     [61] = "unsupported TLS/SSL feature",
     [67] = "authentication failed",
-    [78] = "requested resource was not found",
+    [78] = "requested resource was not found"
 }
 
--- shell-escape a string for safe inclusion in a shell command
+local function ensureTmpDir()
+    lfs.mkdir(TMP_DIR)
+end
+
 function CurlUtil.shellQuote(str)
     return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
 end
 
--- parse a version string like "7.68.0" into a table {major, minor, patch}
-local function parseVersion(version_str)
-    if not version_str then
-        return nil
+function CurlUtil.isPidRunning(pid)
+    if not pid then
+        return false
     end
-    local major, minor, patch = version_str:match("^(%d+)%.(%d+)%.(%d+)")
-    if not major then
-        return nil
+
+    local ok = os.execute(string.format("kill -0 %d 2>/dev/null", pid))
+    return ok == 0
+end
+
+function CurlUtil.killPid(pid)
+    if not pid then
+        return
     end
-    return {
-        major = tonumber(major),
-        minor = tonumber(minor),
-        patch = tonumber(patch),
-        str = version_str
-    }
+    os.execute(string.format("kill %d 2>/dev/null", pid))
 end
 
 function CurlUtil.getErrorMeaning(exit_code)
     return CURL_ERRORS[exit_code] or "(curl exit code " .. tostring(exit_code) .. ")"
 end
 
--- compare two version tables: returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2
-local function compareVersions(v1, v2)
-    if not v1 or not v2 then
-        return nil
-    end
-    if v1.major ~= v2.major then
-        return v1.major < v2.major and -1 or 1
-    end
-    if v1.minor ~= v2.minor then
-        return v1.minor < v2.minor and -1 or 1
-    end
-    if v1.patch ~= v2.patch then
-        return v1.patch < v2.patch and -1 or 1
-    end
-    return 0
-end
-
-function CurlUtil.getRepoVersion()
-    local cmd = "curl -s " .. VERSION_URL .. " | grep '\"tag_name\"'"
-    local handle = io.popen(cmd)
-    if not handle then
-        return nil
-    end
-
-    local output = handle:read("*a")
-    handle:close()
-
-    -- output:  "tag_name": "v0.1"
-    local tag = output:match('"tag_name"%s*:%s*"([^"]+)"')
-
-    if not tag then
-        return nil
-    end
-
-    tag = tag:gsub("^v", "")
-
-    local major, minor, patch = tag:match("(%d+)%.(%d+)%.?(%d*)")
-
-    return {
-        major = tonumber(major) or 0,
-        minor = tonumber(minor) or 0,
-        patch = tonumber(patch) or 0,
-    }
-end
-
--- get the installed curl version
-function CurlUtil.getCurlVersion()
-    local pipe = io.popen("curl --version 2>/dev/null", "r")
-    if not pipe then
-        return nil
-    end
-
-    local output = pipe:read("*l")
-    pipe:close()
-
-    if not output then
-        return nil
-    end
-
-    -- curl version output format: "curl X.Y.Z (platform) ..."
-    local version = output:match("^curl%s+([%d%.]+)")
-    return version
-end
-
--- check if the installed curl version is at least the minimum required version
-function CurlUtil.isCurlVersionOk(min_version)
-    local current_version_str = CurlUtil.getCurlVersion()
-    if not current_version_str then
-        logger.warn("KindleFetch: curl not found or version could not be determined")
-        return false
-    end
-
-    local current_version = parseVersion(current_version_str)
-    local min_version_parsed = parseVersion(min_version)
-
-    if not current_version or not min_version_parsed then
-        logger.warn("KindleFetch: could not parse curl versions", {
-            current = current_version_str,
-            minimum = min_version
-        })
-        return false
-    end
-
-    local cmp = compareVersions(current_version, min_version_parsed)
-    local is_ok = cmp >= 0
-
-    logger.dbg("KindleFetch: curl version check", {
-        current = current_version_str,
-        minimum = min_version,
-        is_ok = is_ok
-    })
-
-    return is_ok
-end
-
--- install static curl from moparisthebest/static-curl releases
--- basically adds safe guards around the sh script given here https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
-function CurlUtil.installStaticCurl(target_version)
-    logger.dbg("KindleFetch: attempting to install static curl v" .. target_version)
-
-    -- create staging directory
-    local staging_dir = "/mnt/us/bin"
-    local mkdir_cmd = string.format("mkdir -p %s", CurlUtil.shellQuote(staging_dir))
-    logger.dbg("KindleFetch: creating staging directory", mkdir_cmd)
-    if os.execute(mkdir_cmd .. " 2>/dev/null") ~= 0 then
-        logger.error("KindleFetch: failed to create staging directory", staging_dir)
-        return false
-    end
-
-    -- download static curl
-    local curl_filename = "curl-armhf"
-    local curl_path = staging_dir .. "/" .. curl_filename
-    local download_url = string.format(
-        "https://github.com/moparisthebest/static-curl/releases/download/v%s/%s",
-        target_version, curl_filename)
-
-    logger.dbg("KindleFetch: downloading static curl", download_url)
-
-    local download_cmd = string.format(
-        "curl -fL -o %s %s",
-        CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(download_url))
-
-    if os.execute(download_cmd .. " 2>/dev/null") ~= 0 then
-        logger.error("KindleFetch: failed to download static curl", download_url)
-        os.remove(curl_path)
-        return false
-    end
-
-    -- make it executable
-    local chmod_cmd = string.format("chmod +x %s", CurlUtil.shellQuote(curl_path))
-    if os.execute(chmod_cmd) ~= 0 then
-        logger.error("KindleFetch: failed to set executable permission", curl_path)
-        os.remove(curl_path)
-        return false
-    end
-
-    -- backup system curl
-    local system_curl = "/usr/bin/curl"
-    local backup_curl = "/usr/bin/curl.system.bak"
-
-    logger.dbg("KindleFetch: remounting rootfs as read-write")
-    if os.execute("mntroot rw 2>/dev/null") ~= 0 then
-        logger.error("KindleFetch: failed to remount rootfs as read-write")
-        return false
-    end
-
-    -- backup original curl if not already backed up
-    if os.execute(string.format("test -f %s", CurlUtil.shellQuote(backup_curl))) ~= 0 then
-        logger.dbg("KindleFetch: backing up system curl")
-        if os.execute(string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(system_curl), CurlUtil.shellQuote(backup_curl))) ~= 0 then
-            logger.warn("KindleFetch: failed to backup system curl (continuing anyway)")
-        end
-    end
-
-    -- install new curl
-    logger.dbg("KindleFetch: installing static curl to " .. system_curl)
-    if os.execute(string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(system_curl))) ~= 0 then
-        logger.error("KindleFetch: failed to install static curl")
-        os.execute("mntroot ro 2>/dev/null")
-        return false
-    end
-
-    -- set permissions
-    if os.execute(string.format("chmod 755 %s", CurlUtil.shellQuote(system_curl))) ~= 0 then
-        logger.warn("KindleFetch: failed to set curl permissions (continuing anyway)")
-    end
-
-    -- remount as read-only
-    logger.dbg("KindleFetch: remounting rootfs as read-only")
-    if os.execute("mntroot ro 2>/dev/null") ~= 0 then
-        logger.error("KindleFetch: failed to remount rootfs as read-only")
-        return false
-    end
-
-    logger.dbg("KindleFetch: static curl installation completed successfully")
-    return true
-end
-
--- check curl is available and at least min_version, update if necessary
-function CurlUtil.checkCurlVersion()
-    local min_version = "8.17.0"
-
-    if CurlUtil.isCurlVersionOk(min_version) then
-        logger.dbg("KindleFetch: curl version is sufficient", min_version)
-        return true
-    end
-
-    logger.warn("KindleFetch: curl version is below " .. min_version .. ", attempting installation")
-    Notification:notify("curl is outdated, updating curl...", Notification.SOURCE_ALWAYS_SHOW)
-    local install_success = CurlUtil.installStaticCurl(min_version)
-
-    if not install_success then
-        logger.error("KindleFetch: failed to install static curl v" .. min_version)
-        Notification:notify("Failed to update curl", Notification.SOURCE_ALWAYS_SHOW)
-        return false
-    end
-
-    -- verify the installation was successful
-    if CurlUtil.isCurlVersionOk(min_version) then
-        Notification:notify("Successfully updated curl to v" .. min_version, Notification.SOURCE_ALWAYS_SHOW)
-        return true
-    else
-        return false
-    end
-end
-
--- get the remote file size in bytes from a URL's Content-Length header
 function CurlUtil.getRemoteFileSize(url)
-    local cmd = string.format("curl -s -L -I %s", CurlUtil.shellQuote(url))
+    local cmd = string.format("curl -sL -I %s", CurlUtil.shellQuote(url))
 
     local pipe = io.popen(cmd, "r")
     if not pipe then
@@ -292,58 +91,236 @@ function CurlUtil.getRemoteFileSize(url)
     return file_size
 end
 
--- spawn a curl download process in the background
-function CurlUtil.spawnDownload(download_url, filepath, use_proxy)
-    local exit_file = filepath .. ".exitcode"
-    FileUtil.removeFile(exit_file)
-    FileUtil.removeFile(filepath)
+function CurlUtil.createExitFile()
+    ensureTmpDir()
 
+    -- FIXME: os.time() is in seconds (for some reason), so overlaps are possible
+    local exit_file = TMP_DIR .. "curl_download_" .. tostring(os.time()) .. ".exitcode"
+    FileUtil.removeFile(exit_file)
+
+    return exit_file
+end
+
+function CurlUtil.getExitCode(exit_file)
+    local exit_code_str = FileUtil.readFile(exit_file)
+    if not exit_code_str then
+        return nil  -- file doesn't exist yet, process still running
+    end
+    FileUtil.removeFile(exit_file)
+    return tonumber(exit_code_str)
+end
+
+function CurlUtil.getProxyFlag(use_proxy)
     local proxy_flag = ""
     if use_proxy then
         local proxy_url = os.getenv("PROXY_URL")
         if proxy_url and proxy_url ~= "" then
-            proxy_flag = "-x " .. CurlUtil.shellQuote(proxy_url) .. " "
+            proxy_flag = "-x " .. CurlUtil.shellQuote(proxy_url)
         end
     end
 
-    local cmd = string.format(
-        "(curl -sL -f %s-A 'Mozilla/5.0' --retry 2 --retry-delay 2 --connect-timeout 15 -o %s %s; echo $? > %s) >/dev/null 2>&1 & echo $!",
-        proxy_flag, CurlUtil.shellQuote(filepath), CurlUtil.shellQuote(download_url), CurlUtil.shellQuote(exit_file))
+    return proxy_flag
+end
 
-    logger.dbg("KindleFetch: curl command", cmd)
-
+function CurlUtil.spawnCurlPid(cmd)
+    -- execute command
     local pipe = io.popen(cmd, "r")
     if not pipe then
-        return nil, nil, "unable to launch curl"
+        return nil, "unable to launch curl"
     end
 
+    -- read pid from terminal output
     local pid_str = pipe:read("*l")
     pipe:close()
 
     local pid = tonumber(pid_str)
     if not pid then
-        return nil, nil, "unable to determine curl pid"
+        return nil, "unable to determine curl pid"
     end
 
-    return pid, exit_file
+    return pid
 end
 
--- check if a process with the given PID is still running
-function CurlUtil.isPidRunning(pid)
-    if not pid then
-        return false
+function CurlUtil.getDownloadCMD(download_url, filepath)
+    return string.format("curl -sL -f -o %s %s", CurlUtil.shellQuote(filepath), CurlUtil.shellQuote(download_url))
+end
+
+function CurlUtil.pretendBrowser(curl_cmd)
+    return curl_cmd .. " -A 'Mozilla/5.0'"
+end
+
+function CurlUtil.enableRetry(curl_cmd, count, delay)
+    return string.format("%s --retry %d --retry-delay %d", curl_cmd, count, delay)
+end
+
+function CurlUtil.setTimeout(curl_cmd, seconds)
+    return string.format("%s --connect-timeout %d", curl_cmd, seconds)
+end
+
+function CurlUtil.enableParallel(curl_cmd, max_parallel)
+    return string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
+end
+
+function CurlUtil.applyProxy(curl_cmd)
+    return string.format("%s %s", curl_cmd, CurlUtil.getProxyFlag())
+end
+
+function CurlUtil.saveExitCode(cmd, exit_file)
+    local command = string.format("(%s; echo $? > %s)", cmd, CurlUtil.shellQuote(exit_file)) -- save exit code to exit_file
+    command = string.format("%s >/dev/null 2>&1", command) -- do not print errors to terminal
+
+    return command
+end
+
+function CurlUtil.echoPid(cmd)
+    return string.format("%s & echo $!", cmd)
+end
+
+function CurlUtil.getCMD(download_url, filepath, exit_file, use_proxy)
+    local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
+    cmd = CurlUtil.enableRetry(cmd, 2, 2)
+    cmd = CurlUtil.setTimeout(cmd, 15)
+    if use_proxy then
+        cmd = CurlUtil.applyProxy(cmd)
+    end
+    cmd = CurlUtil.saveExitCode(cmd, exit_file)
+
+    return cmd
+end
+
+function CurlUtil.download(download_url, filepath, use_proxy, background)
+
+    local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
+    cmd = CurlUtil.pretendBrowser(cmd)
+    cmd = CurlUtil.enableRetry(cmd, 2, 2)
+    cmd = CurlUtil.setTimeout(cmd, 15)
+    if use_proxy then
+        cmd = CurlUtil.applyProxy(cmd)
     end
 
-    local ok = os.execute(string.format("kill -0 %d 2>/dev/null", pid))
-    return ok == 0
+    local exit_file = CurlUtil.createExitFile()
+    cmd = CurlUtil.saveExitCode(cmd, exit_file)
+
+    logger.dbg("KindleFetch: curl download command", cmd)
+
+    if background then
+        local cmd = CurlUtil.echoPid(cmd)
+        local pid, err = CurlUtil.spawnCurlPid(cmd, exit_file)
+        if not pid or err then
+            return nil, nil, err
+        end
+
+        return pid, exit_file
+    end
+
+    os.execute(cmd)
+
+    local exit_code = CurlUtil.getExitCode(exit_file)
+    if exit_code == 0 then
+        local file_size = FileUtil.getSize(filepath)
+        if file_size and file_size > 0 then
+            logger.dbg("KindleFetch: download completed successfully", {
+                filepath = filepath,
+                file_size = file_size
+            })
+            return true
+        else
+            logger.warn("KindleFetch: download produced empty file", filepath)
+            FileUtil.removeFile(filepath)
+            return false, "download produced empty file"
+        end
+    else
+        logger.warn("KindleFetch: download failed", {
+            filepath = filepath,
+            exit_code = exit_code
+        })
+        FileUtil.removeFile(filepath)
+        return false, CurlUtil.getErrorMeaning(exit_code)
+    end
 end
 
--- kill a process with the given PID
-function CurlUtil.killPid(pid)
-    if not pid then
-        return
+function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, background, num_parallel_jobs)
+    ensureTmpDir()
+
+    local config_file = TMP_DIR .. "curl_download_config_" .. tostring(os.time()) .. ".txt"
+    local f = io.open(config_file, "w")
+    
+    for i, download_url in ipairs(download_urls) do
+        f:write(string.format('url = "%s"\n', download_url:gsub('"', '\\"')))
+        f:write(string.format('output = "%s"\n', filepaths[i]:gsub('"', '\\"')))
     end
-    os.execute(string.format("kill %d 2>/dev/null", pid))
+    f:close()
+
+    local cmd = string.format('curl -sL -f --config "%s"', config_file)
+    cmd = CurlUtil.pretendBrowser(cmd)
+    cmd = CurlUtil.enableRetry(cmd, 2, 2)
+    cmd = CurlUtil.setTimeout(cmd, 15)
+    cmd = CurlUtil.enableParallel(cmd, num_parallel_jobs)
+    if use_proxy then
+        cmd = CurlUtil.applyProxy(cmd)
+    end
+
+    local exit_file = CurlUtil.createExitFile()
+    cmd = CurlUtil.saveExitCode(cmd, exit_file)
+
+    logger.dbg("KindleFetch: curl parallel download command", cmd)
+
+    if background then
+        cmd = CurlUtil.echoPid(cmd)
+        
+        local pid, err = CurlUtil.spawnCurlPid(cmd)
+        if not pid then
+            FileUtil.removeFile(config_file)
+            FileUtil.removeFile(exit_file)
+            return nil, nil, nil, err
+        end
+
+        logger.dbg("KindleFetch: spawned parallel download", {
+            pid = pid, exit_file = exit_file, config_file = config_file,
+            file_count = #download_urls
+        })
+        return pid, exit_file, config_file
+    end
+
+    os.execute(cmd)
+
+    local exit_code = CurlUtil.getExitCode(exit_file)
+    if exit_code ~= 0 then
+        logger.warn("KindleFetch: parallel download command failed", {
+            exit_code = exit_code,
+            reason = CurlUtil.getErrorMeaning(exit_code)
+        })
+    end
+
+    local successful_count = 0
+    for _, filepath in ipairs(filepaths) do
+        if exit_code == 0 and FileUtil.isValidFile(filepath) then
+            local file_size = FileUtil.getSize(filepath)
+            if file_size and file_size > 0 then
+                successful_count = successful_count + 1
+                logger.dbg("KindleFetch: file downloaded successfully", {
+                    filepath = filepath,
+                    file_size = file_size
+                })
+            else
+                logger.warn("KindleFetch: download produced empty file", filepath)
+                FileUtil.removeFile(filepath)
+            end
+        else
+            logger.warn("KindleFetch: file download failed", filepath)
+            FileUtil.removeFile(filepath)
+        end
+    end
+
+    FileUtil.removeFile(config_file)
+    
+    logger.dbg("KindleFetch: parallel download completed", {
+        total_requested = #download_urls,
+        successful = successful_count
+    })
+
+    return successful_count
 end
+
 
 return CurlUtil
