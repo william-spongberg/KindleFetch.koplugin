@@ -9,6 +9,7 @@ local KindleFetchSettings = {}
 -- default settings
 local DEFAULTS = {
     version = {0, 1, 0},
+    show_book_covers = true,
     download_dir = nil,
     preferred_languages = {"en"},
     preferred_file_types = {"epub", "pdf", "cbr", "cbz"},
@@ -345,6 +346,7 @@ end
 
 function KindleFetchSettings:load()
     self:setDownloadDir(self:getDownloadDir())
+    self:setShowBookCovers(self:getShowBookCovers())
     self:setPreferredLanguages(self:getPreferredLanguages())
     self:setPreferredFileTypes(self:getPreferredFileTypes())
     self:setPreferredBookTypes(self:getPreferredBookTypes())
@@ -353,18 +355,34 @@ end
 -- util
 function KindleFetchSettings:getSetting(name)
     local settings_file = getSettingsFile()
-    return settings_file:readSetting(name) or DEFAULTS[name]
-end
-function KindleFetchSettings:setSetting(name, data)
-    if type(data) ~= "table" then
-        data = {data}
+    local value = settings_file:readSetting(name)
+
+    if value == nil then
+        return DEFAULTS[name]
     end
 
+    return value
+end
+function KindleFetchSettings:setSetting(name, data)
     local settings_file = getSettingsFile()
     settings_file:saveSetting(name, data)
     settings_file:flush()
-    logger.dbg("KindleFetch: updated", name, " to", table.concat(data, ", "))
+    
+    if type(data) ~= "table" then
+        logger.dbg("KindleFetch: updated", name, "to", data)
+    else
+        logger.dbg("KindleFetch: updated", name, "to", table.concat(data, ", "))
+    end
+    
     return true
+end
+
+-- show book covers
+function KindleFetchSettings:getShowBookCovers()
+    return KindleFetchSettings:getSetting("show_book_covers")
+end
+function KindleFetchSettings:setShowBookCovers(bool)
+    return KindleFetchSettings:setSetting("show_book_covers", bool)
 end
 
 -- version

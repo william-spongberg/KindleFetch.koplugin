@@ -4,6 +4,7 @@ local DownloadMgr = require("ui/downloadmgr")
 local Menu = require("ui/widget/menu")
 local Notification = require("ui/widget/notification")
 local Screen = require("device").screen
+local logger = require("logger")
 local _ = require("gettext")
 
 local SettingsPage = {}
@@ -12,12 +13,20 @@ function SettingsPage:showSettings()
     local this = self
     local menu
     self.dimen = Screen:getSize()
+    local show_book_covers = KindleFetchSettings:getShowBookCovers()
     local download_dir = KindleFetchSettings:getDownloadDir()
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
     local book_types = KindleFetchSettings:getPreferredBookTypes()
 
     local menu_items = {{
+        text = _(string.format("Show Book Covers: %s", show_book_covers and "☑" or "☐")),
+        callback = function()
+            UIManager:close(menu)
+            UIManager:setDirty(menu, "full")
+            this:changeBookCoverVisibility()
+        end
+    }, {
         text = _("Download Folder: ") .. download_dir,
         callback = function()
             UIManager:close(menu)
@@ -56,6 +65,19 @@ function SettingsPage:showSettings()
     }
     UIManager:show(menu)
     UIManager:setDirty(menu, "full")
+end
+
+function SettingsPage:changeBookCoverVisibility()
+    local this = self
+
+    local ok, err = KindleFetchSettings:setShowBookCovers(not KindleFetchSettings:getShowBookCovers())
+    if ok then
+        Notification:notify("Book cover visibility updated", Notification.SOURCE_ALWAYS_SHOW)
+        KindleFetchSettings:load()
+        this:showSettings()
+    else
+        Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
+    end
 end
 
 function SettingsPage:changeDownloadFolder()
