@@ -13,8 +13,10 @@ local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
 local AnnasAPI = require("api.annasapi")
 local LlgiAPI = require("api.lgliapi")
-local CurlUtil = require("util.curlutil")
 local logger = require("logger")
+local BookMenu = require("ui.bookmenu")
+local CoverCache = require("cache.covercache")
+local VersionCheck = require("util.versioncheck")
 local _ = require("gettext")
 
 local KindleFetch = WidgetContainer:new{
@@ -33,7 +35,7 @@ end
 
 function KindleFetch:init()
     -- ensure curl is available and meets version requirements
-    if not CurlUtil.checkCurlVersion() then
+    if not VersionCheck.checkCurlVersion() then
         Notification:notify("curl is not available or could not be installed", Notification.SOURCE_ALWAYS_SHOW)
         return
     end
@@ -116,74 +118,50 @@ function KindleFetch:performSearch()
 
     logger.dbg("KindleFetch: starting search for", query)
     Notification:notify("Searching...", Notification.SOURCE_ALWAYS_SHOW, true)
+    UIManager:forceRePaint()
 
     -- start search
     self.current_search_query = query
     self.current_page = 1
-    local results, err = self:search(query, self.current_page)
-    self.results = results
-    if err then
+    local books, err = self:search(query, self.current_page)
+    self.books = books
+
+    -- check for errors
+    if err or not books then
         Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
         return
     end
-
-    if results == {} then
+    if #books == 0 then
         logger.warn("KindleFetch: no books to show after search")
-        Notification:notify("No results found", Notification.SOURCE_ALWAYS_SHOW)
+        Notification:notify("No books found", Notification.SOURCE_ALWAYS_SHOW)
         return
     end
 
-    -- show results
-    self:showResults(results)
+    -- show books
+    self:showBooks(books)
 end
 
 function KindleFetch:search(query, page)
     local books, err = AnnasAPI:search(query, page)
 
-    if books == nil or type(books) ~= "table" then
+    if not books or type(books) ~= "table" then
         logger.warn("KindleFetch: API search failed for", query, err or "unknown error")
         return nil, err
     end
 
-    logger.dbg("KindleFetch: API returned", #books, "raw results for", query, "page", page)
+    logger.dbg("KindleFetch: API returned", #books, "raw books for", query, "page", page)
 
     return books
 end
 
-local function formatBookDetails(book)
-    local details = {}
-
-    local function addBookDetail(detail)
-        if StringUtil.assertValidString(detail) then
-            table.insert(details, detail)
-        end
-    end
-
-    addBookDetail(book.year)
-    addBookDetail(book.language)
-    addBookDetail(book.book_type)
-    addBookDetail(book.file_type)
-    addBookDetail(book.file_size)
-
-    return table.concat(details, " · ")
-end
-
-function KindleFetch:showResults(results)
+-- TODO: move to new books page file
+function KindleFetch:showBooks(books)
     local this = self
     local menu_items = {}
 
-    for _, book in ipairs(results) do
-        local book_text = book.title .. " by " .. book.authors
-        local details = formatBookDetails(book)
-        logger.dbg("KindleFetch: book details for", book.title, "=", details)
-        book_text = book_text .. " · " .. details
-
+    for _, book in ipairs(books) do
         table.insert(menu_items, {
-            text = book_text,
-            single_line = false,
-            multilines_show_more_text = true,
-            multilines_forced = true,
-            keep_newlines = true,
+            book = book,
             callback = function()
                 this:downloadBook(book)
             end
@@ -193,28 +171,71 @@ function KindleFetch:showResults(results)
     table.insert(menu_items, {
         text = _("Load more"),
         callback = function()
-            this:loadMoreResults()
+            self:loadMoreBooks()
         end
     })
 
-    local menu = Menu:new{
+    local menu
+    menu = BookMenu:new{
         item_table = menu_items,
         covers_fullscreen = true,
         is_borderless = true,
-        multilines_show_more_text = true,
         width = this.dimen.w,
-        height = this.dimen.h
+        height = this.dimen.h,
+        items_max_lines = true,
+        onPageChange = function(page)
+            if (KindleFetchSettings:getShowBookCovers()) then
+                logger.dbg("KindleFetch: loading covers for page", page)
+                this:loadCoversForPage(menu, page)
+            end
+        end
     }
-    self.results_menu = menu
+
+    self.books_menu = menu
 
     UIManager:show(menu)
     UIManager:setDirty(menu, "full")
+
+    -- load covers for first page
+    if KindleFetchSettings:getShowBookCovers() then
+        logger.dbg("KindleFetch: loading covers for page 1")
+        this:loadCoversForPage(menu, 1)
+    end
 end
 
-function KindleFetch:loadMoreResults()
+function KindleFetch:loadCoversForPage(menu, current_page)
+    local items_per_page = self.books_menu:getNumberBooksPerPage() + 1
+    local start_idx = (current_page - 1) * items_per_page + 1
+    local end_idx = math.min(start_idx + items_per_page - 1, #menu.item_table)
+
+    -- collect books that need downloading
+    local books_to_download = {}
+    local items_being_modified = {}
+    for idx = start_idx, end_idx do
+        local item = menu.item_table[idx]
+        if item and item.book and item.book.image_url and not CoverCache:cacheExists(item.book.md5) then
+            table.insert(books_to_download, item.book)
+            table.insert(items_being_modified, idx)
+            item.widget = nil -- clear cache
+        end
+    end
+
+    if #books_to_download > 0 then
+        -- download all at once in parallel
+        logger.dbg("KindleFetch: downloading", #books_to_download, "covers in parallel")
+        CoverCache:downloadMultiple(books_to_download, items_per_page)
+
+        -- refresh menu to show downloaded covers
+        menu:updateItems()
+        UIManager:setDirty(menu, "full")
+    end
+end
+
+function KindleFetch:loadMoreBooks()
     self.current_page = self.current_page + 1
 
     Notification:notify("Loading more books...", Notification.SOURCE_ALWAYS_SHOW, true)
+    UIManager:forceRePaint()
 
     local books, err = self:search(self.current_search_query, self.current_page)
 
@@ -230,16 +251,16 @@ function KindleFetch:loadMoreResults()
         return
     end
 
-    -- append new results
+    -- append new books
     for _, book in ipairs(books) do
-        table.insert(self.results, book)
+        table.insert(self.books, book)
     end
 
-    -- close old menu, show new results
-    UIManager:close(self.results_menu)
-    UIManager:setDirty(self.results_menu, "full")
-    
-    self:showResults(self.results)
+    -- close old menu, show new menu
+    UIManager:close(self.books_menu)
+    UIManager:setDirty(self.books_menu, "full")
+
+    self:showBooks(self.books)
 end
 
 local function buildDownloadPath(book)
@@ -252,10 +273,14 @@ function KindleFetch:downloadBook(book)
     local filepath = buildDownloadPath(book)
     LlgiAPI:downloadBook(book, filepath, function(ok, err)
         if ok then
+            logger.warn("KindleFetch: downloaded book", book.md5, "to", filepath)
             Notification:notify("Downloaded " .. book.title, Notification.SOURCE_ALWAYS_SHOW, true)
+            UIManager:forceRePaint()
         else
+            logger.warn("KindleFetch: download failed for", book.md5, err)
             Notification:notify(err and ("Download failed: " .. err) or "Download failed",
                 Notification.SOURCE_ALWAYS_SHOW, true)
+            UIManager:forceRePaint()
         end
     end)
 end
