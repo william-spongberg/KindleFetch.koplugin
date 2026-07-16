@@ -30,19 +30,18 @@ local function parseBookTable(html)
             -- Cell 0: Cover image + MD5
             book.md5 = cells[1]:match('href="/md5/([a-f0-9]+)')
             book.image_url = cells[1]:match('src="([^"]+)"')
-
-            logger.dbg("KindleFetch: cells[1]", cells[1])
-            logger.dbg("KindleFetch: image url", book.image_url)
-
             -- Cell 1: Title
             local raw_title = cells[2]:match('>([^<]+)</span>')
-            if not raw_title:find("file:") then
-                book.title = StringUtil.removeParentheses(StringUtil.removeExtension(raw_title))
+            if raw_title and not raw_title:find("file:") and not raw_title:find("file might have issues") then
+                book.title = StringUtil.cleanFileName(raw_title)
+                book.display_title = StringUtil.truncate(book.title)
             end
             -- Cell 2: Authors
             book.authors = cells[3]:match('>([^<]+)</span>')
             if not StringUtil.assertValidString(book.authors) then
                 book.authors = "Unknown author"
+            else
+                book.authors = StringUtil.truncate(book.authors)
             end
             -- Cell 3: Publisher
             -- Cell 4: Year
@@ -135,8 +134,8 @@ function AnnasAPI:search(query, page, retrying)
         logger.warn("KindleFetch: failed url:", url, err or "unknown error")
         last_err = err
 
-        -- invalidate the url cache
-        UrlCache:clear()
+        -- delete from url cache
+        UrlApi:deleteAnnasUrl(url)
     end
 
     -- scrape new urls since all current have failed, and search again

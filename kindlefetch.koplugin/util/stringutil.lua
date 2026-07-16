@@ -24,6 +24,20 @@ function StringUtil.collapseWhitespace(text)
     return text:gsub("%s+", " ")
 end
 
+function StringUtil.collapseDots(text)
+    if not StringUtil.assertValidString(text) then
+        return ""
+    end
+    return text:gsub("%.+", ".")
+end
+
+function StringUtil.collapseDashes(text)
+    if not StringUtil.assertValidString(text) then
+        return ""
+    end
+    return text:gsub("-+", "-")
+end
+
 function StringUtil.cleanEmojis(text)
     if not StringUtil.assertValidString(text) then
         return ""
@@ -65,6 +79,34 @@ function StringUtil.removeParentheses(text)
     -- remove anything in brackets, (...) or [...]
     text = text:gsub("%s*%([^)]*%)", "")  -- remove (...)
     text = text:gsub("%s*%[[^%]]*%]", "")  -- remove [...]
+    return text
+end
+
+function StringUtil.truncate(text)
+    if not StringUtil.assertValidString(text) then
+        return ""
+    end
+
+    local limit = 50
+    if #text > limit then
+        return text:sub(1, limit) .. "…"
+    end
+    
+    return text
+end
+
+function StringUtil.cleanFileName(text)
+    if not StringUtil.assertValidString(text) then
+        return ""
+    end
+
+    text = StringUtil.removeExtension(text)
+    text = StringUtil.removeParentheses(text)
+    text = text:gsub('[<>:"/\\|?*]', "-")  -- replace invalid chars with dash
+    text = text:gsub("^[%s%.]+", "")  -- remove leading spaces/dots
+    text = text:gsub("[%s%.]+$", "")  -- remove trailing spaces/dots
+    text = StringUtil.collapseWhitespace(StringUtil.collapseDashes(StringUtil.collapseDots(text)))
+
     return text
 end
 
