@@ -20,6 +20,7 @@ local StringUtil = require("util.stringutil")
 local Screen = require("device").screen
 local TextWidget = require("ui/widget/textwidget")
 local CoverCache = require("cache.covercache")
+local LogUtil = require("util.logutil")
 
 -- constants
 local COVER_SIZE = Screen:scaleBySize(100)
@@ -277,6 +278,34 @@ function BookMenu:updateItems(select_number, no_recalculate_dimen)
         local refresh_dimen = old_dimen and old_dimen:combine(self.dimen) or self.dimen
         return "ui", refresh_dimen
     end)
+end
+
+function BookMenu:loadCoversForPage(current_page)
+    local items_per_page = self:getNumberBooksPerPage() + 1
+    local start_idx = (current_page - 1) * items_per_page + 1
+    local end_idx = math.min(start_idx + items_per_page - 1, #self.item_table)
+
+    -- collect books that need downloading
+    local books_to_download = {}
+    local items_being_modified = {}
+    for idx = start_idx, end_idx do
+        local item = self.item_table[idx]
+        if item and item.book and item.book.image_url and not CoverCache:cacheExists(item.book.md5) then
+            table.insert(books_to_download, item.book)
+            table.insert(items_being_modified, idx)
+            item.widget = nil -- clear cache
+        end
+    end
+
+    if #books_to_download > 0 then
+        -- download all at once in parallel
+        LogUtil.debug("downloading", #books_to_download, "covers in parallel")
+        CoverCache:downloadMultiple(books_to_download, items_per_page)
+
+        -- refresh menu to show downloaded covers
+        self:updateItems()
+        UIManager:setDirty(self, "full")
+    end
 end
 
 return BookMenu

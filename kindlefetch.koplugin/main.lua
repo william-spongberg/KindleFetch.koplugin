@@ -189,7 +189,6 @@ function KindleFetch:search(query, page)
     return books
 end
 
--- TODO: move to new books page file
 function KindleFetch:showBooks(books)
     local this = self
     local menu_items = {}
@@ -221,7 +220,7 @@ function KindleFetch:showBooks(books)
         onPageChange = function(page)
             if (KindleFetchSettings:getShowBookCovers()) then
                 LogUtil.debug("loading covers for page", page)
-                this:loadCoversForPage(menu, page)
+                menu:loadCoversForPage(page)
             end
         end
     }
@@ -234,35 +233,7 @@ function KindleFetch:showBooks(books)
     -- load covers for first page
     if KindleFetchSettings:getShowBookCovers() then
         LogUtil.debug("loading covers for page 1")
-        this:loadCoversForPage(menu, 1)
-    end
-end
-
-function KindleFetch:loadCoversForPage(menu, current_page)
-    local items_per_page = self.books_menu:getNumberBooksPerPage() + 1
-    local start_idx = (current_page - 1) * items_per_page + 1
-    local end_idx = math.min(start_idx + items_per_page - 1, #menu.item_table)
-
-    -- collect books that need downloading
-    local books_to_download = {}
-    local items_being_modified = {}
-    for idx = start_idx, end_idx do
-        local item = menu.item_table[idx]
-        if item and item.book and item.book.image_url and not CoverCache:cacheExists(item.book.md5) then
-            table.insert(books_to_download, item.book)
-            table.insert(items_being_modified, idx)
-            item.widget = nil -- clear cache
-        end
-    end
-
-    if #books_to_download > 0 then
-        -- download all at once in parallel
-        LogUtil.debug("downloading", #books_to_download, "covers in parallel")
-        CoverCache:downloadMultiple(books_to_download, items_per_page)
-
-        -- refresh menu to show downloaded covers
-        menu:updateItems()
-        UIManager:setDirty(menu, "full")
+        menu:loadCoversForPage(1)
     end
 end
 
