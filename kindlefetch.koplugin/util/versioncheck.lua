@@ -1,9 +1,9 @@
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
-local Notification = require("ui/widget/notification")
 local Device = require("device")
 local UIManager = require("ui/uimanager")
 local CurlUtil = require("util.curlutil")
+local NotifyUtil = require("util.notifyutil")
 
 local VersionCheck = {}
 
@@ -224,21 +224,18 @@ function VersionCheck.checkCurlVersion()
     end
 
     LogUtil.warn("curl version is below ")
-    Notification:notify("curl is outdated, updating curl...", Notification.SOURCE_ALWAYS_SHOW)
-    UIManager:forceRePaint()
+    NotifyUtil.info("curl is outdated, updating curl...")
     local install_success = VersionCheck.installStaticCurl(min_version)
 
     if not install_success then
         LogUtil.warn("failed to install static curl v")
-        Notification:notify("Failed to update curl", Notification.SOURCE_ALWAYS_SHOW)
-        UIManager:forceRePaint()
+        NotifyUtil.info("Failed to update curl")
         return false
     end
 
     -- verify the installation was successful
     if VersionCheck.isCurlVersionOk(min_version) then
-        Notification:notify("Successfully updated curl to v" .. min_version, Notification.SOURCE_ALWAYS_SHOW)
-        UIManager:forceRePaint()
+        NotifyUtil.info("Successfully updated curl to v" .. min_version)
         return true
     else
         return false

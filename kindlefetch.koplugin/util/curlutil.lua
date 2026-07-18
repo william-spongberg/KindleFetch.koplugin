@@ -1,6 +1,5 @@
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
-local Notification = require("ui/widget/notification")
 local Device = require("device")
 local UIManager = require("ui/uimanager")
 local lfs = require("libs/libkoreader-lfs")

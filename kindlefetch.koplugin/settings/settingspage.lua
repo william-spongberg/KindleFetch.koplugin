@@ -2,9 +2,9 @@ local KindleFetchSettings = require("settings.settings")
 local UIManager = require("ui/uimanager")
 local DownloadMgr = require("ui/downloadmgr")
 local Menu = require("ui/widget/menu")
-local Notification = require("ui/widget/notification")
 local Screen = require("device").screen
 local LogUtil = require("util.logutil")
+local NotifyUtil = require("util.notifyutil")
 local _ = require("gettext")
 
 local SettingsPage = {}
@@ -72,11 +72,11 @@ function SettingsPage:changeBookCoverVisibility()
 
     local ok, err = KindleFetchSettings:setShowBookCovers(not KindleFetchSettings:getShowBookCovers())
     if ok then
-        Notification:notify("Book cover visibility updated", Notification.SOURCE_ALWAYS_SHOW)
+        NotifyUtil.info("Book cover visibility updated")
         KindleFetchSettings:load()
         this:showSettings()
     else
-        Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
+        NotifyUtil.info("Error: " .. err)
     end
 end
 
@@ -88,11 +88,11 @@ function SettingsPage:changeDownloadFolder()
         onConfirm = function(dir)
             local ok, err = KindleFetchSettings:setDownloadDir(dir)
             if ok then
-                Notification:notify("Download folder updated", Notification.SOURCE_ALWAYS_SHOW)
+                NotifyUtil.info("Download folder updated")
                 KindleFetchSettings:load()
                 this:showSettings()
             else
-                Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
+                NotifyUtil.info("Error: " .. err)
             end
         end
     }:chooseDir()
@@ -144,15 +144,15 @@ function SettingsPage:changeLanguages()
                 if #result > 0 then
                     local ok, err = KindleFetchSettings:setPreferredLanguages(result)
                     if ok then
-                        Notification:notify("Languages updated", Notification.SOURCE_ALWAYS_SHOW)
+                        NotifyUtil.info("Languages updated")
                         UIManager:close(menu)
                         UIManager:setDirty(menu, "full")
                         this:showSettings()
                     else
-                        Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
+                        NotifyUtil.info("Error: " .. err)
                     end
                 else
-                    Notification:notify("Select at least one language", Notification.SOURCE_ALWAYS_SHOW)
+                    NotifyUtil.info("Select at least one language")
                 end
             end
         }
@@ -235,16 +235,16 @@ function SettingsPage:changeFileTypes()
                 if #result > 0 then
                     local ok, err = KindleFetchSettings:setPreferredFileTypes(result)
                     if ok then
-                        Notification:notify("File types updated", Notification.SOURCE_ALWAYS_SHOW)
+                        NotifyUtil.info("File types updated")
                         UIManager:close(menu)
                         UIManager:setDirty(menu, "full")
                         KindleFetchSettings:load()
                         this:showSettings()
                     else
-                        Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
+                        NotifyUtil.info("Error: " .. err)
                     end
                 else
-                    Notification:notify("Select at least one file type", Notification.SOURCE_ALWAYS_SHOW)
+                    NotifyUtil.info("Select at least one file type")
                 end
             end
         }
@@ -302,16 +302,16 @@ function SettingsPage:changeBookTypes()
                 if #result > 0 then
                     local ok, err = KindleFetchSettings:setPreferredBookTypes(result)
                     if ok then
-                        Notification:notify("Book types updated", Notification.SOURCE_ALWAYS_SHOW)
+                        NotifyUtil.info("Book types updated")
                         UIManager:close(menu)
                         UIManager:setDirty(menu, "full")
                         KindleFetchSettings:load()
                         this:showSettings()
                     else
-                        Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
+                        NotifyUtil.info("Error: " .. err)
                     end
                 else
-                    Notification:notify("Select at least one book type", Notification.SOURCE_ALWAYS_SHOW)
+                    NotifyUtil.info("Select at least one book type")
                 end
             end
         }

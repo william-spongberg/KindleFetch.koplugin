@@ -1,11 +1,11 @@
 local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
 local FileUtil = require("util.fileutil")
-local Notification = require("ui/widget/notification")
 local UIManager = require("ui/uimanager")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
 local LogUtil = require("util.logutil")
+local NotifyUtil = require("util.notifyutil")
 
 local CoverCache = {}
 
@@ -81,9 +81,8 @@ function CoverCache:downloadMultiple(books, parallel_jobs)
         return 0
     end
     
-    Notification:notify("Getting book covers...", Notification.SOURCE_ALWAYS_SHOW)
-    UIManager:forceRePaint()
-    
+    NotifyUtil.info("Getting book covers...")
+        
     local successful_count = CurlUtil.downloadMultiple(download_urls, filepaths, false, false, parallel_jobs)
     
     for _, book in ipairs(books) do

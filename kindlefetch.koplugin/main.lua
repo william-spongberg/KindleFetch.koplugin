@@ -5,7 +5,6 @@ local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
 local DownloadMgr = require("ui/downloadmgr")
 local Menu = require("ui/widget/menu")
-local Notification = require("ui/widget/notification")
 local KindleFetchSettings = require("settings.settings")
 local SettingsPage = require("settings.settingspage")
 local util = require("util")
@@ -14,6 +13,7 @@ local StringUtil = require("util.stringutil")
 local AnnasAPI = require("api.annasapi")
 local LlgiAPI = require("api.lgliapi")
 local LogUtil = require("util.logutil")
+local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
 local CoverCache = require("cache.covercache")
 local VersionCheck = require("util.versioncheck")
@@ -36,7 +36,7 @@ end
 function KindleFetch:init()
     -- ensure curl is available and meets version requirements
     if not VersionCheck.checkCurlVersion() then
-        Notification:notify("curl is not available or could not be installed", Notification.SOURCE_ALWAYS_SHOW)
+        NotifyUtil.info("curl is not available or could not be installed")
         return
     end
 
@@ -106,19 +106,18 @@ function KindleFetch:performSearch()
 
     -- check query is not empty
     if query == "" then
-        Notification:notify("Enter a search term first", Notification.SOURCE_ALWAYS_SHOW)
+        NotifyUtil.info("Enter a search term first")
         return
     end
 
     -- check device is online
     if not NetworkMgr:isConnected() then
-        Notification:notify("Connect to the internet first", Notification.SOURCE_ALWAYS_SHOW)
+        NotifyUtil.info("Connect to the internet first")
         return
     end
 
     LogUtil.debug("starting search for", query)
-    Notification:notify("Searching...", Notification.SOURCE_ALWAYS_SHOW, true)
-    UIManager:forceRePaint()
+    NotifyUtil.info("Searching...")
 
     -- start search
     self.current_search_query = query
@@ -128,12 +127,12 @@ function KindleFetch:performSearch()
 
     -- check for errors
     if err or not books then
-        Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
+        NotifyUtil.info("Error: " .. err)
         return
     end
     if #books == 0 then
         LogUtil.warn("no books to show after search")
-        Notification:notify("No books found", Notification.SOURCE_ALWAYS_SHOW)
+        NotifyUtil.info("No books found")
         return
     end
 
@@ -234,19 +233,18 @@ end
 function KindleFetch:loadMoreBooks()
     self.current_page = self.current_page + 1
 
-    Notification:notify("Loading more books...", Notification.SOURCE_ALWAYS_SHOW, true)
-    UIManager:forceRePaint()
+    NotifyUtil.info("Loading more books...")
 
     local books, err = self:search(self.current_search_query, self.current_page)
 
     if err then
-        Notification:notify("Error: " .. err, Notification.SOURCE_ALWAYS_SHOW)
+        NotifyUtil.info("Error: " .. err)
         self.current_page = self.current_page - 1
         return
     end
 
     if not books then
-        Notification:notify("No more books found", Notification.SOURCE_ALWAYS_SHOW)
+        NotifyUtil.info("No more books found")
         self.current_page = self.current_page - 1
         return
     end
@@ -274,13 +272,10 @@ function KindleFetch:downloadBook(book)
     LlgiAPI:downloadBook(book, filepath, function(ok, err)
         if ok then
             LogUtil.debug("downloaded book")
-            Notification:notify("Downloaded " .. book.title, Notification.SOURCE_ALWAYS_SHOW, true)
-            UIManager:forceRePaint()
+            NotifyUtil.info("Downloaded " .. book.title)
         else
             LogUtil.warn("download failed for")
-            Notification:notify(err and ("Download failed: " .. err) or "Download failed",
-                Notification.SOURCE_ALWAYS_SHOW, true)
-            UIManager:forceRePaint()
+            NotifyUtil.info(err and ("Download failed: " .. err) or "Download failed")
         end
     end)
 end

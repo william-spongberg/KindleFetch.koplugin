@@ -1,6 +1,5 @@
 local util = require("util")
 local UIManager = require("ui/uimanager")
-local Notification = require("ui/widget/notification")
 local LogUtil = require("util.logutil")
 local DownloadProgress = require("ui.downloadprogress")
 local DownloadPrompt = require("ui.downloadprompt")
@@ -11,6 +10,7 @@ local CurlUtil = require("util.curlutil")
 local UrlApi = require("api.urlapi")
 local UrlCache = require("cache.urlcache")
 local CoverCache = require("cache.covercache")
+local NotifyUtil = require("util.notifyutil")
 local _ = require("gettext")
 
 local LlgiAPI = {}
@@ -247,8 +247,7 @@ function LlgiAPI:downloadBook(book, filepath, callback)
             md5 = book.md5
         })
     else
-        Notification:notify("Getting book cover...", Notification.SOURCE_ALWAYS_SHOW)
-        UIManager:forceRePaint()
+        NotifyUtil.info("Getting book cover...")
         self:downloadBookCover(book)
     end
 
