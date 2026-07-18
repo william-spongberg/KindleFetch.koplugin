@@ -287,6 +287,7 @@ function LlgiAPI:downloadBookCover(book)
     end
 end
 
+-- TODO: check if book is already being downloaded, and if so reopen the download progress window
 function LlgiAPI:getActiveDownloads()
     local downloads = {}
     for id, download_info in pairs(self.active_downloads) do
@@ -301,6 +302,7 @@ function LlgiAPI:getActiveDownloads()
     return downloads
 end
 
+-- TODO: cancel all downloads on exiting menu
 function LlgiAPI:cancelAllDownloads()
     for id, download_info in pairs(self.active_downloads) do
         download_info.progress_widget.cancelled = true

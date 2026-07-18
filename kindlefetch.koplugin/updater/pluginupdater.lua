@@ -99,7 +99,6 @@ local function installPluginRelease(plugin_path, zip_path, version_str)
     end
 
     -- find extracted directory
-    -- TODO: fix this shit
     local extracted_dir = VersionUtil.getTmpDir() .. "/" .. PLUGIN_NAME
     if not FileUtil.isValidDirectory(extracted_dir) then
         LogUtil.warn("extracted plugin directory not found", extracted_dir)
