@@ -37,13 +37,6 @@ function KindleFetch:onDispatcherRegisterActions()
 end
 
 function KindleFetch:init()
-    -- check curl is at min version
-    CurlUpdater.checkVersion()
-
-    -- check for updates
-    self:getPluginPath()
-    PluginUpdater.checkForUpdates(self.plugin_path)
-
     -- load settings
     KindleFetchSettings:load()
 
@@ -55,6 +48,15 @@ function KindleFetch:init()
     -- register to main menu
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
+
+    -- schedule update checks after UI is ready
+    UIManager:scheduleIn(0.1, function()
+        -- check curl is at min version
+        CurlUpdater.checkVersion()
+        -- check for updates
+        self:getPluginPath()
+        PluginUpdater.checkForUpdates(self.plugin_path)
+    end)
 end
 
 function KindleFetch:addToMainMenu(menu_items)
@@ -115,14 +117,14 @@ function KindleFetch:getPluginPath()
 
     self.plugin_path = dir .. "/" .. path
     LogUtil.debug("plugin path", self.plugin_path)
-    
+
     -- List files in the plugin directory
     local handle = io.popen("ls -la " .. self.plugin_path)
     local files = handle:read("*a")
     handle:close()
-    
+
     LogUtil.debug("plugin files", files)
-    
+
     -- Read version.txt using FileUtil
     local version = FileUtil.readFile(self.plugin_path .. "/version.txt")
     if version then
@@ -131,8 +133,6 @@ function KindleFetch:getPluginPath()
         LogUtil.debug("plugin version", "version.txt not found")
     end
 end
-
-
 
 function KindleFetch:performSearch()
     local query = StringUtil.trim(self.search_box:getInputText())
