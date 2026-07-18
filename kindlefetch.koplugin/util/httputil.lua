@@ -1,6 +1,6 @@
 local http = require("socket.http")
 local ltn12 = require("ltn12")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 
 local HttpUtil = {}
 
@@ -27,24 +27,24 @@ function HttpUtil.requestBody(request_url, proxy_url)
 end
 
 function HttpUtil.getBody(url)
-    logger.dbg("KindleFetch: fetching page for url", url)
+    LogUtil.debug("fetching page for url", url)
     local body, err = HttpUtil.requestBody(url)
     if body then
-        logger.dbg("KindleFetch: page fetched", #body, "bytes return")
+        LogUtil.debug("page fetched", #body, "bytes return")
         return body
     end
 
     -- use proxy as backup
     local proxy_url = os.getenv("PROXY_URL")
     if proxy_url and proxy_url ~= "" then
-        logger.warn("KindleFetch: direct fetch failed, retrying through proxy", proxy_url, err or "unknown error")
+        LogUtil.warn("direct fetch failed, retrying through proxy")
         body, err = HttpUtil.requestBody(url, proxy_url)
         if body then
             return body
         end
     end
 
-    logger.warn("KindleFetch: failed to fetch page for", url, err or "unknown error")
+    LogUtil.warn("failed to fetch page for")
     return nil, err
 end
 

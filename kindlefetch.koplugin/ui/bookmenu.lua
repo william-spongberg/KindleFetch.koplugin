@@ -20,7 +20,6 @@ local StringUtil = require("util.stringutil")
 local Screen = require("device").screen
 local TextWidget = require("ui/widget/textwidget")
 local CoverCache = require("cache.covercache")
-local logger = require("logger")
 
 -- constants
 local COVER_SIZE = Screen:scaleBySize(100)

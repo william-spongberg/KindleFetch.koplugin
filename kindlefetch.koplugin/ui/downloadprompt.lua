@@ -16,7 +16,7 @@ local Size = require("ui/size")
 local Geom = require("ui/geometry")
 local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 local CoverCache = require("cache.covercache")
 local _ = require("gettext")
 
@@ -38,7 +38,7 @@ end
 function DownloadPrompt.new(book, filepath, on_download)
     local self = setmetatable({}, DownloadPrompt)
 
-    logger.dbg("KindleFetch: params given to DownloadPrompt", book, filepath)
+    LogUtil.debug("params given to DownloadPrompt", book, filepath)
 
     self.book = book
     self.filepath = filepath

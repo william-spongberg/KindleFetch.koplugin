@@ -13,7 +13,7 @@ local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
 local AnnasAPI = require("api.annasapi")
 local LlgiAPI = require("api.lgliapi")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 local BookMenu = require("ui.bookmenu")
 local CoverCache = require("cache.covercache")
 local VersionCheck = require("util.versioncheck")
@@ -116,7 +116,7 @@ function KindleFetch:performSearch()
         return
     end
 
-    logger.dbg("KindleFetch: starting search for", query)
+    LogUtil.debug("starting search for", query)
     Notification:notify("Searching...", Notification.SOURCE_ALWAYS_SHOW, true)
     UIManager:forceRePaint()
 
@@ -132,7 +132,7 @@ function KindleFetch:performSearch()
         return
     end
     if #books == 0 then
-        logger.warn("KindleFetch: no books to show after search")
+        LogUtil.warn("no books to show after search")
         Notification:notify("No books found", Notification.SOURCE_ALWAYS_SHOW)
         return
     end
@@ -145,11 +145,11 @@ function KindleFetch:search(query, page)
     local books, err = AnnasAPI:search(query, page)
 
     if not books or type(books) ~= "table" then
-        logger.warn("KindleFetch: API search failed for", query, err or "unknown error")
+        LogUtil.warn("API search failed for")
         return nil, err
     end
 
-    logger.dbg("KindleFetch: API returned", #books, "raw books for", query, "page", page)
+    LogUtil.debug("API returned", #books, "raw books for", query, "page", page)
 
     return books
 end
@@ -185,7 +185,7 @@ function KindleFetch:showBooks(books)
         items_max_lines = true,
         onPageChange = function(page)
             if (KindleFetchSettings:getShowBookCovers()) then
-                logger.dbg("KindleFetch: loading covers for page", page)
+                LogUtil.debug("loading covers for page", page)
                 this:loadCoversForPage(menu, page)
             end
         end
@@ -198,7 +198,7 @@ function KindleFetch:showBooks(books)
 
     -- load covers for first page
     if KindleFetchSettings:getShowBookCovers() then
-        logger.dbg("KindleFetch: loading covers for page 1")
+        LogUtil.debug("loading covers for page 1")
         this:loadCoversForPage(menu, 1)
     end
 end
@@ -222,7 +222,7 @@ function KindleFetch:loadCoversForPage(menu, current_page)
 
     if #books_to_download > 0 then
         -- download all at once in parallel
-        logger.dbg("KindleFetch: downloading", #books_to_download, "covers in parallel")
+        LogUtil.debug("downloading", #books_to_download, "covers in parallel")
         CoverCache:downloadMultiple(books_to_download, items_per_page)
 
         -- refresh menu to show downloaded covers
@@ -273,11 +273,11 @@ function KindleFetch:downloadBook(book)
     local filepath = buildDownloadPath(book)
     LlgiAPI:downloadBook(book, filepath, function(ok, err)
         if ok then
-            logger.warn("KindleFetch: downloaded book", book.md5, "to", filepath)
+            LogUtil.debug("downloaded book")
             Notification:notify("Downloaded " .. book.title, Notification.SOURCE_ALWAYS_SHOW, true)
             UIManager:forceRePaint()
         else
-            logger.warn("KindleFetch: download failed for", book.md5, err)
+            LogUtil.warn("download failed for")
             Notification:notify(err and ("Download failed: " .. err) or "Download failed",
                 Notification.SOURCE_ALWAYS_SHOW, true)
             UIManager:forceRePaint()

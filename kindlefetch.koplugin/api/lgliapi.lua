@@ -1,7 +1,7 @@
 local util = require("util")
 local UIManager = require("ui/uimanager")
 local Notification = require("ui/widget/notification")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 local DownloadProgress = require("ui.downloadprogress")
 local DownloadPrompt = require("ui.downloadprompt")
 local HttpUtil = require("util.httputil")
@@ -39,7 +39,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
                 total_size / (1024 * 1024)))
     end
 
-    logger.dbg("KindleFetch: download progress", {
+    LogUtil.debug("download progress", {
         title = book.title,
         md5 = book.md5,
         bytes_downloaded = bytes_downloaded,
@@ -54,7 +54,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         -- check if completed successfully
         if exit_code == 0 and final_size and final_size > 0 then
             progress_widget:update(1, "100%")
-            logger.dbg("KindleFetch: lgli download completed", {
+            LogUtil.debug("lgli download completed", {
                 title = book.title,
                 md5 = book.md5,
                 filepath = filepath,
@@ -65,7 +65,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         end
 
         -- download completed without reaching final size, has failed
-        logger.warn("KindleFetch: curl attempt failed", {
+        LogUtil.warn("curl attempt failed", {
             title = book.title,
             md5 = book.md5,
             exit_code = exit_code,
@@ -108,7 +108,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
 end
 
 function LlgiAPI:_startDownload(book, filepath, callback, retrying)
-    logger.dbg("KindleFetch: starting download", {
+    LogUtil.debug("starting download", {
         title = book.title,
         md5 = book.md5,
         filepath = filepath
@@ -151,7 +151,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     local download_url
     local last_err
     for _, url in ipairs(base_urls) do
-        logger.dbg("KindleFetch: trying libgen url", url)
+        LogUtil.debug("trying libgen url", url)
 
         -- load ads page (to get key for download page)
         local ads_page = string.format("%s/ads.php?md5=%s", url, book.md5)
@@ -164,7 +164,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
             if download_path and download_path ~= "" then
                 download_url = url .. "/" .. download_path:gsub("^/", "")
 
-                logger.dbg("KindleFetch: resolved libgen download url", {
+                LogUtil.debug("resolved libgen download url", {
                     title = book.title,
                     md5 = book.md5,
                     download_url = download_url
@@ -172,11 +172,11 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
 
                 break
             else
-                logger.warn("KindleFetch: no libgen download link found on url", url)
+                LogUtil.warn("no libgen download link found on url")
                 last_err = "no Library Genesis download link found"
             end
         else
-            logger.warn("KindleFetch: failed to fetch libgen ads page", {
+            LogUtil.warn("failed to fetch libgen ads page", {
                 url = url,
                 error = err
             })
@@ -204,9 +204,9 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     UIManager:forceRePaint()
     local total_size = CurlUtil.getRemoteFileSize(download_url)
     if total_size then
-        logger.dbg("KindleFetch: file size found", total_size)
+        LogUtil.debug("file size found", total_size)
     else
-        logger.warn("KindleFetch: could not determine remote size")
+        LogUtil.warn("could not determine remote size")
     end
 
     -- start background curl downloader
@@ -242,7 +242,7 @@ function LlgiAPI:downloadBook(book, filepath, callback)
 
     -- download book image
     if CoverCache:cacheExists(book.md5) then
-        logger.dbg("KindleFetch: book image already downloaded", {
+        LogUtil.debug("book image already downloaded", {
             title = book.title,
             md5 = book.md5
         })
@@ -262,7 +262,7 @@ end
 
 function LlgiAPI:downloadBookCover(book)
     if not book.image_url then
-        logger.warn("KindleFetch: no image url available", {
+        LogUtil.warn("no image url available", {
             title = book.title,
             md5 = book.md5
         })
@@ -270,18 +270,18 @@ function LlgiAPI:downloadBookCover(book)
     end
 
     -- download book cover
-    logger.dbg("KindleFetch: downloading book cover", {
+    LogUtil.debug("downloading book cover", {
         title = book.title,
         md5 = book.md5
     })
     local path = CoverCache:download(book.md5, book.image_url)
     if not path then
-        logger.warn("KindleFetch: failed to download book cover", {
+        LogUtil.warn("failed to download book cover", {
             title = book.title,
             md5 = book.md5
         })
     else
-        logger.dbg("KindleFetch: book cover downloaded successfully", {
+        LogUtil.debug("book cover downloaded successfully", {
             title = book.title,
             md5 = book.md5
         })

@@ -1,6 +1,6 @@
 local LuaSettings = require("luasettings")
 local DataStorage = require("datastorage")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 
 local KindleFetchCache = {}
 
@@ -35,7 +35,7 @@ function KindleFetchCache:count()
 end
 
 function KindleFetchCache:delete(key)
-    logger.dbg("KindleFetch: deleting cache entry:", key)
+    LogUtil.debug("deleting cache entry:", key)
 
     self.cache[key] = nil
 end
@@ -89,7 +89,7 @@ function KindleFetchCache:get(...)
     self:load()
 
     local key = self.makeKey(...)
-    logger.dbg("KindleFetch: checking cache for key:", key)
+    LogUtil.debug("checking cache for key:", key)
 
     local entry = self.cache[key]
     if not entry then
@@ -98,14 +98,14 @@ function KindleFetchCache:get(...)
 
     local age = os.time() - entry.timestamp
     if self.expiry and age > self.expiry then
-        logger.dbg("KindleFetch: cache expired for key:", key, "age:", age, "seconds")
+        LogUtil.debug("cache expired for key:", key, "age:", age, "seconds")
 
         self:delete(key)
         self:save()
         return nil
     end
 
-    logger.dbg("KindleFetch: cache hit for key:", key, "returned", entry.value)
+    LogUtil.debug("cache hit for key:", key, "returned", entry.value)
     return entry.value
 end
 
@@ -119,12 +119,12 @@ function KindleFetchCache:set(value, ...)
         value = value
     }
 
-    logger.dbg("KindleFetch: stored cache entry:", key, "with", value)
+    LogUtil.debug("stored cache entry:", key, "with", value)
     self:save()
 end
 
 function KindleFetchCache:clear()
-    logger.dbg("KindleFetch: clearing cache")
+    LogUtil.debug("clearing cache")
 
     self.cache = {}
     self:save()
@@ -136,20 +136,20 @@ function KindleFetchCache:deleteValueFromKey(value, ...)
     local entry = self.cache[key]
     
     if not entry then
-        logger.dbg("KindleFetch: cache key not found:", key)
+        LogUtil.debug("cache key not found:", key)
         return
     end
     
     local values = entry.value
     if type(values) ~= "table" then
-        logger.dbg("KindleFetch: cached value is not a table for key:", key)
+        LogUtil.debug("cached value is not a table for key:", key)
         return
     end
     
     -- remove specific value from list
     for i, v in ipairs(values) do
         if v == value then
-            logger.dbg("KindleFetch: removing url from cache:", value)
+            LogUtil.debug("removing url from cache:", value)
             table.remove(values, i)
             break
         end

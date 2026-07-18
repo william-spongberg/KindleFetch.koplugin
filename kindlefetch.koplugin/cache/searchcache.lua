@@ -1,5 +1,5 @@
 local KindleFetchCache = require("cache.cache")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 
 return KindleFetchCache:new{
     filename = "kindlefetch_searchcache.lua",
@@ -7,7 +7,7 @@ return KindleFetchCache:new{
     max_entries = 100,
 
     makeKey = function(...)
-        logger.dbg("KindleFetch: data for makeKey:", ...)
+        LogUtil.debug("data for makeKey:", ...)
         local query, page, languages, file_types, book_types = ...
 
         return table.concat({query, tostring(page), table.concat(languages, ","),

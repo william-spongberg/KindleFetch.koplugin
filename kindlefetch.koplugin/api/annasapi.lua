@@ -1,5 +1,5 @@
 local util = require("util")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
@@ -63,12 +63,12 @@ local function parseBookTable(html)
             -- at minimum need title + md5 + file type for a valid book
             if book.title and book.md5 and book.file_type then
                 table.insert(books, book)
-                logger.dbg("KindleFetch: new book found", book)
+                LogUtil.debug("new book found", book)
             else
-                logger.warn("KindleFetch: skipped book with missing features", book)
+                LogUtil.warn("skipped book with missing features")
             end
         else
-            logger.warn("KindleFetch: skipped row with missing cells", row)
+            LogUtil.warn("skipped row with missing cells")
         end
     end
 
@@ -112,15 +112,15 @@ function AnnasAPI:search(query, page, retrying)
     for _, url in ipairs(base_urls) do
         local annas_url = string.format("%s/search?%s", url, table.concat(params, "&"))
 
-        logger.dbg("KindleFetch: trying Anna's Archive url:", url)
+        LogUtil.debug("trying Anna's Archive url:", url)
 
         local html, err = HttpUtil.getBody(annas_url)
 
         if html then
-            logger.dbg("KindleFetch: successfully fetched from url:", url)
+            LogUtil.debug("successfully fetched from url:", url)
 
             local books = parseBookTable(html)
-            logger.dbg("KindleFetch: parsed", #books, "books for", query)
+            LogUtil.debug("parsed", #books, "books for", query)
 
             if books then
                 -- add new query result to cache before returning
@@ -131,7 +131,7 @@ function AnnasAPI:search(query, page, retrying)
             return nil
         end
 
-        logger.warn("KindleFetch: failed url:", url, err or "unknown error")
+        LogUtil.warn("failed url:")
         last_err = err or "unknown error"
 
         -- delete from url cache

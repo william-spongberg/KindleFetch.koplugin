@@ -4,7 +4,7 @@ local DownloadMgr = require("ui/downloadmgr")
 local Menu = require("ui/widget/menu")
 local Notification = require("ui/widget/notification")
 local Screen = require("device").screen
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 local _ = require("gettext")
 
 local SettingsPage = {}

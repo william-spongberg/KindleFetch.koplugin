@@ -1,4 +1,4 @@
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local Notification = require("ui/widget/notification")
 local Device = require("device")
@@ -201,7 +201,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background)
     local exit_file = CurlUtil.createExitFile()
     cmd = CurlUtil.saveExitCode(cmd, exit_file)
 
-    logger.dbg("KindleFetch: curl download command", cmd)
+    LogUtil.debug("curl download command", cmd)
 
     if background then
         local cmd = CurlUtil.echoPid(cmd)
@@ -219,18 +219,18 @@ function CurlUtil.download(download_url, filepath, use_proxy, background)
     if exit_code == 0 then
         local file_size = FileUtil.getSize(filepath)
         if file_size and file_size > 0 then
-            logger.dbg("KindleFetch: download completed successfully", {
+            LogUtil.debug("download completed successfully", {
                 filepath = filepath,
                 file_size = file_size
             })
             return true
         else
-            logger.warn("KindleFetch: download produced empty file", filepath)
+            LogUtil.warn("download produced empty file")
             FileUtil.removeFile(filepath)
             return false, "download produced empty file"
         end
     else
-        logger.warn("KindleFetch: download failed", {
+        LogUtil.warn("download failed", {
             filepath = filepath,
             exit_code = exit_code
         })
@@ -263,7 +263,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
     local exit_file = CurlUtil.createExitFile()
     cmd = CurlUtil.saveExitCode(cmd, exit_file)
 
-    logger.dbg("KindleFetch: curl parallel download command", cmd)
+    LogUtil.debug("curl parallel download command", cmd)
 
     if background then
         cmd = CurlUtil.echoPid(cmd)
@@ -275,7 +275,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
             return nil, nil, nil, err
         end
 
-        logger.dbg("KindleFetch: spawned parallel download", {
+        LogUtil.debug("spawned parallel download", {
             pid = pid, exit_file = exit_file, config_file = config_file,
             file_count = #download_urls
         })
@@ -286,7 +286,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
 
     local exit_code = CurlUtil.getExitCode(exit_file)
     if exit_code ~= 0 then
-        logger.warn("KindleFetch: parallel download command failed", {
+        LogUtil.warn("parallel download command failed", {
             exit_code = exit_code,
             reason = CurlUtil.getErrorMeaning(exit_code)
         })
@@ -298,23 +298,23 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
             local file_size = FileUtil.getSize(filepath)
             if file_size and file_size > 0 then
                 successful_count = successful_count + 1
-                logger.dbg("KindleFetch: file downloaded successfully", {
+                LogUtil.debug("file downloaded successfully", {
                     filepath = filepath,
                     file_size = file_size
                 })
             else
-                logger.warn("KindleFetch: download produced empty file", filepath)
+                LogUtil.warn("download produced empty file")
                 FileUtil.removeFile(filepath)
             end
         else
-            logger.warn("KindleFetch: file download failed", filepath)
+            LogUtil.warn("file download failed")
             FileUtil.removeFile(filepath)
         end
     end
 
     FileUtil.removeFile(config_file)
     
-    logger.dbg("KindleFetch: parallel download completed", {
+    LogUtil.debug("parallel download completed", {
         total_requested = #download_urls,
         successful = successful_count
     })

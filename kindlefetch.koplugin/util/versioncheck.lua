@@ -1,4 +1,4 @@
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local Notification = require("ui/widget/notification")
 local Device = require("device")
@@ -99,7 +99,7 @@ end
 function VersionCheck.isCurlVersionOk(min_version)
     local current_version_str = VersionCheck.getCurlVersion()
     if not current_version_str then
-        logger.warn("KindleFetch: curl not found or version could not be determined")
+        LogUtil.warn("curl not found or version could not be determined")
         return false
     end
 
@@ -107,7 +107,7 @@ function VersionCheck.isCurlVersionOk(min_version)
     local min_version_parsed = parseVersion(min_version)
 
     if not current_version or not min_version_parsed then
-        logger.warn("KindleFetch: could not parse curl versions", {
+        LogUtil.warn("could not parse curl versions", {
             current = current_version_str,
             minimum = min_version
         })
@@ -117,7 +117,7 @@ function VersionCheck.isCurlVersionOk(min_version)
     local cmp = compareVersions(current_version, min_version_parsed)
     local is_ok = cmp >= 0
 
-    logger.dbg("KindleFetch: curl version check", {
+    LogUtil.debug("curl version check", {
         current = current_version_str,
         minimum = min_version,
         is_ok = is_ok
@@ -129,14 +129,14 @@ end
 -- install static curl from moparisthebest/static-curl releases
 -- basically adds safe guards around the sh script given here https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
 function VersionCheck.installStaticCurl(target_version)
-    logger.dbg("KindleFetch: attempting to install static curl v" .. target_version)
+    LogUtil.debug("attempting to install static curl v" .. target_version)
 
     -- create staging directory
     local staging_dir = "/mnt/us/bin"
     local mkdir_cmd = string.format("mkdir -p %s", CurlUtil.shellQuote(staging_dir))
-    logger.dbg("KindleFetch: creating staging directory", mkdir_cmd)
+    LogUtil.debug("creating staging directory", mkdir_cmd)
     if os.execute(mkdir_cmd .. " 2>/dev/null") ~= 0 then
-        logger.error("KindleFetch: failed to create staging directory", staging_dir)
+        LogUtil.warn("failed to create staging directory")
         return false
     end
 
@@ -146,13 +146,13 @@ function VersionCheck.installStaticCurl(target_version)
     local download_url = string.format("https://github.com/moparisthebest/static-curl/releases/download/v%s/%s",
         target_version, curl_filename)
 
-    logger.dbg("KindleFetch: downloading static curl", download_url)
+    LogUtil.debug("downloading static curl", download_url)
 
     local download_cmd = string.format("curl -fL -o %s %s", CurlUtil.shellQuote(curl_path),
         CurlUtil.shellQuote(download_url))
 
     if os.execute(download_cmd .. " 2>/dev/null") ~= 0 then
-        logger.error("KindleFetch: failed to download static curl", download_url)
+        LogUtil.warn("failed to download static curl")
         os.remove(curl_path)
         return false
     end
@@ -160,7 +160,7 @@ function VersionCheck.installStaticCurl(target_version)
     -- make it executable
     local chmod_cmd = string.format("chmod +x %s", CurlUtil.shellQuote(curl_path))
     if os.execute(chmod_cmd) ~= 0 then
-        logger.error("KindleFetch: failed to set executable permission", curl_path)
+        LogUtil.warn("failed to set executable permission")
         os.remove(curl_path)
         return false
     end
@@ -169,67 +169,67 @@ function VersionCheck.installStaticCurl(target_version)
     local system_curl = "/usr/bin/curl"
     local backup_curl = "/usr/bin/curl.system.bak"
 
-    logger.dbg("KindleFetch: remounting rootfs as read-write")
+    LogUtil.debug("remounting rootfs as read-write")
     if os.execute("mntroot rw 2>/dev/null") ~= 0 then
-        logger.error("KindleFetch: failed to remount rootfs as read-write")
+        LogUtil.warn("failed to remount rootfs as read-write")
         return false
     end
 
     -- backup original curl if not already backed up
     if os.execute(string.format("test -f %s", CurlUtil.shellQuote(backup_curl))) ~= 0 then
-        logger.dbg("KindleFetch: backing up system curl")
+        LogUtil.debug("backing up system curl")
         if os.execute(string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(system_curl),
             CurlUtil.shellQuote(backup_curl))) ~= 0 then
-            logger.warn("KindleFetch: failed to backup system curl (continuing anyway)")
+            LogUtil.warn("failed to backup system curl (continuing anyway)")
         end
     end
 
     -- install new curl
-    logger.dbg("KindleFetch: installing static curl to " .. system_curl)
+    LogUtil.debug("installing static curl to " .. system_curl)
     if os.execute(
         string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(system_curl))) ~= 0 then
-        logger.error("KindleFetch: failed to install static curl")
+        LogUtil.warn("failed to install static curl")
         os.execute("mntroot ro 2>/dev/null")
         return false
     end
 
     -- set permissions
     if os.execute(string.format("chmod 755 %s", CurlUtil.shellQuote(system_curl))) ~= 0 then
-        logger.warn("KindleFetch: failed to set curl permissions (continuing anyway)")
+        LogUtil.warn("failed to set curl permissions (continuing anyway)")
     end
 
     -- remount as read-only
-    logger.dbg("KindleFetch: remounting rootfs as read-only")
+    LogUtil.debug("remounting rootfs as read-only")
     if os.execute("mntroot ro 2>/dev/null") ~= 0 then
-        logger.error("KindleFetch: failed to remount rootfs as read-only")
+        LogUtil.warn("failed to remount rootfs as read-only")
         return false
     end
 
-    logger.dbg("KindleFetch: static curl installation completed successfully")
+    LogUtil.debug("static curl installation completed successfully")
     return true
 end
 
 -- check curl is available and at least min_version, update if necessary
 function VersionCheck.checkCurlVersion()
     if Device:isSDL() then
-        logger.dbg("KindleFetch: running in emulator, skipping curl version check")
+        LogUtil.debug("running in emulator, skipping curl version check")
         return true
     end
 
     local min_version = "8.17.0"
 
     if VersionCheck.isCurlVersionOk(min_version) then
-        logger.dbg("KindleFetch: curl version is sufficient", min_version)
+        LogUtil.debug("curl version is sufficient", min_version)
         return true
     end
 
-    logger.warn("KindleFetch: curl version is below " .. min_version .. ", attempting installation")
+    LogUtil.warn("curl version is below ")
     Notification:notify("curl is outdated, updating curl...", Notification.SOURCE_ALWAYS_SHOW)
     UIManager:forceRePaint()
     local install_success = VersionCheck.installStaticCurl(min_version)
 
     if not install_success then
-        logger.error("KindleFetch: failed to install static curl v" .. min_version)
+        LogUtil.warn("failed to install static curl v")
         Notification:notify("Failed to update curl", Notification.SOURCE_ALWAYS_SHOW)
         UIManager:forceRePaint()
         return false

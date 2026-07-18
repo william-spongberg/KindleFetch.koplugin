@@ -1,6 +1,6 @@
 local StringUtil = require("util.stringutil")
 local lfs = require("libs/libkoreader-lfs")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 
 local FileUtil = {}
 
@@ -22,7 +22,7 @@ end
 function FileUtil.createFile(path, data)    
     local file = io.open(path, "wb")
     if not file then
-        logger.warn("KindleFetch: could not write to file", path)
+        LogUtil.warn("could not write to file")
         return nil
     end
     

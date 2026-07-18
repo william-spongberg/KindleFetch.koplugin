@@ -1,7 +1,7 @@
 local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local UrlCache = require("cache.urlcache")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 
 local UrlApi = {}
 
@@ -16,7 +16,7 @@ local function parseAnnasUrls(html)
 
     for href in html:gmatch('<a[^>]-href="(https://annas%-archive%.[^"/]+)/?["]') do
         table.insert(urls, href)
-        logger.dbg("KindleFetch: new Anna's Archive URL", href)
+        LogUtil.debug("new Anna's Archive URL", href)
     end
 
     return #urls > 0 and urls or nil
@@ -28,7 +28,7 @@ local function parseLibgenUrls(html)
     for domain in html:gmatch("<li>%s*(libgen%.[^<]+)%s*</li>") do
         local url = "https://" .. domain
         table.insert(urls, url)
-        logger.dbg("KindleFetch: new LibGen URL", domain)
+        LogUtil.debug("new LibGen URL", domain)
     end
 
     return #urls > 0 and urls or nil

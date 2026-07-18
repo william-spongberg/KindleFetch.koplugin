@@ -2,7 +2,7 @@ local LuaSettings = require("luasettings")
 local DataStorage = require("datastorage")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 
 local KindleFetchSettings = {}
 
@@ -369,9 +369,9 @@ function KindleFetchSettings:setSetting(name, data)
     settings_file:flush()
     
     if type(data) ~= "table" then
-        logger.dbg("KindleFetch: updated", name, "to", data)
+        LogUtil.debug("updated", name, "to", data)
     else
-        logger.dbg("KindleFetch: updated", name, "to", table.concat(data, ", "))
+        LogUtil.debug("updated", name, "to", table.concat(data, ", "))
     end
     
     return true
@@ -401,12 +401,12 @@ function KindleFetchSettings:getDownloadDir()
 
         if download_dir == "" then
             download_dir = "/mnt/us/documents"
-            logger.warn("KindleFetch: home directory not found, defaulting to", download_dir)
+            LogUtil.warn("home directory not found, defaulting to")
         end
 
         if not FileUtil.isValidDirectory(download_dir) then
             download_dir = "/mnt/us"
-            logger.warn("KindleFetch: documents directory does not exist, defaulting to", download_dir)
+            LogUtil.warn("documents directory does not exist, defaulting to")
         end
     end
 
@@ -420,7 +420,7 @@ function KindleFetchSettings:setDownloadDir(path)
     local settings_file = getSettingsFile()
     settings_file:saveSetting("download_dir", path)
     settings_file:flush()
-    logger.dbg("KindleFetch: download directory set to", path)
+    LogUtil.debug("download directory set to", path)
     return true
 end
 

@@ -5,7 +5,7 @@ local Notification = require("ui/widget/notification")
 local UIManager = require("ui/uimanager")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
-local logger = require("logger")
+local LogUtil = require("util.logutil")
 
 local CoverCache = {}
 
