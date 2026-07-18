@@ -238,14 +238,13 @@ function BookMenu:updateItems(select_number, no_recalculate_dimen)
         elseif item.text then
             local text_widget = TextWidget:new{
                 text = item.text,
-                face = Font:getFace("infont", 20),
+                face = Font:getFace("cfont", 20),
                 bold = true
             }
 
             item_widget = FrameContainer:new{
                 background = Blitbuffer.COLOR_WHITE,
-                bordersize = 1,
-                border_color = Blitbuffer.COLOR_DARK_GRAY,
+                bordersize = 0,
                 CenterContainer:new{
                     dimen = Geom:new{
                         w = self.dimen.w,
