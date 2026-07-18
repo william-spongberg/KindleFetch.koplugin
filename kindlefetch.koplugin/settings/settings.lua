@@ -3,12 +3,12 @@ local DataStorage = require("datastorage")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local LogUtil = require("util.logutil")
+local lfs = require("libs/libkoreader-lfs")
 
 local KindleFetchSettings = {}
 
 -- default settings
 local DEFAULTS = {
-    version = {0, 1, 0},
     show_book_covers = true,
     download_dir = nil,
     preferred_languages = {"en"},
@@ -377,17 +377,12 @@ function KindleFetchSettings:setSetting(name, data)
     return true
 end
 
--- show book covers
+-- show_book_covers
 function KindleFetchSettings:getShowBookCovers()
     return KindleFetchSettings:getSetting("show_book_covers")
 end
 function KindleFetchSettings:setShowBookCovers(bool)
     return KindleFetchSettings:setSetting("show_book_covers", bool)
-end
-
--- version
-function KindleFetchSettings:getVersion()
-    return KindleFetchSettings:getSetting("version")
 end
 
 -- download_dir
@@ -401,12 +396,12 @@ function KindleFetchSettings:getDownloadDir()
 
         if download_dir == "" then
             download_dir = "/mnt/us/documents"
-            LogUtil.warn("home directory not found, defaulting to")
+            LogUtil.warn("home directory not found, defaulting to", download_dir)
         end
 
         if not FileUtil.isValidDirectory(download_dir) then
-            download_dir = "/mnt/us"
-            LogUtil.warn("documents directory does not exist, defaulting to")
+            download_dir = lfs.currentdir()
+            LogUtil.warn("documents directory does not exist, defaulting to working dir", download_dir)
         end
     end
 
