@@ -2,12 +2,12 @@ local logger = require("logger")
 
 local LogUtil = {}
 
-function LogUtil.warn(log)
-    logger.warn("KindleFetch:", log)
+function LogUtil.warn(...)
+    logger.warn("KindleFetch:", ...)
 end
 
-function LogUtil.debug(log)
-    logger.dbg("KindleFetch:", log)
+function LogUtil.debug(...)
+    logger.dbg("KindleFetch:", ...)
 end
 
 return LogUtil

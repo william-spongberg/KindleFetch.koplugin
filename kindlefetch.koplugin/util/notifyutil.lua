@@ -3,8 +3,8 @@ local UIManager = require("ui/uimanager")
 
 local NotifyUtil = {}
 
-function NotifyUtil.info(message)
-    Notification:notify(message, Notification.SOURCE_ALWAYS_SHOW, true)
+function NotifyUtil.info(...)
+    Notification:notify(..., Notification.SOURCE_ALWAYS_SHOW, true)
     UIManager:forceRePaint()
 end
 
