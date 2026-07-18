@@ -45,6 +45,28 @@ function FileUtil.readFile(path)
     return content and StringUtil.trim(content) or nil
 end
 
+
+-- writes data to a small text file, or false if the data is null
+function FileUtil.writeFile(path, content)
+    if not StringUtil.assertValidString(path) then
+        return false
+    end
+    
+    if content == nil then
+        return false
+    end
+
+    local f = io.open(path, "w")
+    if not f then
+        return false
+    end
+    
+    local success = f:write(content)
+    f:close()
+    
+    return success and true or false
+end
+
 -- remove a file at the given path
 function FileUtil.removeFile(path)
     if not StringUtil.assertValidString(path) then

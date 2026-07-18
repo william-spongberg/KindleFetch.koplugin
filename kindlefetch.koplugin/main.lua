@@ -16,7 +16,10 @@ local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
 local CoverCache = require("cache.covercache")
-local VersionCheck = require("util.versioncheck")
+local CurlUpdater = require("updater.curlupdater")
+local PluginUpdater = require("updater.pluginupdater")
+local lfs = require("libs/libkoreader-lfs")
+local FileUtil = require("util.fileutil")
 local _ = require("gettext")
 
 local KindleFetch = WidgetContainer:new{
@@ -34,11 +37,12 @@ function KindleFetch:onDispatcherRegisterActions()
 end
 
 function KindleFetch:init()
-    -- ensure curl is available and meets version requirements
-    if not VersionCheck.checkCurlVersion() then
-        NotifyUtil.info("curl is not available or could not be installed")
-        return
-    end
+    -- check curl is at min version
+    CurlUpdater.checkVersion()
+
+    -- check for updates
+    self:getPluginPath()
+    PluginUpdater.checkForUpdates(self.plugin_path)
 
     -- load settings
     KindleFetchSettings:load()
@@ -51,9 +55,6 @@ function KindleFetch:init()
     -- register to main menu
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
-
-    -- register exit hook to warn about active downloads
-    self:registerExitHook()
 end
 
 function KindleFetch:addToMainMenu(menu_items)
@@ -97,6 +98,41 @@ function KindleFetch:setupUI()
     UIManager:show(self.search_box)
     UIManager:setDirty(self.search_box, "ui")
 end
+
+function KindleFetch:getPluginPath()
+    local dir = lfs.currentdir()
+
+    self.plugin_path = dir .. LogUtil.debug("plugin path", self.plugin_path)
+end
+
+function KindleFetch:getPluginPath()
+    local dir = lfs.currentdir()
+    local path = debug.getinfo(1, "S").source
+    if path:sub(1, 1) == "@" then
+        path = path:sub(2)
+    end
+    path = path:match("(.*)/")
+
+    self.plugin_path = dir .. "/" .. path
+    LogUtil.debug("plugin path", self.plugin_path)
+    
+    -- List files in the plugin directory
+    local handle = io.popen("ls -la " .. self.plugin_path)
+    local files = handle:read("*a")
+    handle:close()
+    
+    LogUtil.debug("plugin files", files)
+    
+    -- Read version.txt using FileUtil
+    local version = FileUtil.readFile(self.plugin_path .. "/version.txt")
+    if version then
+        LogUtil.debug("plugin version", version)
+    else
+        LogUtil.debug("plugin version", "version.txt not found")
+    end
+end
+
+
 
 function KindleFetch:performSearch()
     local query = StringUtil.trim(self.search_box:getInputText())
