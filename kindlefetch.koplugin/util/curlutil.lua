@@ -1,3 +1,4 @@
+local NotifyUtil = require("util.notifyutil")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local Device = require("device")
@@ -287,10 +288,12 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
 
     local exit_code = CurlUtil.getExitCode(exit_file)
     if exit_code ~= 0 then
+        local reason = CurlUtil.getErrorMeaning(exit_code)
         LogUtil.warn("parallel download command failed", {
             exit_code = exit_code,
-            reason = CurlUtil.getErrorMeaning(exit_code)
+            reason = reason
         })
+        NotifyUtil.info("Download failed:", reason)
     end
 
     local successful_count = 0
