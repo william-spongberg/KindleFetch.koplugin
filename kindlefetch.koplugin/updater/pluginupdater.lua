@@ -199,7 +199,7 @@ local function promptPluginUpdate(plugin_path, installed_version, available_upda
             text = _("Update"),
             callback = function()
                 UIManager:close(confirm_dialog)
-                updatePlugin(plugin_path, available_version)
+                updatePlugin(plugin_path, available_update.version.str)
             end
         }}}
     }
