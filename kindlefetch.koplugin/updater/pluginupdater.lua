@@ -6,6 +6,7 @@ local CurlUtil = require("util.curlutil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
+local StringUtil = require("util.stringutil")
 local _ = require("gettext")
 
 -- constants
@@ -19,8 +20,8 @@ local REPO_DOWNLOAD_URL = GITHUB_URL .. REPO_NAME
 local PluginUpdater = {}
 
 -- read latest repo version from github
-local function getRepoVersion()
-    local cmd = "curl -s " .. REPO_VERSION_URL .. "/releases/latest" .. " | grep '\"tag_name\"'"
+local function getUpdateInfo()
+    local cmd = "curl -s " .. REPO_VERSION_URL .. "/releases/latest"
     local handle = io.popen(cmd)
     if not handle then
         return nil
@@ -32,18 +33,20 @@ local function getRepoVersion()
     -- output:  "tag_name": "v0.1"
     local tag = output:match('"tag_name"%s*:%s*"([^"]+)"')
     if not tag then
-        LogUtil.debug(output)
+        LogUtil.debug("failed to find tag name:", output)
         return nil
     end
-
     tag = tag:gsub("^v", "")
-    local major, minor, patch = tag:match("(%d+)%.(%d+)%.?(%d*)")
+
+    -- updates notes: "body": "[message]"
+    local body = output:match('"body"%s*:%s*"([^"]+)"')
+    if not body then
+        LogUtil.debug("failed to find body:", output)
+    end
 
     return {
-        major = tonumber(major) or 0,
-        minor = tonumber(minor) or 0,
-        patch = tonumber(patch) or 0,
-        str = tag
+        version = VersionUtil.parseVersion(tag),
+        notes = body
     }
 end
 
@@ -174,11 +177,11 @@ local function updatePlugin(plugin_path, version_str)
     return true
 end
 
-local function promptPluginUpdate(plugin_path, installed_version, available_version)
-    local message = string.format("KindleFetch v%s is installed.\nNew version available: v%s\n\nUpdate plugin now?",
-        installed_version, available_version)
+local function promptPluginUpdate(plugin_path, installed_version, available_update)
+    local message = string.format("KindleFetch v%s is installed.\nNew version available: v%s\n\n%s\n\nUpdate plugin now?",
+        installed_version, available_update.version.str, StringUtil.replaceCarriageReturns(available_update.notes))
 
-    LogUtil.debug("showing", message)
+    LogUtil.debug("showing update message:", message)
 
     local confirm_dialog
     confirm_dialog = InputDialog:new{
@@ -219,27 +222,27 @@ function PluginUpdater.checkForUpdates(plugin_path)
         installed_version = VersionUtil.parseVersion("0.0.0")
     end
 
-    local repo_version = getRepoVersion()
-    if not repo_version then
-        LogUtil.warn("failed to fetch repo version")
+    local repo_update = getUpdateInfo()
+    if not repo_update then
+        LogUtil.warn("failed to fetch repo update info")
         NotifyUtil.info("Failed to fetch updates for KindleFetch")
         return false
     end
 
     LogUtil.debug("KindleFetch:", "plugin version check", {
         installed = installed_version.str,
-        available = repo_version.str
+        available = repo_update.version.str
     })
 
-    local cmp = VersionUtil.compareVersions(installed_version, repo_version)
+    local cmp = VersionUtil.compareVersions(installed_version, repo_update.version)
     if cmp >= 0 then
         LogUtil.debug("plugin is up to date")
         return true
     end
 
     -- update available
-    LogUtil.debug("new plugin version available", repo_version.str)
-    return promptPluginUpdate(plugin_path, installed_version.str, repo_version.str)
+    LogUtil.debug("new plugin version available", repo_update.version.str)
+    return promptPluginUpdate(plugin_path, installed_version.str, repo_update)
 end
 
 return PluginUpdater

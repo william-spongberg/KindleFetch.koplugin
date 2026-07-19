@@ -110,4 +110,12 @@ function StringUtil.cleanFileName(text)
     return text
 end
 
+function StringUtil.replaceCarriageReturns(text)
+    if not StringUtil.assertValidString(text) then
+        return ""
+    end
+
+    return text:gsub("\\r\\n", "\n")    
+end
+
 return StringUtil
