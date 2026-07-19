@@ -119,7 +119,7 @@ end
 
 -- prompt for curl update
 local function promptCurlUpdate(current_version, min_version)
-    local message = string.format("curl v%s is installed.\nMinimum required: v%s\n\nUpdate curl now?", current_version,
+    local message = string.format("curl v%s is installed.\nMinimum required: v%s\n\nUpdate curl now? This will avoid potential TLS issues.", current_version,
         min_version)
 
     local confirm_dialog
