@@ -49,6 +49,7 @@ KindleFetch integrates Anna's Archive and Library Genesis into KOReader, allowin
 3. Browse the results and tap a book to download.
 
 <img width="400" height="533" alt="Screenshot From 2026-07-19 15-48-33" src="https://github.com/user-attachments/assets/f7245229-d4aa-4a08-ade7-285fa52282b6" />
+<img width="400" height="533" alt="Screenshot From 2026-07-19 16-26-45" src="https://github.com/user-attachments/assets/815d7d60-2d06-4ff8-9560-18dc58ec8e4c" />
 
 5. In the download prompt, optionally tap the book cover for a fullscreen preview or adjust the download location via the download path button
 
@@ -67,6 +68,9 @@ Downloaded books are saved to your configured download location.
 #### Search → Kindle Fetch → Settings
 
 - **Show Book Covers**: Enable or disable cover image display in search results (default: enabled)
+
+<img width="400" height="533" alt="Screenshot From 2026-07-19 16-26-40" src="https://github.com/user-attachments/assets/75589b17-aeaf-4c1c-9ea9-20f9ae75442d" />
+<img width="400" height="533" alt="Screenshot From 2026-07-19 15-58-51" src="https://github.com/user-attachments/assets/59dd8a28-cf89-4410-b376-18d534be1913" />
 
 - **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`)
 
