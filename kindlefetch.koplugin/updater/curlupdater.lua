@@ -153,6 +153,10 @@ function CurlUpdater.checkVersion()
         LogUtil.debug("running in emulator, skipping curl version check")
         return true
     end
+    if Device:isAndroid() then
+        LogUtil.debug("running android, skipping curl version check")
+        return true
+    end
     LogUtil.debug("checking curl version")
 
     local current_version_str = getCurlVersion()
