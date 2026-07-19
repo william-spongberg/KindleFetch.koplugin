@@ -83,7 +83,7 @@ function CoverCache:downloadMultiple(books, parallel_jobs)
     
     NotifyUtil.info("Getting book covers...")
         
-    local successful_count = CurlUtil.downloadMultiple(download_urls, filepaths, false, false, parallel_jobs, false, 5)
+    local successful_count = CurlUtil.downloadMultiple(download_urls, filepaths, false, false, parallel_jobs, false, 15)
     
     for _, book in ipairs(books) do
         if book.md5 then
