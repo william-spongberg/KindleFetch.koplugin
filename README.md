@@ -44,11 +44,21 @@ KindleFetch integrates Anna's Archive and Library Genesis into KOReader, allowin
 
 1. Enter a book title, author, or keyword in the search box.
 
-2. Browse the results and tap a book to download.
+<img width="400" height="533" alt="Screenshot From 2026-07-19 15-48-12" src="https://github.com/user-attachments/assets/26d9a11c-fcbe-49a4-8420-4c371b2f44b3" />
 
-3. In the download prompt, optionally tap the book cover for a fullscreen preview or adjust the download location via the download path button
+3. Browse the results and tap a book to download.
 
-4. Confirm the download and monitor progress; tap Hide to run in background or Cancel to stop.
+<img width="400" height="533" alt="Screenshot From 2026-07-19 15-48-33" src="https://github.com/user-attachments/assets/f7245229-d4aa-4a08-ade7-285fa52282b6" />
+
+5. In the download prompt, optionally tap the book cover for a fullscreen preview or adjust the download location via the download path button
+
+<img width="400" height="533" alt="Screenshot From 2026-07-19 15-48-41" src="https://github.com/user-attachments/assets/3dd1ce46-02b4-45b5-a1c8-ac495f3748eb" />
+<img width="400" height="533" alt="Screenshot From 2026-07-19 15-48-44" src="https://github.com/user-attachments/assets/43baaa36-7fb6-4fbb-b632-617874794144" />
+
+6. Confirm the download and monitor progress; tap Hide to run in background or Cancel to stop.
+
+<img width="400" height="533" alt="Screenshot From 2026-07-19 15-51-06" src="https://github.com/user-attachments/assets/e49fcbeb-c1df-413d-be8b-376e60facf19" />
+<img width="400" height="533" alt="Screenshot From 2026-07-19 15-56-06" src="https://github.com/user-attachments/assets/49bd7f2e-b707-4337-84ff-3f7efc702b0d" />
 
 Downloaded books are saved to your configured download location.
 
