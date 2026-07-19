@@ -5,4 +5,4 @@
 - [ ] setting for custom cache expiries
 - [ ] add development info. devs to create .env file with path to repo clone + koreader install
 - [ ] add proxy support to searches + book cover downloads
-- [ ] stricter timeouts for book cover downloads
+- [x] stricter timeouts for book cover downloads

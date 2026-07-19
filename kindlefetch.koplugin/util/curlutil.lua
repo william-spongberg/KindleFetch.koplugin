@@ -238,7 +238,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background)
     end
 end
 
-function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, background, num_parallel_jobs)
+function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, background, num_parallel_jobs, enable_retry, timeout)
     ensureTmpDir()
 
     local config_file = TMP_DIR .. "curl_download_config_" .. tostring(os.time()) .. ".txt"
@@ -252,8 +252,10 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
 
     local cmd = string.format('curl -sL -f --config "%s"', config_file)
     cmd = CurlUtil.pretendBrowser(cmd)
-    cmd = CurlUtil.enableRetry(cmd, 2, 2)
-    cmd = CurlUtil.setTimeout(cmd, 15)
+    if enable_retry then
+        cmd = CurlUtil.enableRetry(cmd, 2, 2)
+    end
+    cmd = CurlUtil.setTimeout(cmd, timeout)
     cmd = CurlUtil.enableParallel(cmd, num_parallel_jobs)
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)
