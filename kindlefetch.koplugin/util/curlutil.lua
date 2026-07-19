@@ -293,7 +293,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
             exit_code = exit_code,
             reason = reason
         })
-        NotifyUtil.info("Download failed:", reason)
+        NotifyUtil.info("Download failed:" .. reason)
     end
 
     local successful_count = 0
