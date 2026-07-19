@@ -3,8 +3,8 @@ local LogUtil = require("util.logutil")
 
 return KindleFetchCache:new{
     filename = "kindlefetch_searchcache.lua",
-    expiry = 72 * 60 * 60, -- 72 hours
-    max_entries = 100,
+    expiry = 2 * 7 * 24 * 60 * 60, -- 2 weeks
+    max_entries = 1000,
 
     makeKey = function(...)
         LogUtil.debug("data for makeKey:", ...)
