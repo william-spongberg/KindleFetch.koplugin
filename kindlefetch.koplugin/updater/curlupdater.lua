@@ -40,11 +40,11 @@ local function updateCurl()
 
     -- download curl
     local curl_filename = "curl-armhf"
-    local curl_path = VersionUtil.getTempDir() .. "/" .. curl_filename
+    local curl_path = VersionUtil.getTmpDir() .. "/" .. curl_filename
     local download_url = string.format(CURL_REPO_URL .. "/releases/download/v%s/%s", MIN_VERSION, curl_filename)
 
     LogUtil.debug("downloading static curl", download_url)
-    local success, err = CurlUtil.download(curl_path, download_url, false, false)
+    local success, err = CurlUtil.download(download_url, curl_path, false, false)
     if not success then
         LogUtil.warn("failed to download static curl", err)
         NotifyUtil.info("Failed to download curl update")
