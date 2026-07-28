@@ -150,7 +150,15 @@ function KindleFetch:performSearch()
 
     -- check device is online
     if not NetworkMgr:isConnected() then
-        NotifyUtil.info("Connect to the internet first")
+        if not NetworkMgr:isWifiOn() then
+            -- WiFi is off, prompt to turn it on
+            NetworkMgr:promptWifiOn(function()
+            end)
+        else
+            -- WiFi is on but not connected, show different prompt
+            NetworkMgr:promptWifi(function()
+            end)
+        end
         return
     end
 
