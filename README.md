@@ -93,7 +93,7 @@ Downloaded books are saved to your configured download location.
 
 <img width="400" alt="Preferred file types" src="docs/screenshots/15-settings-file-types.png" />
 
-- **Preferred Book Types**: Filter by fiction, non-fiction, comics, Russian fiction, magazines, scientific articles, or standards
+- **Preferred Book Types**: Filter by fiction, non-fiction, comics, magazines, scientific articles, or standards
 
 <img width="400" alt="Preferred book types" src="docs/screenshots/16-settings-book-types.png" />
 

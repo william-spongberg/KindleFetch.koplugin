@@ -18,7 +18,6 @@ local MAX_PAGES = 5
 -- Library Genesis topics for each preferred book type
 local TOPICS = {
     fiction = "f",
-    fiction_rus = "r",
     nonfiction = "l",
     comics = "c",
     magazines = "m",

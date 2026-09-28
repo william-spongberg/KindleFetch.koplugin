@@ -93,7 +93,7 @@ describe("KindleFetchSettings", function()
             assert.are.same({"pdf", "txt", "rtf", "doc", "docx", "odt", "djvu"}, Settings:getDocumentFileTypes())
             assert.are.same({"jpg", "tif", "pdb"}, Settings:getImageFileTypes())
             assert.are.same({"chm", "htm", "html", "htmlz", "mht"}, Settings:getWebFileTypes())
-            assert.are.same({"fiction", "nonfiction", "comics", "fiction_rus", "magazines", "articles", "standards"},
+            assert.are.same({"fiction", "nonfiction", "comics", "magazines", "articles", "standards"},
                 (function()
                     local codes = {}
                     for _, book_type in ipairs(Settings:getAvailableBookTypes()) do
@@ -136,6 +136,13 @@ describe("KindleFetchSettings", function()
 
             Settings:load()
             assert.are.same({"fiction", "nonfiction", "comics", "standards"}, pluginSettings().preferred_book_types)
+        end)
+
+        it("leave out Russian fiction, which can no longer be chosen", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                preferred_book_types = {"fiction", "fiction_rus", "magazines"}
+            }
+            assert.are.same({"fiction", "magazines"}, Settings:getPreferredBookTypes())
         end)
 
         it("fall back to the defaults when none are left", function()
