@@ -146,17 +146,19 @@ function KindleFetchCache:deleteValueFromKey(value, ...)
         return
     end
     
-    -- remove specific value from list
-    for i, v in ipairs(values) do
-        if v == value then
+    -- build a new list rather than removing in place, as callers may still be looping over the old one
+    local remaining = {}
+    for _, v in ipairs(values) do
+        if v ~= value then
+            table.insert(remaining, v)
+        else
             LogUtil.debug("removing url from cache:", value)
-            table.remove(values, i)
-            break
         end
     end
-    
+    entry.value = remaining
+
     -- delete cache key if no values remain
-    if #values == 0 then
+    if #remaining == 0 then
         self:delete(key)
     end
     
