@@ -25,6 +25,12 @@ local function ensureCacheDir()
     lfs.mkdir(CACHE_DIR)
 end
 
+-- covers that fail to download are retried through PROXY_URL, like searches and books
+local function hasProxy()
+    local proxy_url = os.getenv("PROXY_URL")
+    return proxy_url ~= nil and proxy_url ~= ""
+end
+
 function CoverCache:getPath(md5)
     ensureCacheDir()
     return CACHE_DIR .. md5 .. ".jpg"
@@ -54,6 +60,10 @@ function CoverCache:download(md5, url)
     local path = self:getPath(md5)
     
     local success = CurlUtil.download(url, path, false, false)
+    if not success and hasProxy() then
+        LogUtil.debug("retrying cover download through proxy", md5)
+        success = CurlUtil.download(url, path, true, false)
+    end
     if success then
         persistent_cache:set(path, md5)
         return path
@@ -85,6 +95,20 @@ function CoverCache:downloadMultiple(books, parallel_jobs)
     NotifyUtil.info("Getting book covers...")
         
     local successful_count = CurlUtil.downloadMultiple(download_urls, filepaths, false, false, parallel_jobs, false, 15)
+
+    if successful_count < count and hasProxy() then
+        local retry_urls = {}
+        local retry_paths = {}
+        for i, path in ipairs(filepaths) do
+            if not FileUtil.isValidFile(path) then
+                table.insert(retry_urls, download_urls[i])
+                table.insert(retry_paths, path)
+            end
+        end
+        LogUtil.debug("retrying", #retry_urls, "cover downloads through proxy")
+        successful_count = successful_count +
+                               CurlUtil.downloadMultiple(retry_urls, retry_paths, true, false, parallel_jobs, false, 15)
+    end
     
     for _, book in ipairs(books) do
         if book.md5 then

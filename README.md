@@ -182,7 +182,7 @@ kindlefetch.koplugin/
 
 5. **Error Handling & Resilience**
    - Network connectivity is verified before searching
-   - Failed downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or corrupted downloads are detected and deleted
+   - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or corrupted downloads are detected and deleted
    - Failed mirrors are removed from cache; if all cached URLs fail they are re-scraped from Wikipedia
    - User can cancel downloads at any time via the progress widget
    - Curl exit codes are mapped to human-readable error messages and the user is notified
@@ -195,7 +195,7 @@ The plugin supports an optional `PROXY_URL` environment variable for proxy-based
 export PROXY_URL="http://proxy.example.com:8080"
 ```
 
-If a direct download fails, the plugin automatically retries through the proxy.
+If a search, book cover or book download fails, the plugin automatically retries it through the proxy.
 
 ## Attribution
 
