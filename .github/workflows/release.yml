@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Part of the version number to increment
+        type: choice
+        options:
+          - minor
+          - patch
+          - major
+        default: minor
+      summary:
+        description: Optional summary shown above the list of commits
+        type: string
+        required: false
+
+# two releases at once would pick the same version number
+concurrency:
+  group: release
+
+jobs:
+  test:
+    # only release from main
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/tests.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # full history and tags, to list the commits since the last release
+          fetch-depth: 0
+
+      - name: Work out version numbers
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          current=$(tr -d '[:space:]' < kindlefetch.koplugin/version.txt)
+          IFS=. read -r major minor patch <<< "$current"
+          case "$BUMP" in
+            major) next="$((major + 1)).0" ;;
+            minor) next="$major.$((${minor:-0} + 1))" ;;
+            patch) next="$major.${minor:-0}.$((${patch:-0} + 1))" ;;
+          esac
+
+          if git rev-parse -q --verify "refs/tags/v$next" > /dev/null; then
+            echo "::error::v$next has already been released"
+            exit 1
+          fi
+
+          echo "Releasing v$current -> v$next"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=$(git describe --tags --abbrev=0 --match 'v*' 2> /dev/null)" >> "$GITHUB_OUTPUT"
+
+      - name: Write release notes
+        env:
+          SUMMARY: ${{ inputs.summary }}
+          PREVIOUS_TAG: ${{ steps.version.outputs.previous_tag }}
+        run: |
+          range=${PREVIOUS_TAG:+$PREVIOUS_TAG..}HEAD
+          commits=$(git log --no-merges --reverse --format='- %s (%h)' "$range")
+          if [ -z "$commits" ]; then
+            echo "::error::No new commits since $PREVIOUS_TAG"
+            exit 1
+          fi
+
+          {
+            if [ -n "$SUMMARY" ]; then
+              printf '%s\n\n' "$SUMMARY"
+            fi
+            if [ -n "$PREVIOUS_TAG" ]; then
+              printf 'Changes since %s:\n\n' "$PREVIOUS_TAG"
+            fi
+            printf '%s\n' "$commits"
+          } > "$RUNNER_TEMP/notes.md"
+
+          # the plugin shows these notes in its update prompt, which (up to v0.3 at least)
+          # only understands \r\n line breaks and cuts the notes off at the first double quote
+          tr '"' "'" < "$RUNNER_TEMP/notes.md" | sed 's/$/\r/' > "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Update version number
+        env:
+          VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          printf '%s' "$VERSION" > kindlefetch.koplugin/version.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Release v$VERSION" kindlefetch.koplugin/version.txt
+          git tag "v$VERSION"
+          # fails without pushing anything if main has moved on since the release started
+          git push --atomic origin HEAD:main "refs/tags/v$VERSION"
+
+      - name: Build plugin zip
+        run: zip -r "$RUNNER_TEMP/kindlefetch.koplugin.zip" kindlefetch.koplugin
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          gh release create "v$VERSION" "$RUNNER_TEMP/kindlefetch.koplugin.zip" \
+            --verify-tag \
+            --title "v$VERSION" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"

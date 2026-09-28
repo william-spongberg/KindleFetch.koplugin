@@ -215,3 +215,9 @@ Tests live in `spec/` and run with [busted](https://lunarmodules.github.io/buste
 luarocks install busted
 busted            # run from the repository root
 ```
+
+Tests run automatically on every push.
+
+### Releasing
+
+Run the **Release** workflow from the Actions tab, or with `gh workflow run release.yml -f bump=minor` (`major`, `minor` or `patch`). It runs the tests, increments `version.txt`, tags the release, and publishes `kindlefetch.koplugin.zip` along with a list of the commits since the last release.
