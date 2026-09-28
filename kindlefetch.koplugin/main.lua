@@ -56,6 +56,12 @@ function KindleFetch:onDispatcherRegisterActions()
     })
 end
 
+-- sent by the dispatcher action, e.g. when a gesture is assigned to it
+function KindleFetch:onKindleFetch()
+    self:setupUI()
+    return true
+end
+
 function KindleFetch:init()
     -- load settings
     KindleFetchSettings:load()
