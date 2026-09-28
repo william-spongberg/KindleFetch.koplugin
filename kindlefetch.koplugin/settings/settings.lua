@@ -400,6 +400,14 @@ function KindleFetchSettings:setShowBookCovers(bool)
     return KindleFetchSettings:setSetting("show_book_covers", bool)
 end
 
+-- last_version (plugin version the last time KOReader was started)
+function KindleFetchSettings:getLastVersion()
+    return KindleFetchSettings:getSetting("last_version")
+end
+function KindleFetchSettings:setLastVersion(version)
+    return KindleFetchSettings:setSetting("last_version", version)
+end
+
 -- download_dir
 function KindleFetchSettings:getDownloadDir()
     local settings_file = getSettingsFile()

@@ -16,13 +16,31 @@ local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
 local CoverCache = require("cache.covercache")
+local SearchCache = require("cache.searchcache")
+local UrlCache = require("cache.urlcache")
 local CurlUpdater = require("updater.curlupdater")
 local PluginUpdater = require("updater.pluginupdater")
+local FileUtil = require("util.fileutil")
+local PathUtil = require("util.pathutil")
 local _ = require("gettext")
 
 -- a new plugin instance is created every time the file manager or a book is opened,
--- so only check for updates once per session
+-- so only check for updates and clear old caches once per session
 local update_check_scheduled = false
+local version_checked = false
+
+-- clear caches left by other versions of the plugin, as their contents may not work with this one
+local function clearCachesAfterUpdate()
+    local version = FileUtil.readFile(PathUtil.getPluginPath() .. "/version.txt")
+    if not version or version == KindleFetchSettings:getLastVersion() then
+        return
+    end
+
+    LogUtil.debug("plugin version changed, clearing caches", version)
+    SearchCache:clear()
+    UrlCache:clear()
+    KindleFetchSettings:setLastVersion(version)
+end
 
 local KindleFetch = WidgetContainer:new{
     name = "kindlefetch",
@@ -41,6 +59,11 @@ end
 function KindleFetch:init()
     -- load settings
     KindleFetchSettings:load()
+
+    if not version_checked then
+        version_checked = true
+        clearCachesAfterUpdate()
+    end
 
     -- get screen size
     if self.dimen == nil then
