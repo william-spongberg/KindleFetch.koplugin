@@ -122,13 +122,12 @@ function AnnasAPI:search(query, page, retrying)
             local books = parseBookTable(html)
             LogUtil.debug("parsed", #books, "books for", query)
 
-            if books then
-                -- add new query result to cache before returning
+            -- add new query result to cache before returning, unless empty as the page may have been an error
+            if #books > 0 then
                 SearchCache:set(books, query, page, languages, file_types, book_types)
-                return books
             end
 
-            return nil
+            return books
         end
 
         LogUtil.warn("failed url:")
