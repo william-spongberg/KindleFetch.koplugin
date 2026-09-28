@@ -1,5 +1,6 @@
 local LuaSettings = require("luasettings")
 local DataStorage = require("datastorage")
+local Device = require("device")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local LogUtil = require("util.logutil")
@@ -396,12 +397,13 @@ function KindleFetchSettings:getDownloadDir()
 
         if download_dir == "" then
             download_dir = "/mnt/us/documents"
-            LogUtil.warn("home directory not found, defaulting to", download_dir)
+            LogUtil.warn("settings home directory not found, defaulting to", download_dir)
         end
 
         if not FileUtil.isValidDirectory(download_dir) then
-            download_dir = lfs.currentdir()
-            LogUtil.warn("documents directory does not exist, defaulting to working dir", download_dir)
+            -- home_dir is nil on some devices, so fall back to the koreader dir
+            download_dir = Device.home_dir or lfs.currentdir()
+            LogUtil.warn("documents directory does not exist, defaulting to device home directory", download_dir)
         end
     end
 

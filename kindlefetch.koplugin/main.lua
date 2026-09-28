@@ -18,9 +18,11 @@ local BookMenu = require("ui.bookmenu")
 local CoverCache = require("cache.covercache")
 local CurlUpdater = require("updater.curlupdater")
 local PluginUpdater = require("updater.pluginupdater")
-local lfs = require("libs/libkoreader-lfs")
-local FileUtil = require("util.fileutil")
 local _ = require("gettext")
+
+-- a new plugin instance is created every time the file manager or a book is opened,
+-- so only check for updates once per session
+local update_check_scheduled = false
 
 local KindleFetch = WidgetContainer:new{
     name = "kindlefetch",
@@ -50,13 +52,13 @@ function KindleFetch:init()
     self.ui.menu:registerToMainMenu(self)
 
     -- if network is connected, schedule update checks after UI is ready
-    if NetworkMgr:isConnected() then
+    if not update_check_scheduled and NetworkMgr:isConnected() then
+        update_check_scheduled = true
         UIManager:scheduleIn(0.1, function()
             -- check curl is at min version
             CurlUpdater.checkVersion()
             -- check for updates
-            self:getPluginPath()
-            PluginUpdater.checkForUpdates(self.plugin_path)
+            PluginUpdater.checkForUpdates()
         end)
     end
 end
@@ -101,39 +103,6 @@ function KindleFetch:setupUI()
     }
     UIManager:show(self.search_box)
     UIManager:setDirty(self.search_box, "ui")
-end
-
-function KindleFetch:getPluginPath()
-    local dir = lfs.currentdir()
-
-    self.plugin_path = dir .. LogUtil.debug("plugin path", self.plugin_path)
-end
-
-function KindleFetch:getPluginPath()
-    local dir = lfs.currentdir()
-    local path = debug.getinfo(1, "S").source
-    if path:sub(1, 1) == "@" then
-        path = path:sub(2)
-    end
-    path = path:match("(.*)/")
-
-    self.plugin_path = dir .. "/" .. path
-    LogUtil.debug("plugin path", self.plugin_path)
-
-    -- List files in the plugin directory
-    local handle = io.popen("ls -la " .. self.plugin_path)
-    local files = handle:read("*a")
-    handle:close()
-
-    LogUtil.debug("plugin files", files)
-
-    -- Read version.txt using FileUtil
-    local version = FileUtil.readFile(self.plugin_path .. "/version.txt")
-    if version then
-        LogUtil.debug("plugin version", version)
-    else
-        LogUtil.debug("plugin version", "version.txt not found")
-    end
 end
 
 function KindleFetch:performSearch()

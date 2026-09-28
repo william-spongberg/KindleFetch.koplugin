@@ -130,6 +130,7 @@ kindlefetch.koplugin/
     ├── stringutil.lua         # String utilities (trimming, validation, emoji removal, HTML entity conversion)
     ├── logutil.lua            # Logger wrapper
     ├── notifyutil.lua         # Notification wrapper
+    ├── pathutil.lua           # Plugin install location and temporary download directory
     └── versionutil.lua        # Version parsing and comparison utilities
 ```
 

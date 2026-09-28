@@ -5,6 +5,7 @@ local CurlUtil = require("util.curlutil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
+local PathUtil = require("util.pathutil")
 local _ = require("gettext")
 
 -- constants
@@ -40,7 +41,7 @@ local function updateCurl()
 
     -- download curl
     local curl_filename = "curl-armhf"
-    local curl_path = VersionUtil.getTmpDir() .. "/" .. curl_filename
+    local curl_path = PathUtil.getTmpPath() .. "/" .. curl_filename
     local download_url = string.format(CURL_REPO_URL .. "/releases/download/v%s/%s", MIN_VERSION, curl_filename)
 
     LogUtil.debug("downloading static curl", download_url)
