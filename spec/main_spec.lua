@@ -48,7 +48,8 @@ describe("KindleFetch", function()
         settings = {
             show_covers = true,
             download_dir = "/mnt/us/documents",
-            last_version = "0.4"
+            last_version = "0.4",
+            check_for_updates = true
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
 
@@ -59,6 +60,9 @@ describe("KindleFetch", function()
             end,
             getDownloadDir = function()
                 return settings.download_dir
+            end,
+            getCheckForUpdates = function()
+                return settings.check_for_updates
             end,
             getLastVersion = function()
                 return settings.last_version
@@ -127,8 +131,9 @@ describe("KindleFetch", function()
             end
         })
         helper.stub("updater.pluginupdater", {
-            checkForUpdates = function()
+            checkForUpdates = function(user_requested)
                 checks.plugin = checks.plugin + 1
+                checks.user_requested = user_requested
             end
         })
 
@@ -190,7 +195,15 @@ describe("KindleFetch", function()
             assert.are.same({curl = 0, plugin = 0}, checks)
 
             helper.runScheduled()
-            assert.are.same({curl = 1, plugin = 1}, checks)
+            assert.are.same({curl = 1, plugin = 1, user_requested = false}, checks)
+        end)
+
+        it("does not check for updates when automatic checks are turned off", function()
+            settings.check_for_updates = false
+            openUI()
+            helper.runScheduled()
+
+            assert.are.same({curl = 0, plugin = 0}, checks)
         end)
 
         it("only checks for updates once per session", function()
@@ -200,7 +213,7 @@ describe("KindleFetch", function()
             openUI()
             helper.runScheduled()
 
-            assert.are.same({curl = 1, plugin = 1}, checks)
+            assert.are.same({curl = 1, plugin = 1, user_requested = false}, checks)
         end)
 
         it("waits for a network connection before checking for updates", function()
@@ -212,7 +225,7 @@ describe("KindleFetch", function()
             helper.stubs.network.connected = true
             openUI()
             helper.runScheduled()
-            assert.are.same({curl = 1, plugin = 1}, checks)
+            assert.are.same({curl = 1, plugin = 1, user_requested = false}, checks)
         end)
     end)
 
@@ -239,6 +252,25 @@ describe("KindleFetch", function()
         it("opens the settings", function()
             menuItem(openUI(), "Settings").callback()
             assert.are.equal(1, settings_shown)
+        end)
+
+        it("checks for updates when asked, even if automatic checks are off", function()
+            settings.check_for_updates = false
+            menuItem(openUI(), "Check for updates").callback()
+
+            assert.are.same({curl = 1, plugin = 1, user_requested = true}, checks)
+            assert.are.equal("Checking for updates...", helper.lastNotification())
+        end)
+
+        it("connects to wifi before checking for updates", function()
+            helper.stubs.network.connected = false
+            menuItem(openUI(), "Check for updates").callback()
+            assert.are.same({curl = 0, plugin = 0}, checks)
+            assert.are.equal("turn wifi on", helper.stubs.network.prompted)
+
+            helper.stubs.network.connected = true
+            helper.stubs.network.when_connected()
+            assert.are.same({curl = 1, plugin = 1, user_requested = true}, checks)
         end)
     end)
 

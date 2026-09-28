@@ -75,15 +75,23 @@ function KindleFetch:init()
     self.ui.menu:registerToMainMenu(self)
 
     -- if network is connected, schedule update checks after UI is ready
-    if not update_check_scheduled and NetworkMgr:isConnected() then
+    if not update_check_scheduled and KindleFetchSettings:getCheckForUpdates() and NetworkMgr:isConnected() then
         update_check_scheduled = true
         UIManager:scheduleIn(0.1, function()
             -- check curl is at min version
             CurlUpdater.checkVersion()
             -- check for updates
-            PluginUpdater.checkForUpdates()
+            PluginUpdater.checkForUpdates(false)
         end)
     end
+end
+
+function KindleFetch:checkForUpdates()
+    NetworkMgr:runWhenConnected(function()
+        NotifyUtil.info("Checking for updates...")
+        CurlUpdater.checkVersion()
+        PluginUpdater.checkForUpdates(true)
+    end)
 end
 
 function KindleFetch:addToMainMenu(menu_items)
@@ -99,6 +107,11 @@ function KindleFetch:addToMainMenu(menu_items)
             text = _("Settings"),
             callback = function()
                 SettingsPage:showSettings()
+            end
+        }, {
+            text = _("Check for updates"),
+            callback = function()
+                self:checkForUpdates()
             end
         }}
     }

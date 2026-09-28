@@ -216,8 +216,8 @@ local function promptPluginUpdate(plugin_path, installed_version, available_upda
     UIManager:setDirty(confirm_dialog, "full")
 end
 
--- check plugin version and update if new version available
-function PluginUpdater.checkForUpdates()
+-- check plugin version and update if new version available, reporting the result if the user asked for the check
+function PluginUpdater.checkForUpdates(user_requested)
     if Device:isSDL() then
         LogUtil.debug("running in emulator, skipping plugin version check")
         return true
@@ -235,7 +235,9 @@ function PluginUpdater.checkForUpdates()
     local repo_update = getUpdateInfo()
     if not repo_update then
         LogUtil.warn("failed to fetch repo update info")
-        NotifyUtil.info("Failed to fetch updates for KindleFetch")
+        if user_requested then
+            NotifyUtil.info("Failed to fetch updates for KindleFetch")
+        end
         return false
     end
 
@@ -247,6 +249,9 @@ function PluginUpdater.checkForUpdates()
     local cmp = VersionUtil.compareVersions(installed_version, repo_update.version)
     if cmp >= 0 then
         LogUtil.debug("plugin is up to date")
+        if user_requested then
+            NotifyUtil.info("KindleFetch is up to date")
+        end
         return true
     end
 

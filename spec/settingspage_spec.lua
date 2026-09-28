@@ -43,7 +43,8 @@ describe("SettingsPage", function()
 
         assert.are.same({"Show Book Covers: ☑", "Download Folder: " .. helper.abs(data_dir),
                          "Preferred Languages: en", "Preferred File Types: epub, pdf, cbr, cbz",
-                         "Preferred Book Types: fiction, comics"}, itemTexts(lastMenu()))
+                         "Preferred Book Types: fiction, comics", "Check for Updates Automatically: ☑"},
+            itemTexts(lastMenu()))
     end)
 
     it("toggles book covers", function()
@@ -53,6 +54,18 @@ describe("SettingsPage", function()
         assert.is_false(Settings:getShowBookCovers())
         assert.are.equal("Show Book Covers: ☐", lastMenu().item_table[1].text)
         assert.are.equal("Book cover visibility updated", helper.lastNotification())
+    end)
+
+    it("turns automatic update checks off and on", function()
+        SettingsPage:showSettings()
+        tap("Check for Updates Automatically")
+
+        assert.is_false(Settings:getCheckForUpdates())
+        assert.are.equal("Check for Updates Automatically: ☐", lastMenu().item_table[6].text)
+        assert.are.equal("Update checks updated", helper.lastNotification())
+
+        tap("Check for Updates Automatically")
+        assert.is_true(Settings:getCheckForUpdates())
     end)
 
     describe("download folder", function()
