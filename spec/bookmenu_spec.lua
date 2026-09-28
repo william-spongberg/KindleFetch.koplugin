@@ -224,25 +224,54 @@ describe("BookMenu", function()
     end)
 
     describe("loadCoversForPage", function()
-        it("downloads the covers missing from that page and redraws", function()
-            local menu = newMenu(11)
-            cacheCover("md5-7")
-            menu.item_table[8].book.image_url = nil
+        local requested
 
-            local requested
-            CoverCache.downloadMultiple = function(_, books, parallel_jobs)
+        before_each(function()
+            requested = nil
+            CoverCache.downloadMultiple = function(_, books, parallel_jobs, on_done)
                 requested = {
-                    parallel_jobs = parallel_jobs
+                    parallel_jobs = parallel_jobs,
+                    on_done = on_done
                 }
                 for _, b in ipairs(books) do
                     table.insert(requested, b.md5)
                 end
+                return true
             end
+        end)
+
+        it("downloads the covers missing from that page in the background", function()
+            local menu = newMenu(11)
+            cacheCover("md5-7")
+            menu.item_table[8].book.image_url = nil
 
             menu.page = 2
             menu:loadCoversForPage(2)
-            assert.are.same({"md5-6", "md5-9", "md5-10", parallel_jobs = 5}, requested)
+            assert.are.same({"md5-6", "md5-9", "md5-10"}, {requested[1], requested[2], requested[3]})
+            assert.are.equal(3, #requested)
+            assert.are.equal(5, requested.parallel_jobs)
+            -- the menu isn't redrawn until they have downloaded
+            assert.are.equal(0, #menu.item_group)
+
+            requested.on_done(3)
             assert.are.equal(5, #menu.item_group)
+        end)
+
+        it("does not redraw when the page has changed", function()
+            local menu = newMenu(11)
+            menu:loadCoversForPage(1)
+            menu.page = 2
+
+            requested.on_done(5)
+            assert.are.equal(0, #menu.item_group)
+        end)
+
+        it("does not redraw when no covers downloaded", function()
+            local menu = newMenu(1)
+            menu:loadCoversForPage(1)
+
+            requested.on_done(0)
+            assert.are.equal(0, #menu.item_group)
         end)
 
         it("does nothing when every cover is there", function()

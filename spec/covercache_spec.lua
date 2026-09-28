@@ -1,4 +1,5 @@
 local helper = require("helper")
+local fixtures = require("fixtures")
 
 describe("CoverCache", function()
     local data_dir, covers_dir, CurlUtil, CoverCache
@@ -106,86 +107,138 @@ describe("CoverCache", function()
     end)
 
     describe("downloadMultiple", function()
-        it("downloads only covers that are missing, in parallel", function()
-            local requested
-            CurlUtil.downloadMultiple = function(urls, paths, _, _, parallel_jobs)
-                requested = {
-                    urls = urls,
-                    paths = paths,
-                    parallel_jobs = parallel_jobs
-                }
-                for _, path in ipairs(paths) do
+        local runs, results
+
+        -- pretend to be curl running in the background: the spec finishes each run with finishRun
+        local function finishRun(run, succeeded, exit_code)
+            for i, path in ipairs(run.paths) do
+                if succeeded[i] then
                     helper.writeFile(path, "jpeg")
                 end
-                return #paths
             end
-            CurlUtil.download = function(_, path)
-                helper.writeFile(path, "jpeg")
+            helper.writeFile(run.exit_file, tostring(exit_code or 0))
+        end
+
+        local function onDone(count)
+            table.insert(results, count)
+        end
+
+        before_each(function()
+            runs, results = {}, {}
+            CurlUtil.downloadMultiple = function(urls, paths, use_proxy, background, parallel_jobs)
+                assert.is_true(background)
+                local run = {
+                    urls = urls,
+                    paths = paths,
+                    use_proxy = use_proxy,
+                    parallel_jobs = parallel_jobs,
+                    pid = 4000 + #runs,
+                    exit_file = CurlUtil.createExitFile() .. #runs
+                }
+                table.insert(runs, run)
+                return run.pid, run.exit_file, data_dir .. "/settings/curl_config.txt"
+            end
+            CurlUtil.isPidRunning = function()
                 return true
             end
-            CoverCache:download("cached", "https://covers.example/cached.jpg")
+        end)
 
+        it("downloads missing covers in the background", function()
+            fixtures.cacheCover(helper, "cached")
             local books = {book("cached", "https://covers.example/cached.jpg"), book("new", "https://covers.example/new.jpg"),
                            book("no-image"), {title = "no md5", image_url = "https://covers.example/x.jpg"}}
-            assert.are.equal(1, CoverCache:downloadMultiple(books, 6))
 
-            assert.are.same({
-                urls = {"https://covers.example/new.jpg"},
-                paths = {covers_dir .. "new.jpg"},
-                parallel_jobs = 6
-            }, requested)
-            assert.are.equal(covers_dir .. "new.jpg", CoverCache:get("new"))
+            assert.is_true(CoverCache:downloadMultiple(books, 6, onDone))
+            assert.are.equal(1, #runs)
+            assert.are.same({"https://covers.example/new.jpg"}, runs[1].urls)
+            assert.are.same({covers_dir .. "new.jpg"}, runs[1].paths)
+            assert.are.equal(6, runs[1].parallel_jobs)
+            assert.is_false(runs[1].use_proxy)
             assert.are.equal("Getting book covers...", helper.lastNotification())
+
+            -- nothing happens until curl has finished
+            helper.tick()
+            assert.are.same({}, results)
+            assert.is_false(CoverCache:cacheExists("new"))
+
+            finishRun(runs[1], {true})
+            helper.tick()
+            assert.are.same({1}, results)
+            assert.are.equal(covers_dir .. "new.jpg", CoverCache:get("new"))
+        end)
+
+        it("does not download covers that are already downloading", function()
+            local books = {book("a", "https://covers.example/a.jpg")}
+            CoverCache:downloadMultiple(books, 6, onDone)
+
+            assert.is_false(CoverCache:downloadMultiple(books, 6, onDone))
+            assert.are.equal(1, #runs)
+
+            finishRun(runs[1], {false}, 22)
+            helper.runScheduled()
+            assert.is_true(CoverCache:downloadMultiple(books, 6, onDone))
+        end)
+
+        it("discards the covers when curl fails", function()
+            CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg"), book("b", "https://covers.example/b.jpg")},
+                6, onDone)
+            finishRun(runs[1], {true, false}, 28)
+            helper.runScheduled()
+
+            assert.are.same({0}, results)
+            assert.is_false(helper.exists(covers_dir .. "a.jpg"))
+            assert.is_false(CoverCache:cacheExists("a"))
+        end)
+
+        it("stops when curl stops without reporting back", function()
+            CurlUtil.isPidRunning = function()
+                return false
+            end
+            CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg")}, 6, onDone)
+            helper.runScheduled()
+
+            assert.are.same({0}, results)
+        end)
+
+        it("reports nothing downloaded when curl cannot be started", function()
+            CurlUtil.downloadMultiple = function()
+                return nil, nil, nil, "unable to launch curl"
+            end
+
+            assert.is_true(CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg")}, 6, onDone))
+            assert.are.same({0}, results)
         end)
 
         it("retries the covers that failed through PROXY_URL", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"
-            local attempts = {}
-            CurlUtil.downloadMultiple = function(urls, paths, use_proxy)
-                table.insert(attempts, {
-                    urls = urls,
-                    use_proxy = use_proxy
-                })
-                -- only the first cover gets through directly
-                for i, path in ipairs(paths) do
-                    if use_proxy or i == 1 then
-                        helper.writeFile(path, "jpeg")
-                    end
-                end
-                return use_proxy and #paths or 1
-            end
+            local books = {book("a", "https://covers.example/a.jpg"), book("b", "https://covers.example/b.jpg")}
+            CoverCache:downloadMultiple(books, 6, onDone)
 
-            local books = {book("a", "https://covers.example/a.jpg"), book("b", "https://covers.example/b.jpg"),
-                           book("c", "https://covers.example/c.jpg")}
-            assert.are.equal(3, CoverCache:downloadMultiple(books, 6))
-            assert.are.same({{
-                urls = {"https://covers.example/a.jpg", "https://covers.example/b.jpg", "https://covers.example/c.jpg"},
-                use_proxy = false
-            }, {
-                urls = {"https://covers.example/b.jpg", "https://covers.example/c.jpg"},
-                use_proxy = true
-            }}, attempts)
-            assert.is_true(CoverCache:cacheExists("c"))
+            finishRun(runs[1], {false, false}, 35)
+            helper.tick()
+            assert.are.equal(2, #runs)
+            assert.is_true(runs[2].use_proxy)
+            assert.are.same({"https://covers.example/a.jpg", "https://covers.example/b.jpg"}, runs[2].urls)
+
+            finishRun(runs[2], {true, true})
+            helper.tick()
+            assert.are.same({2}, results)
+            assert.is_true(CoverCache:cacheExists("b"))
         end)
 
         it("does not retry covers without PROXY_URL", function()
             helper.state.env.PROXY_URL = false
-            local attempts = 0
-            CurlUtil.downloadMultiple = function()
-                attempts = attempts + 1
-                return 0
-            end
+            CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg")}, 6, onDone)
 
-            assert.are.equal(0, CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg")}, 6))
-            assert.are.equal(1, attempts)
+            finishRun(runs[1], {false}, 35)
+            helper.runScheduled()
+            assert.are.equal(1, #runs)
+            assert.are.same({0}, results)
         end)
 
         it("does nothing when every cover is cached", function()
-            CurlUtil.downloadMultiple = function()
-                error("should not download")
-            end
-
-            assert.are.equal(0, CoverCache:downloadMultiple({book("no-image")}, 6))
+            assert.is_false(CoverCache:downloadMultiple({book("no-image")}, 6, onDone))
+            assert.are.equal(0, #runs)
             assert.are.equal(0, #helper.state.notifications)
         end)
     end)
