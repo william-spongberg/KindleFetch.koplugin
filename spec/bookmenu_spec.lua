@@ -160,6 +160,16 @@ describe("BookMenu", function()
             assert.are.equal("1990 · English [en] · Book (fiction) · epub · 1.2MB", info)
         end)
 
+        -- gray text is hard to read on e-ink screens (#3)
+        it("show authors and details in black", function()
+            local menu = newMenu(1)
+            local content = menu:createBookItemWidget(book(1))[1]
+            content = content[#content]
+
+            assert.are.equal("black", content[3].fgcolor)
+            assert.are.equal("black", content[5].fgcolor)
+        end)
+
         it("leave out missing details", function()
             local menu = newMenu(1)
             local b = book(1, {year = ""})

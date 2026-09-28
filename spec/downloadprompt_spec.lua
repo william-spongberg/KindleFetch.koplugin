@@ -51,6 +51,12 @@ describe("DownloadPrompt", function()
                          "Format: epub", "Size: 1.2MB"}, details)
     end)
 
+    it("shows the author and details in black", function()
+        local prompt = newPrompt()
+        assert.are.equal("black", prompt.author.fgcolor)
+        assert.are.equal("black", prompt.frame[1][1][3][5].fgcolor)
+    end)
+
     it("shows a dash for missing details", function()
         book.year = nil
         local prompt = newPrompt()

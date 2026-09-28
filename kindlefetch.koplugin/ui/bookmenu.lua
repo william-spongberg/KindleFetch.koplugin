@@ -113,7 +113,7 @@ function BookMenu:createBookItemWidget(book)
         width = self.dimen.w,
         face = Font:getFace("cfont", 15),
         text = book.authors or "",
-        fgcolor = Blitbuffer.COLOR_GRAY
+        fgcolor = Blitbuffer.COLOR_BLACK
     }
 
     -- book details (year, language, type, format, size)
@@ -121,7 +121,7 @@ function BookMenu:createBookItemWidget(book)
         width = self.dimen.w,
         face = Font:getFace("cfont", 14),
         text = formatBookDetails(book),
-        fgcolor = Blitbuffer.COLOR_DARK_GRAY
+        fgcolor = Blitbuffer.COLOR_BLACK
     }
 
     -- main content group

@@ -31,7 +31,7 @@ local function infoLine(label, value)
         width = CONTENT_WIDTH - COVER_SIZE - Size.padding.large,
         face = Font:getFace("cfont", 16),
         text = string.format("%s: %s", label, value or "-"),
-        fgcolor = Blitbuffer.COLOR_DARK_GRAY
+        fgcolor = Blitbuffer.COLOR_BLACK
     }
 end
 
@@ -162,7 +162,7 @@ function DownloadPrompt:buildContent()
         width = CONTENT_WIDTH - COVER_SIZE - Size.padding.large,
         face = Font:getFace("cfont", 17),
         text = self.book.authors or "",
-        fgcolor = Blitbuffer.COLOR_GRAY
+        fgcolor = Blitbuffer.COLOR_BLACK
     }
 
     return VerticalGroup:new{HorizontalGroup:new{self.cover, HorizontalSpan:new{
