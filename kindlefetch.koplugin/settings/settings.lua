@@ -12,6 +12,8 @@ local KindleFetchSettings = {}
 local DEFAULTS = {
     show_book_covers = true,
     check_for_updates = true,
+    search_cache_expiry_days = 14,
+    mirror_cache_expiry_days = 7,
     download_dir = nil,
     preferred_languages = {"en"},
     preferred_file_types = {"epub", "pdf", "cbr", "cbz"},
@@ -348,6 +350,8 @@ local AVAILABLE_BOOK_TYPES = {{
     text = "Standards",
     code = "standards"
 }}
+-- how long searches and mirrors can be cached for
+local AVAILABLE_CACHE_EXPIRY_DAYS = {1, 3, 7, 14, 30}
 -- book types saved when searching Anna's Archive
 local OLD_BOOK_TYPES = {
     book_fiction = "fiction",
@@ -364,6 +368,8 @@ function KindleFetchSettings:load()
     self:setDownloadDir(self:getDownloadDir())
     self:setShowBookCovers(self:getShowBookCovers())
     self:setCheckForUpdates(self:getCheckForUpdates())
+    self:setSearchCacheExpiryDays(self:getSearchCacheExpiryDays())
+    self:setMirrorCacheExpiryDays(self:getMirrorCacheExpiryDays())
     self:setPreferredLanguages(self:getPreferredLanguages())
     self:setPreferredFileTypes(self:getPreferredFileTypes())
     self:setPreferredBookTypes(self:getPreferredBookTypes())
@@ -408,6 +414,23 @@ function KindleFetchSettings:getCheckForUpdates()
 end
 function KindleFetchSettings:setCheckForUpdates(bool)
     return KindleFetchSettings:setSetting("check_for_updates", bool)
+end
+
+-- search_cache_expiry_days / mirror_cache_expiry_days
+function KindleFetchSettings:getSearchCacheExpiryDays()
+    return KindleFetchSettings:getSetting("search_cache_expiry_days")
+end
+function KindleFetchSettings:setSearchCacheExpiryDays(days)
+    return KindleFetchSettings:setSetting("search_cache_expiry_days", days)
+end
+function KindleFetchSettings:getMirrorCacheExpiryDays()
+    return KindleFetchSettings:getSetting("mirror_cache_expiry_days")
+end
+function KindleFetchSettings:setMirrorCacheExpiryDays(days)
+    return KindleFetchSettings:setSetting("mirror_cache_expiry_days", days)
+end
+function KindleFetchSettings:getAvailableCacheExpiryDays()
+    return AVAILABLE_CACHE_EXPIRY_DAYS
 end
 
 -- last_version (plugin version the last time KOReader was started)

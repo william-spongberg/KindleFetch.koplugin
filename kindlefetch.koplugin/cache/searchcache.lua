@@ -1,9 +1,12 @@
 local KindleFetchCache = require("cache.cache")
+local KindleFetchSettings = require("settings.settings")
 local LogUtil = require("util.logutil")
 
 return KindleFetchCache:new{
     filename = "kindlefetch_searchcache.lua",
-    expiry = 2 * 7 * 24 * 60 * 60, -- 2 weeks
+    expiry = function()
+        return KindleFetchSettings:getSearchCacheExpiryDays() * 24 * 60 * 60
+    end,
     max_entries = 1000,
 
     makeKey = function(...)

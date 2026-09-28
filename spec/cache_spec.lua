@@ -65,6 +65,22 @@ describe("KindleFetchCache", function()
         assert.is_nil(cacheFile().key)
     end)
 
+    it("can work out the expiry when checking an entry", function()
+        local expiry = 60
+        local cache = newCache{
+            expiry = function()
+                return expiry
+            end
+        }
+        cache:set("value", "key")
+
+        helper.state.time = 1000061
+        expiry = 120
+        assert.are.equal("value", cache:get("key"))
+        expiry = 60
+        assert.is_nil(cache:get("key"))
+    end)
+
     it("keeps entries forever without an expiry", function()
         local cache = newCache()
         cache:set("value", "key")
@@ -165,6 +181,14 @@ describe("SearchCache", function()
         assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"epub"}, {"fiction"}))
     end)
 
+    it("keeps searches for as long as set in the settings", function()
+        require("settings.settings"):setSearchCacheExpiryDays(1)
+        SearchCache:set({"book"}, "dune", 1, {"en"}, {"epub"}, {"fiction"})
+
+        helper.state.time = 1000000 + 24 * 60 * 60 + 1
+        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"epub"}, {"fiction"}))
+    end)
+
     it("keeps at most 1000 searches", function()
         assert.are.equal(1000, SearchCache.max_entries)
     end)
@@ -190,5 +214,13 @@ describe("UrlCache", function()
 
         helper.state.time = 1000000 + 7 * 24 * 60 * 60 + 1
         assert.is_nil(UrlCache:get("libgen"))
+    end)
+
+    it("keeps mirrors for as long as set in the settings", function()
+        UrlCache:set({"https://libgen.example"}, "libgen")
+        helper.state.time = 1000000 + 7 * 24 * 60 * 60 + 1
+        require("settings.settings"):setMirrorCacheExpiryDays(30)
+
+        assert.are.same({"https://libgen.example"}, UrlCache:get("libgen"))
     end)
 end)
