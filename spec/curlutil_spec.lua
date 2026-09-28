@@ -66,6 +66,11 @@ describe("CurlUtil", function()
                 "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/book\r\nContent-Length: 0\r\n\r\n" ..
                     "HTTP/2 200\r\ncontent-length: 1048576\r\n\r\n")
             assert.are.equal(1048576, CurlUtil.getRemoteFileSize("https://libgen.example/get.php?md5=abc"))
+
+            -- asks like a browser, or Library Genesis sends a small page instead of the file
+            local cmd = helper.state.popen_calls[#helper.state.popen_calls]
+            assert.matches("-A 'Mozilla/5.0'", cmd, 1, true)
+            assert.matches("-e 'https://libgen.example/'", cmd, 1, true)
         end)
 
         it("returns nil when the size is unknown", function()

@@ -65,7 +65,9 @@ function CurlUtil.getErrorMeaning(exit_code)
 end
 
 function CurlUtil.getRemoteFileSize(url)
+    -- ask like the download will, as Library Genesis sends a small page instead of the file otherwise
     local cmd = string.format("curl -sL -I %s", CurlUtil.shellQuote(url))
+    cmd = CurlUtil.setReferer(CurlUtil.pretendBrowser(cmd), url)
 
     local pipe = io.popen(cmd, "r")
     if not pipe then
