@@ -210,6 +210,18 @@ describe("CoverCache", function()
             assert.is_false(helper.exists(covers_dir .. "b.jpg"))
         end)
 
+        -- curl can finish just after its exit code was checked, before checking whether it's running
+        it("reads the exit code again once curl has stopped", function()
+            CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg")}, 6, onDone)
+            CurlUtil.isPidRunning = function()
+                finishRun(runs[1], {true})
+                return false
+            end
+            helper.runScheduled()
+
+            assert.are.same({1}, results)
+        end)
+
         it("stops when curl stops without reporting back", function()
             CurlUtil.isPidRunning = function()
                 return false

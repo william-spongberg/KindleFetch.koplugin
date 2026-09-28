@@ -83,11 +83,15 @@ end
 -- the paths that downloaded
 local function pollDownloads(pid, exit_file, config_file, filepaths, on_done)
     local exit_code = CurlUtil.getExitCode(exit_file)
-    if not exit_code and CurlUtil.isPidRunning(pid) then
-        UIManager:scheduleIn(POLL_INTERVAL, function()
-            pollDownloads(pid, exit_file, config_file, filepaths, on_done)
-        end)
-        return
+    if not exit_code then
+        if CurlUtil.isPidRunning(pid) then
+            UIManager:scheduleIn(POLL_INTERVAL, function()
+                pollDownloads(pid, exit_file, config_file, filepaths, on_done)
+            end)
+            return
+        end
+        -- curl may have finished between checking for its exit code and whether it was running
+        exit_code = CurlUtil.getExitCode(exit_file)
     end
 
     local results_file = CurlUtil.getResultsFile(config_file)
