@@ -539,6 +539,11 @@ function helper.reset()
     for _, module_name in ipairs(WIDGET_MODULES) do
         package.loaded[module_name] = widgetClass()
     end
+    -- the characters TextBoxWidget uses for bold text
+    local TextBoxWidget = package.loaded["ui/widget/textboxwidget"]
+    TextBoxWidget.PTF_HEADER = "\u{FFF1}"
+    TextBoxWidget.PTF_BOLD_START = "\u{FFF2}"
+    TextBoxWidget.PTF_BOLD_END = "\u{FFF3}"
     for module_name, module in pairs(CONSTANT_MODULES) do
         package.loaded[module_name] = module
     end

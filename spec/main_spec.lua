@@ -485,7 +485,8 @@ describe("KindleFetch", function()
             helper.tick()
 
             local dialog = helper.lastShown()
-            assert.are.equal("Downloaded Dune\nWould you like to read it now?", dialog.text)
+            -- the title is bold, on a line of its own
+            assert.are.equal("\u{FFF1}Downloaded\n\u{FFF2}Dune\u{FFF3}\n\nWould you like to read it now?", dialog.text)
             assert.are.equal("Read now", dialog.ok_text)
 
             dialog.ok_callback()
