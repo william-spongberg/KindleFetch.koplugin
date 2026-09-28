@@ -140,7 +140,7 @@ function AnnasAPI:search(query, page, retrying)
 
     -- scrape new urls since all current have failed, and search again
     if not retrying then
-        AnnasAPI:search(query, page, true)
+        return AnnasAPI:search(query, page, true)
     end
 
     return nil, last_err or "all Anna's Archive mirrors failed"
