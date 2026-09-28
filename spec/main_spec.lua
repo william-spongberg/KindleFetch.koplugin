@@ -3,6 +3,7 @@ local fixtures = require("fixtures")
 
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
+    local cancelled_downloads
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
     local function openUI()
@@ -105,7 +106,11 @@ describe("KindleFetch", function()
                 return result[1], result[2]
             end
         })
+        cancelled_downloads = 0
         helper.stub("api.lgliapi", {
+            cancelAllDownloads = function()
+                cancelled_downloads = cancelled_downloads + 1
+            end,
             downloadBook = function(_, download_book, filepath, callback)
                 table.insert(downloads, {
                     book = download_book,
@@ -142,6 +147,19 @@ describe("KindleFetch", function()
     end)
 
     after_each(helper.cleanup)
+
+    describe("exiting", function()
+        it("cancels downloads when KOReader exits", function()
+            -- returning nothing lets the exit event carry on to the rest of KOReader
+            assert.is_nil(openUI():onExit())
+            assert.are.equal(1, cancelled_downloads)
+        end)
+
+        it("cancels downloads when KOReader restarts", function()
+            assert.is_nil(openUI():onRestart())
+            assert.are.equal(1, cancelled_downloads)
+        end)
+    end)
 
     describe("after an update", function()
         it("clears cached searches and mirrors", function()
