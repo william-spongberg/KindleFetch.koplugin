@@ -7,6 +7,7 @@ local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
 local StringUtil = require("util.stringutil")
+local PathUtil = require("util.pathutil")
 local _ = require("gettext")
 
 -- constants
@@ -38,6 +39,12 @@ local function getUpdateInfo()
     end
     tag = tag:gsub("^v", "")
 
+    local version = VersionUtil.parseVersion(tag)
+    if not version then
+        LogUtil.debug("failed to parse tag name:", tag)
+        return nil
+    end
+
     -- updates notes: "body": "[message]"
     local body = output:match('"body"%s*:%s*"([^"]+)"')
     if not body then
@@ -45,7 +52,7 @@ local function getUpdateInfo()
     end
 
     return {
-        version = VersionUtil.parseVersion(tag),
+        version = version,
         notes = body
     }
 end
@@ -69,7 +76,7 @@ end
 local function downloadPluginRelease(version_str)
     LogUtil.debug("downloading plugin release", version_str)
     local download_url = string.format(REPO_DOWNLOAD_URL .. "/releases/download/v%s/%s.zip", version_str, PLUGIN_NAME)
-    local zip_path = VersionUtil.getTmpDir() .. "/" .. PLUGIN_NAME .. ".zip"
+    local zip_path = PathUtil.getTmpPath() .. "/" .. PLUGIN_NAME .. ".zip"
 
     LogUtil.debug("plugin download url", download_url)
 
@@ -93,16 +100,17 @@ end
 local function installPluginRelease(plugin_path, zip_path, version_str)
     LogUtil.debug("installing plugin release from", zip_path)
 
-    -- extract zip to temp directory
-    local extract_cmd = string.format("cd %s && unzip -q -o %s", CurlUtil.shellQuote(VersionUtil.getTmpDir()),
-        CurlUtil.shellQuote(zip_path))
+    -- extract zip to temp directory (use -d rather than cd, as paths may be relative to the koreader dir)
+    local tmp_path = PathUtil.getTmpPath()
+    local extract_cmd = string.format("unzip -q -o %s -d %s", CurlUtil.shellQuote(zip_path),
+        CurlUtil.shellQuote(tmp_path))
     if os.execute(extract_cmd .. " 2>/dev/null") ~= 0 then
         LogUtil.warn("failed to extract plugin zip")
         return false
     end
 
     -- find extracted directory
-    local extracted_dir = VersionUtil.getTmpDir() .. "/" .. PLUGIN_NAME
+    local extracted_dir = tmp_path .. "/" .. PLUGIN_NAME
     if not FileUtil.isValidDirectory(extracted_dir) then
         LogUtil.warn("extracted plugin directory not found", extracted_dir)
         return false
@@ -142,7 +150,7 @@ local function installPluginRelease(plugin_path, zip_path, version_str)
     end
 
     -- cleanup temp directory
-    os.execute(string.format("rm -rf %s 2>/dev/null", CurlUtil.shellQuote(VersionUtil.getTmpDir())))
+    os.execute(string.format("rm -rf %s 2>/dev/null", CurlUtil.shellQuote(tmp_path)))
 
     LogUtil.debug("plugin installation completed successfully")
     return true
@@ -209,12 +217,14 @@ local function promptPluginUpdate(plugin_path, installed_version, available_upda
 end
 
 -- check plugin version and update if new version available
-function PluginUpdater.checkForUpdates(plugin_path)
+function PluginUpdater.checkForUpdates()
     if Device:isSDL() then
         LogUtil.debug("running in emulator, skipping plugin version check")
         return true
     end
     LogUtil.debug("checking for plugin updates")
+
+    local plugin_path = PathUtil.getPluginPath()
 
     local installed_version = getInstalledVersion(plugin_path)
     if not installed_version then

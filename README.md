@@ -130,6 +130,7 @@ kindlefetch.koplugin/
     ├── stringutil.lua         # String utilities (trimming, validation, emoji removal, HTML entity conversion)
     ├── logutil.lua            # Logger wrapper
     ├── notifyutil.lua         # Notification wrapper
+    ├── pathutil.lua           # Plugin install location and temporary download directory
     └── versionutil.lua        # Version parsing and comparison utilities
 ```
 
@@ -205,3 +206,18 @@ This plugin facilitates downloading books from Anna's Archive and Library Genesi
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request with improvements, bug fixes, or new features.
+
+### Running tests
+
+Tests live in `spec/` and run with [busted](https://lunarmodules.github.io/busted/), ideally on LuaJIT to match KOReader. KOReader modules are stubbed in `spec/helper.lua`, so no KOReader build is needed. The plugin update tests also need `zip` and `unzip`.
+
+```bash
+luarocks install busted
+busted            # run from the repository root
+```
+
+Tests run automatically on every push.
+
+### Releasing
+
+Run the **Release** workflow from the Actions tab, or with `gh workflow run release.yml -f bump=minor` (`major`, `minor` or `patch`). It runs the tests, increments `version.txt`, tags the release, and publishes `kindlefetch.koplugin.zip` along with a list of the commits since the last release.

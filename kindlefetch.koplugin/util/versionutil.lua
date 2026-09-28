@@ -1,30 +1,16 @@
-local lfs = require("libs/libkoreader-lfs")
-
--- constants
-local TMP_DIR = lfs.currentdir() .. "/bin"
-
 local VersionUtil = {}
-
-function VersionUtil.ensureTmpDir()
-    lfs.mkdir(TMP_DIR)
-end
-
-function VersionUtil.getTmpDir()
-    VersionUtil.ensureTmpDir()
-    return TMP_DIR
-end
 
 -- parse a version string like "7.68.0", "0.2", or "1" into a table {major, minor, patch}
 function VersionUtil.parseVersion(version_str)
-    if not version_str then
+    if type(version_str) ~= "string" then
         return nil
     end
-    
+
     local major, minor, patch = version_str:match("^(%d+)%.?(%d*)%.?(%d*)")
     if not major or major == "" then
         return nil
     end
-    
+
     return {
         major = tonumber(major),
         minor = tonumber(minor) or 0,

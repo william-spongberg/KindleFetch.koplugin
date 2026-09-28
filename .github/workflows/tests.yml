@@ -1,0 +1,28 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_call:
+
+jobs:
+  busted:
+    # branches in this repo are already tested on push, so only test pull requests from forks
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # KOReader runs on LuaJIT
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "luajit-2.1"
+
+      - uses: leafo/gh-actions-luarocks@v6
+
+      - name: Install busted
+        run: luarocks install busted
+
+      - name: Run tests
+        run: busted
