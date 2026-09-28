@@ -7,7 +7,9 @@ local helper = {}
 -- keep the unpatched functions somewhere that survives this file being loaded again
 local originals = io.kindlefetch_spec_originals or {
     execute = os.execute,
-    popen = io.popen
+    popen = io.popen,
+    getenv = os.getenv,
+    time = os.time
 }
 io.kindlefetch_spec_originals = originals
 local real_execute = originals.execute
@@ -22,6 +24,18 @@ local function succeeded(cmd)
     local ok = real_execute(cmd)
     return ok == true or ok == 0
 end
+
+local function deepCopy(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    local copy = {}
+    for k, v in pairs(value) do
+        copy[k] = deepCopy(v)
+    end
+    return copy
+end
+helper.deepCopy = deepCopy
 
 local pwd = real_popen("pwd")
 helper.ROOT = pwd:read("*l")
@@ -46,6 +60,13 @@ os.execute = function(cmd)
     if cmd == nil then
         return real_execute()
     end
+    table.insert(helper.state.executed, cmd)
+    for i = #helper.state.execute_stubs, 1, -1 do
+        local stub = helper.state.execute_stubs[i]
+        if cmd:find(stub.pattern, 1, true) then
+            return stub.handler(cmd) or 0
+        end
+    end
     guardCommand(cmd)
     local ok, how, code = real_execute(cmd)
     if type(ok) == "number" then
@@ -59,25 +80,30 @@ end
 
 local function fakeHandle(output)
     local pos = 1
-    return {
-        read = function(_, format)
-            if format == "*a" or format == "a" or format == "*all" then
-                local rest = output:sub(pos)
-                pos = #output + 1
-                return rest
-            end
-            if pos > #output then
-                return nil
-            end
-            local newline = output:find("\n", pos, true)
-            local line = output:sub(pos, newline and newline - 1 or #output)
-            pos = newline and newline + 1 or #output + 1
-            return line
-        end,
-        close = function()
-            return true
+    local handle = {}
+    function handle:read(format)
+        if format == "*a" or format == "a" or format == "*all" then
+            local rest = output:sub(pos)
+            pos = #output + 1
+            return rest
         end
-    }
+        if pos > #output then
+            return nil
+        end
+        local newline = output:find("\n", pos, true)
+        local line = output:sub(pos, newline and newline - 1 or #output)
+        pos = newline and newline + 1 or #output + 1
+        return line
+    end
+    function handle:lines()
+        return function()
+            return self:read("*l")
+        end
+    end
+    function handle:close()
+        return true
+    end
+    return handle
 end
 
 io.popen = function(cmd, mode)
@@ -85,11 +111,29 @@ io.popen = function(cmd, mode)
     for i = #helper.state.commands, 1, -1 do
         local stub = helper.state.commands[i]
         if cmd:find(stub.pattern, 1, true) then
-            return fakeHandle(stub.output)
+            local output = stub.output
+            if type(output) == "function" then
+                output = output(cmd)
+            end
+            return fakeHandle(output or "")
         end
     end
     guardCommand(cmd)
     return real_popen(cmd, mode)
+end
+
+os.getenv = function(name)
+    if helper.state.env[name] ~= nil then
+        return helper.state.env[name] or nil
+    end
+    return originals.getenv(name)
+end
+
+os.time = function(...)
+    if helper.state.time and select("#", ...) == 0 then
+        return helper.state.time
+    end
+    return originals.time(...)
 end
 
 -- modules loaded before any spec runs are kept across resets
@@ -99,6 +143,46 @@ local baseline = {
 for name in pairs(package.loaded) do
     baseline[name] = true
 end
+
+-- a minimal version of KOReader's widget class hierarchy
+local function widgetClass()
+    local Widget = {}
+    Widget.__index = Widget
+
+    function Widget:extend(subclass)
+        subclass = subclass or {}
+        setmetatable(subclass, self)
+        self.__index = self
+        return subclass
+    end
+
+    function Widget:new(o)
+        o = self:extend(o)
+        if o.init then
+            o:init()
+        end
+        return o
+    end
+
+    function Widget:setText(text)
+        self.text = text
+    end
+
+    function Widget:free()
+        self.freed = true
+    end
+
+    function Widget:clear()
+        for i = #self, 1, -1 do
+            self[i] = nil
+        end
+    end
+
+    function Widget:resetLayout() end
+
+    return Widget
+end
+helper.widgetClass = widgetClass
 
 local function createStubs(state)
     local stubs = {}
@@ -121,6 +205,15 @@ local function createStubs(state)
         android = false,
         home_dir = nil,
         screen = {
+            scaleBySize = function(_, size)
+                return size
+            end,
+            getWidth = function()
+                return 600
+            end,
+            getHeight = function()
+                return 800
+            end,
             getSize = function()
                 return {w = 600, h = 800}
             end
@@ -168,19 +261,22 @@ local function createStubs(state)
         end
     }
 
+    -- settings files live in state.settings_files, and like LuaSettings only change on flush
     stubs.luasettings = {
         open = function(_, path)
-            state.settings_files[path] = state.settings_files[path] or {}
-            local data = state.settings_files[path]
-            return {
-                readSetting = function(_, key)
-                    return data[key]
-                end,
-                saveSetting = function(_, key, value)
-                    data[key] = value
-                end,
-                flush = function() end
+            local file = {
+                data = deepCopy(state.settings_files[path]) or {}
             }
+            function file:readSetting(key)
+                return self.data[key]
+            end
+            function file:saveSetting(key, value)
+                self.data[key] = value
+            end
+            function file:flush()
+                state.settings_files[path] = deepCopy(self.data)
+            end
+            return file
         end
     }
 
@@ -191,8 +287,14 @@ local function createStubs(state)
         close = function(_, widget)
             table.insert(state.closed, widget)
         end,
-        setDirty = function() end,
+        setDirty = function(_, _, refresh)
+            if type(refresh) == "function" then
+                state.refresh = {refresh()}
+            end
+        end,
         forceRePaint = function() end,
+        widgetInvert = function() end,
+        yieldToEPDC = function() end,
         scheduleIn = function(_, _, fn)
             table.insert(state.scheduled, fn)
         end
@@ -200,7 +302,14 @@ local function createStubs(state)
 
     stubs.inputdialog = {
         new = function(_, o)
-            return o or {}
+            o = o or {}
+            o.getInputText = function(self)
+                return self.input_text or ""
+            end
+            o.onCloseKeyboard = function(self)
+                self.keyboard_closed = true
+            end
+            return o
         end
     }
 
@@ -211,43 +320,106 @@ local function createStubs(state)
         end
     }
 
+    -- the parts of KOReader's util the plugin uses (the real one needs KOReader's ffi modules)
     stubs.util = {
         htmlEntitiesToUtf8 = function(text)
+            text = text:gsub("&#(%d+);", function(code)
+                return string.char(tonumber(code))
+            end)
+            text = text:gsub("&quot;", '"'):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&amp;", "&")
             return text
         end,
+        urlEncode = function(url)
+            if url == nil then
+                return
+            end
+            url = url:gsub("\n", "\r\n")
+            url = url:gsub("([^%w%-%._~])", function(c)
+                return string.format("%%%02X", string.byte(c))
+            end)
+            return url
+        end,
         getSafeFilename = function(name)
-            return name
+            return (name:gsub("/", "_"))
         end
     }
 
     stubs.network = {
         connected = true,
+        wifi_on = true,
         isConnected = function(self)
             return self.connected
         end,
         isWifiOn = function(self)
-            return self.connected
+            return self.wifi_on
         end,
-        promptWifiOn = function() end,
-        promptWifi = function() end
+        promptWifiOn = function(self)
+            state.wifi_prompts = (state.wifi_prompts or 0) + 1
+            self.prompted = "turn wifi on"
+        end,
+        promptWifi = function(self)
+            state.wifi_prompts = (state.wifi_prompts or 0) + 1
+            self.prompted = "connect to wifi"
+        end
     }
 
     stubs.dispatcher = {
-        registerAction = function() end
+        registerAction = function(_, name, action)
+            state.actions[name] = action
+        end
     }
 
-    -- mirrors Widget:new, which calls init on new instances
-    local WidgetContainer = {}
-    function WidgetContainer:new(o)
-        o = o or {}
-        setmetatable(o, self)
-        self.__index = self
-        if o.init then
-            o:init()
+    stubs.widgetcontainer = widgetClass()
+
+    -- luasocket
+    stubs.http = {
+        request = function()
+            error("unstubbed http request", 2)
         end
-        return o
+    }
+    stubs.ltn12 = {
+        sink = {
+            table = function(t)
+                return function(chunk)
+                    if chunk then
+                        table.insert(t, chunk)
+                    end
+                    return 1
+                end
+            end
+        }
+    }
+
+    -- widgets
+    stubs.Menu = widgetClass()
+    function stubs.Menu:onGotoPage(page)
+        self.page = page
+        return true
     end
-    stubs.widgetcontainer = WidgetContainer
+    stubs.InputContainer = widgetClass()
+    stubs.geometry = {
+        new = function(_, o)
+            o = o or {}
+            function o:copy()
+                return stubs.geometry:new{x = self.x, y = self.y, w = self.w, h = self.h}
+            end
+            function o:combine()
+                return self
+            end
+            function o:notIntersectWith(other)
+                return self.outside
+            end
+            return o
+        end
+    }
+    stubs.downloadmgr = {
+        new = function(_, o)
+            function o:chooseDir()
+                table.insert(state.dir_choosers, self)
+            end
+            return o
+        end
+    }
 
     return stubs
 end
@@ -266,8 +438,37 @@ local MODULE_STUBS = {
     ["ui/network/manager"] = "network",
     ["dispatcher"] = "dispatcher",
     ["ui/widget/container/widgetcontainer"] = "widgetcontainer",
-    ["ui/downloadmgr"] = false,
-    ["ui/widget/menu"] = false
+    ["socket.http"] = "http",
+    ["ltn12"] = "ltn12",
+    ["ui/widget/menu"] = "Menu",
+    ["ui/widget/container/inputcontainer"] = "InputContainer",
+    ["ui/geometry"] = "geometry",
+    ["ui/downloadmgr"] = "downloadmgr"
+}
+
+-- widgets the plugin only builds and lays out
+local WIDGET_MODULES = {"ui/gesturerange", "ui/widget/container/centercontainer",
+                        "ui/widget/container/framecontainer", "ui/widget/container/leftcontainer",
+                        "ui/widget/verticalgroup", "ui/widget/horizontalgroup", "ui/widget/verticalspan",
+                        "ui/widget/horizontalspan", "ui/widget/textboxwidget", "ui/widget/textwidget",
+                        "ui/widget/imagewidget", "ui/widget/button", "ui/widget/progresswidget"}
+
+local CONSTANT_MODULES = {
+    ["ui/font"] = {
+        getFace = function(_, name, size)
+            return {name = name, size = size}
+        end
+    },
+    ["ui/size"] = {
+        padding = {small = 2, default = 5, large = 10},
+        border = {default = 1, window = 2}
+    },
+    ["ffi/blitbuffer"] = {
+        COLOR_WHITE = "white",
+        COLOR_BLACK = "black",
+        COLOR_GRAY = "gray",
+        COLOR_DARK_GRAY = "dark gray"
+    }
 }
 
 -- unload plugin modules and install fresh stubs
@@ -282,21 +483,40 @@ function helper.reset()
 
     helper.state = {
         data_dir = nil,
+        time = nil, -- fixed os.time() when set
+        env = {}, -- os.getenv overrides, false to unset
         fs = {}, -- path -> "directory" | "file" | false, overrides the real filesystem
         settings_files = {},
+        reader_settings = {},
         commands = {},
+        execute_stubs = {},
+        executed = {},
         popen_calls = {},
         shown = {},
         closed = {},
         scheduled = {},
         notifications = {},
+        dir_choosers = {},
+        actions = {},
         logs = {}
     }
     helper.stubs = createStubs(helper.state)
 
     for module_name, stub_name in pairs(MODULE_STUBS) do
-        package.loaded[module_name] = stub_name and helper.stubs[stub_name] or {}
+        package.loaded[module_name] = helper.stubs[stub_name]
     end
+    for _, module_name in ipairs(WIDGET_MODULES) do
+        package.loaded[module_name] = widgetClass()
+    end
+    for module_name, module in pairs(CONSTANT_MODULES) do
+        package.loaded[module_name] = module
+    end
+
+    G_reader_settings = {
+        isFalse = function(_, key)
+            return helper.state.reader_settings[key] == false
+        end
+    }
 end
 
 -- replace a module with the given table
@@ -304,7 +524,44 @@ function helper.stub(module_name, module)
     package.loaded[module_name] = module
 end
 
--- return output for any io.popen command containing pattern
+-- responses to real requests, kept for the whole run so each live page is only downloaded once
+local live_responses = {}
+
+-- use a stand-in for luasocket's http module that makes real requests with curl (luasocket's https
+-- support needs luasec, which needs OpenSSL headers to build), so specs can scrape live pages
+function helper.useLiveHttp()
+    local http = {
+        requests = {}
+    }
+    function http.request(request)
+        table.insert(http.requests, request.url)
+        local response = live_responses[request.url]
+        if not response then
+            local cmd = string.format("curl -sL --max-time %d -A %s -w '\\n%%{http_code}' %s", http.TIMEOUT or 60,
+                quote(request.headers and request.headers["User-Agent"] or "curl"), quote(request.url))
+            if request.proxy then
+                cmd = cmd .. " -x " .. quote(request.proxy)
+            end
+            local pipe = real_popen(cmd)
+            local output = pipe:read("*a")
+            pipe:close()
+
+            local body, code = output:match("^(.*)\n(%d+)$")
+            code = tonumber(code)
+            if not code or code == 0 then
+                return nil, "could not connect to " .. request.url
+            end
+            response = {body, code}
+            live_responses[request.url] = response
+        end
+        request.sink(response[1])
+        return 1, response[2]
+    end
+    package.loaded["socket.http"] = http
+    return http
+end
+
+-- return output (a string, or a function of the command) for any io.popen command containing pattern
 function helper.stubCommand(pattern, output)
     table.insert(helper.state.commands, {
         pattern = pattern,
@@ -312,15 +569,49 @@ function helper.stubCommand(pattern, output)
     })
 end
 
--- run callbacks passed to UIManager:scheduleIn
+-- run handler(cmd) instead of any os.execute command containing pattern, returning its exit status (default 0)
+function helper.stubExecute(pattern, handler)
+    table.insert(helper.state.execute_stubs, {
+        pattern = pattern,
+        handler = handler
+    })
+end
+
+-- run the callbacks currently scheduled with UIManager:scheduleIn, but not ones they schedule
+function helper.tick()
+    local due = helper.state.scheduled
+    helper.state.scheduled = {}
+    for _, fn in ipairs(due) do
+        fn()
+    end
+    return #due
+end
+
+-- run scheduled callbacks until nothing is left
 function helper.runScheduled()
+    local ticks = 0
     while #helper.state.scheduled > 0 do
-        table.remove(helper.state.scheduled, 1)()
+        helper.tick()
+        ticks = ticks + 1
+        assert(ticks < 100, "scheduled callbacks keep rescheduling themselves")
     end
 end
 
 function helper.lastNotification()
     return helper.state.notifications[#helper.state.notifications]
+end
+
+function helper.lastShown()
+    return helper.state.shown[#helper.state.shown]
+end
+
+function helper.wasClosed(widget)
+    for _, closed in ipairs(helper.state.closed) do
+        if closed == widget then
+            return true
+        end
+    end
+    return false
 end
 
 -- filesystem
@@ -362,6 +653,17 @@ function helper.writeFile(path, content)
     local f = assert(io.open(path, "w"))
     f:write(content)
     f:close()
+end
+
+function helper.readDir(path)
+    local entries = {}
+    local ls = real_popen("ls -A " .. quote(path) .. " 2>/dev/null")
+    for entry in ls:lines() do
+        table.insert(entries, entry)
+    end
+    ls:close()
+    table.sort(entries)
+    return entries
 end
 
 function helper.readFile(path)

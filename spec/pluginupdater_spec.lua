@@ -71,6 +71,13 @@ for _, layout in ipairs(LAYOUTS) do
                 assert.matches("Bug fixes\n- fixed updates on android", dialog.input, 1, true)
             end)
 
+            it("offers updates without release notes", function()
+                helper.stubCommand("/releases/latest", '{"tag_name": "v0.4", "body": ""}')
+                PluginUpdater.checkForUpdates()
+
+                assert.matches("New version available: v0.4", helper.state.shown[1].input, 1, true)
+            end)
+
             it("treats a missing version file as 0.0.0", function()
                 os.remove(plugin_path .. "/version.txt")
                 latestRelease("v0.3")
@@ -149,6 +156,59 @@ for _, layout in ipairs(LAYOUTS) do
 
                 assert.is_false(helper.exists(plugin_path .. ".backup"))
                 assert.is_false(helper.exists(data_dir .. "/cache/kindlefetch"))
+            end)
+
+            it("does nothing when the user cancels", function()
+                PluginUpdater.checkForUpdates()
+                local dialog = helper.state.shown[1]
+                dialog.buttons[1][1].callback()
+
+                assert.is_true(helper.wasClosed(dialog))
+                assert.is_nil(downloaded_url)
+            end)
+
+            it("keeps the installed plugin when the release has no plugin folder", function()
+                local build_dir = helper.tmpdir("bad-release")
+                helper.writeFile(build_dir .. "/KindleFetch-main/main.lua", "-- v0.4\n")
+                local bad_zip = helper.abs(build_dir) .. "/release.zip"
+                helper.run(string.format("cd %s && zip -qr %s KindleFetch-main", helper.quote(build_dir),
+                    helper.quote(bad_zip)))
+                release_zip = bad_zip
+                acceptUpdate()
+
+                assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
+                assert.are.equal("Failed to install update", helper.lastNotification())
+            end)
+
+            it("keeps the installed plugin when it cannot be moved aside", function()
+                helper.stubExecute(string.format("mv '%s' '%s.backup'", plugin_path, plugin_path), function()
+                    return 256
+                end)
+                acceptUpdate()
+
+                assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
+                assert.are.equal("Failed to install update", helper.lastNotification())
+            end)
+
+            it("restores the installed plugin when the new one cannot be moved into place", function()
+                helper.stubExecute("/cache/kindlefetch/kindlefetch.koplugin' '" .. plugin_path .. "'", function()
+                    return 256
+                end)
+                acceptUpdate()
+
+                assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
+                assert.is_false(helper.exists(plugin_path .. ".backup"))
+                assert.are.equal("Failed to install update", helper.lastNotification())
+            end)
+
+            it("keeps the installed plugin when the download leaves no file", function()
+                CurlUtil.download = function()
+                    return true
+                end
+                acceptUpdate()
+
+                assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
+                assert.are.equal("Failed to download update", helper.lastNotification())
             end)
 
             it("keeps the installed plugin when the download fails", function()
