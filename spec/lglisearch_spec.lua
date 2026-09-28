@@ -144,6 +144,14 @@ describe("LlgiSearch", function()
             assert.are.equal("Pride & Prejudice", LlgiSearch:search("dune", 1)[1].title)
         end)
 
+        it("shows each book once, though Library Genesis may list it more than once", function()
+            results(mirrors[1], {fixtures.DUNE, fixtures.MESSIAH, fixtures.DUNE})
+            local books = LlgiSearch:search("dune", 1)
+
+            assert.are.same({"Dune", "Dune Messiah"}, {books[1].title, books[2].title})
+            assert.are.equal(2, #books)
+        end)
+
         it("keeps the dots in titles", function()
             results(mirrors[1], {{
                 md5 = "abc",

@@ -217,6 +217,8 @@ function LlgiSearch:search(query, page)
     end
 
     local books = {}
+    -- Library Genesis can list the same file more than once, e.g. for each edition it's in
+    local seen = {}
     local next_page = page
     for _ = 1, MAX_PAGES do
         local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types))
@@ -231,7 +233,10 @@ function LlgiSearch:search(query, page)
         local page_books, results = LlgiSearch.parseResults(html, url, languages, file_types)
         LogUtil.debug("parsed", #page_books, "books from", results, "results for", query, "page", next_page)
         for _, book in ipairs(page_books) do
-            table.insert(books, book)
+            if not seen[book.md5] then
+                seen[book.md5] = true
+                table.insert(books, book)
+            end
         end
 
         if results < RESULTS_PER_PAGE then
