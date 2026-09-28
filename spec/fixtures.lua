@@ -3,7 +3,8 @@
 local fixtures = {}
 
 -- Mirrors are scraped from the live Wikipedia pages, while every other page is served from web.pages
--- (url -> html, or a function returning html) so specs never contact the mirrors themselves.
+-- (url -> html, or a function returning html) so specs don't contact the mirrors themselves, unless
+-- web.live is set.
 function fixtures.fakeWeb(helper)
     local web = {
         pages = {},
@@ -21,6 +22,9 @@ function fixtures.fakeWeb(helper)
                 return nil, "could not resolve host"
             end
             web.scrapes = web.scrapes + 1
+            return fetchLive(url)
+        end
+        if web.live then
             return fetchLive(url)
         end
         local page = web.pages[url]
@@ -58,58 +62,82 @@ function fixtures.scrapeMirrors(web, getUrls, site)
 end
 
 local function cell(value)
-    if value == nil then
-        return '<td class="p-0"><span class="line-clamp-2"></span></td>'
-    end
-    return string.format('<td class="p-0"><span class="line-clamp-2">%s</span></td>', value)
+    return "<td>" .. (value or "") .. "</td>\n"
 end
 
--- one row of Anna's Archive's table view (display=table)
-function fixtures.annasRow(book)
-    local cover = '<td class="p-0"><a href="/md5/' .. (book.md5 or "") .. '" tabindex="-1">' ..
-                      (book.image_url and ('<img class="w-[50px]" src="' .. book.image_url .. '" alt="">') or "") ..
-                      '</a></td>'
-    local cells = {cover, cell(book.title), cell(book.authors), cell(book.publisher or "Ace"), cell(book.year),
-                   cell("lgli/fiction/dune.epub"), cell("lgli"), cell(book.language), cell(book.book_type),
-                   cell(book.file_type), cell(book.file_size)}
+-- one row of Library Genesis' search results (index.php with covers=on), with the same markup as the real page
+function fixtures.libgenRow(book)
+    local tooltip = 'data-toggle="tooltip" data-placement="right" data-html="true" ' ..
+                        'title="Add/Edit : 2021-06-18/2021-10-17; ID: 6518940<br>' .. (book.title or "") .. '"'
+    local title = ""
+    if book.series and book.issue then
+        -- comics link the series and the issue number before the title
+        title = '<b><a href="series.php?id=164150">' .. book.series .. ' </a><a ' .. tooltip ..
+                    ' href="edition.php?id=317043"><i> ' .. book.issue .. '</i></a></b><br>'
+    elseif book.series then
+        title = "<b>" .. book.series .. "</b><br>"
+    end
+    if book.title then
+        title = title .. "<a " .. tooltip .. ' href="edition.php?id=317043">' .. book.title .. " <i></i></a>"
+    end
+    if book.isbn then
+        title = title .. "<br><a " .. tooltip .. ' href="edition.php?id=317043"><i><font color="green"> ' .. book.isbn ..
+                    "</font></a></i>"
+    end
+    title = title .. ' <nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" ' ..
+                'data-html="true" title="' .. (book.book_type or "Book") .. '">b</a></span> ' ..
+                '<span class="badge badge-secondary"">f 6270247</span></nobr>'
+
+    local cover = book.cover and ('<a href="edition.php?id=6270247"><img src="' .. book.cover ..
+                      '" style="max-height:70px;max-width:150px;height:auto;width:auto;"></a>') or ""
+    local mirrors = book.md5 and ('<a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" ' ..
+                        'href="/ads.php?md5=' .. book.md5 .. '"><span class="badge badge-primary">1</span></a> ' ..
+                        '<a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" ' ..
+                        'href="https://randombook.org/book/' .. book.md5 .. '"><span class="badge badge-primary">2</span></a>') or ""
+
+    local cells = {cell(cover), cell(title), cell(book.authors), cell('<a href="publisher.php?id=17868">Ace</a>'),
+                   cell(book.year and ("<nobr>" .. book.year .. "</nobr>")), cell(book.language), cell("412"),
+                   cell(book.file_size and ('<nobr><a href="/file.php?id=6518940">' .. book.file_size .. "</a></nobr>")),
+                   cell(book.file_type), cell(mirrors)}
     if book.cells then
         local unpack = table.unpack or unpack
         cells = {unpack(cells, 1, book.cells)}
     end
-    return '<tr class="group h-full odd:bg-black/5">' .. table.concat(cells) .. '</tr>'
+    return "<tr>\n" .. table.concat(cells) .. "</tr>\n"
 end
 
-function fixtures.annasResults(books)
+function fixtures.libgenResults(books)
     local rows = {}
     for _, book in ipairs(books) do
-        table.insert(rows, fixtures.annasRow(book))
+        table.insert(rows, fixtures.libgenRow(book))
     end
-    return '<html><body><table class="text-sm w-full"><thead><tr><th>Cover</th></tr></thead><tbody>' ..
-               table.concat(rows) .. '</tbody></table></body></html>'
+    return '<html><head><title>Library Genesis</title></head><body><table class="table  table-striped" ' ..
+               'id="tablelibgen"><thead><tr><th scope="col" class="first_col">Title</th></tr></thead><tbody>' ..
+               table.concat(rows) .. "</tbody></table></body></html>"
 end
 
 fixtures.DUNE = {
-    md5 = "d41d8cd98f00b204e9800998ecf8427e",
-    image_url = "https://covers.example/zlib1/d41d8cd9.jpg",
+    md5 = "24778aacb1d0844950bf463c145b3d21",
+    cover = "/fictioncovers/2509000/24778aacb1d0844950bf463c145b3d21_small.jpg",
+    image_url = "https://covers.example/fictioncovers/24778aacb1d0844950bf463c145b3d21_small.jpg",
+    series = "Dune Chronicles",
     title = "Dune (Dune Chronicles, Book 1)",
-    authors = "Frank Herbert",
+    authors = "Frank Herbert, ",
     year = "1990",
-    language = "English [en]",
-    book_type = "📘 Book (fiction)",
+    language = "English",
     file_type = "epub",
-    file_size = "1.2MB"
+    file_size = "1 MB"
 }
 
 fixtures.MESSIAH = {
-    md5 = "9e107d9d372bb6826bd81d3542a419d6",
-    image_url = "https://covers.example/zlib1/9e107d9d.jpg",
+    md5 = "f5a2858c141b73a63f56f164a79acee8",
+    cover = "/fictioncovers/7791000/f5a2858c141b73a63f56f164a79acee8_small.jpg",
     title = "Dune Messiah",
     authors = "Frank Herbert",
     year = "1987",
-    language = "English [en]",
-    book_type = "📘 Book (fiction)",
+    language = "English",
     file_type = "pdf",
-    file_size = "3.4MB"
+    file_size = "3 MB"
 }
 
 -- Library Genesis' ads.php page links to get.php with a download key

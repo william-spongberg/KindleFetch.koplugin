@@ -6,21 +6,8 @@ local LogUtil = require("util.logutil")
 local UrlApi = {}
 
 -- constants
-local ANNAS_KEY = "annas-archive"
 local LIBGEN_KEY = "libgen"
-local ANNAS_URL = "https://en.wikipedia.org/wiki/Anna%27s_Archive"
 local LIBGEN_URL = "https://en.wikipedia.org/wiki/Library_Genesis"
-
-local function parseAnnasUrls(html)
-    local urls = {}
-
-    for href in html:gmatch('<a[^>]-href="(https://annas%-archive%.[^"/]+)/?["]') do
-        table.insert(urls, href)
-        LogUtil.debug("new Anna's Archive URL", href)
-    end
-
-    return #urls > 0 and urls or nil
-end
 
 local function parseLibgenUrls(html)
     local urls = {}
@@ -53,14 +40,6 @@ function UrlApi:getUrls(key, url, parse)
     end
 
     return nil
-end
-
-function UrlApi:getAnnasUrls()
-    return self:getUrls(ANNAS_KEY, ANNAS_URL, parseAnnasUrls)
-end
-
-function UrlApi:deleteAnnasUrl(url)
-    return UrlCache:deleteValueFromKey(url, ANNAS_KEY)
 end
 
 function UrlApi:getLibgenUrls()

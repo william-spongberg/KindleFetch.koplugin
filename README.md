@@ -2,15 +2,15 @@
 
 <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/stars/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github star tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/downloads/william-spongberg/KindleFetch.koplugin/total.svg" height="25px" alt="Github downloads tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/v/release/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github release version tracker"></a>
 
-Download books from Anna's Archive directly to your Kindle, entirely within the KOReader app.
+Download books from Library Genesis directly to your Kindle, entirely within the KOReader app.
 
 ## Overview
 
-KindleFetch integrates Anna's Archive and Library Genesis into KOReader, allowing you to search for and download books without leaving your e-reader. The plugin handles the entire workflow - from search queries to file downloads - with an intuitive interface and robust error handling.
+KindleFetch integrates Library Genesis into KOReader, allowing you to search for and download books without leaving your e-reader. The plugin handles the entire workflow - from search queries to file downloads - with an intuitive interface and robust error handling.
 
 ## Features
 
-- **Book Search + Downloads**: Query Anna's Archive from your device with simple text input and download with a tap from Library Genesis
+- **Book Search + Downloads**: Search Library Genesis from your device with simple text input and download with a tap
 - **Caching**: Minimise network requests and improve performance
   - Search results (2 week expiry, 1000 entries max)
   - Mirror URLs (1 week expiry)
@@ -36,7 +36,7 @@ KindleFetch integrates Anna's Archive and Library Genesis into KOReader, allowin
 
 ### Downloading books
 
-#### Search → Kindle Fetch → Search Anna's Archive
+#### Search → Kindle Fetch → Search Library Genesis
 
 <img width="400" height="533" alt="FileManager_2026-07-12_135936" src="https://github.com/user-attachments/assets/7cbd408b-a778-48d0-b2cf-faef8fc8064e" />
 <img width="400" height="533" alt="FileManager_2026-07-12_135944" src="https://github.com/user-attachments/assets/01568d65-a1ae-4701-b7af-567f57df1f92" />
@@ -92,7 +92,7 @@ Downloaded books are saved to your configured download location.
 <img width="400" height="533" alt="FileManager_2026-07-12_140030" src="https://github.com/user-attachments/assets/2f4cff54-240e-49d6-9293-3982f0a0523b" />
 
 
-- **Preferred Book Types**: Filter by fiction, non-fiction, unknown, comics, or standards documents
+- **Preferred Book Types**: Filter by fiction, non-fiction, comics, Russian fiction, magazines, scientific articles, or standards
 
 <img width="400" height="533" alt="FileManager_2026-07-12_140038" src="https://github.com/user-attachments/assets/1576b6c1-f5b0-4fd8-b907-841080495950" />
 
@@ -108,9 +108,9 @@ kindlefetch.koplugin/
 │   ├── settings.lua           # Persistent storage and management of user preferences
 │   └── settingspage.lua       # UI for configuring user preferences
 ├── api/
-│   ├── annasapi.lua           # Searches Anna's Archive; parses HTML and caches results
 │   ├── lgliapi.lua            # Handles Library Genesis downloads with progress tracking, proxy fallback, and error recovery
-│   └── urlapi.lua             # Scrapes Wikipedia to discover current mirror URLs for Anna's Archive and Library Genesis
+│   ├── lglisearch.lua         # Searches Library Genesis; parses HTML, filters by preferences and caches results
+│   └── urlapi.lua             # Scrapes Wikipedia to discover current Library Genesis mirror URLs
 ├── ui/
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination
 │   ├── downloadprompt.lua     # Modal dialog for confirming download details, choosing save location, displaying metadata, and fullscreen cover preview
@@ -144,17 +144,17 @@ kindlefetch.koplugin/
 1. **Settings & Filtering** (`SettingsPage`)
    - User can customize preferred languages (100+ supported)
    - User can select preferred file types: ebooks (EPUB, MOBI, AZW, etc.), comics (CBR, CBZ), documents (PDF, DOCX, etc.), images, or web formats
-   - User can filter by book type: fiction, non-fiction, comics, or standards documents
+   - User can filter by book type: fiction, non-fiction, comics, magazines, scientific articles, or standards
    - Download directory can be changed from a file browser
    - Book cover loading can be toggled on/off (for efficiency)
    - All settings are persisted and applied to future searches
 
-2. **Search Phase** (`AnnasAPI`)
+2. **Search Phase** (`LlgiSearch`)
    - User enters a search query via InputDialog
-   - Plugin resolves the current Anna's Archive mirror URL (with weekly caching)
-   - Plugin scrapes Anna's Archive HTML search results page
-   - HTML table is parsed to extract book metadata (title, authors, year, language, file type, MD5 hash, cover image URL)
-   - Results are cached (72 hours max, 100 entries) to minimise requests
+   - Plugin resolves the current Library Genesis mirror URL (with weekly caching)
+   - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
+   - HTML table is parsed to extract book metadata (title, authors, year, language, file type, MD5 hash, cover image URL), keeping books in the preferred languages and file types
+   - Results are cached (2 weeks max, 1000 entries) to minimise requests
    - Search results are displayed in a menu
 
 3. **Cover Loading**
@@ -201,7 +201,7 @@ MIT
 
 ## Disclaimer
 
-This plugin facilitates downloading books from Anna's Archive and Library Genesis. Ensure you have the legal right to download any content and respect copyright laws in your jurisdiction. The authors assume no liability for misuse.
+This plugin facilitates downloading books from Library Genesis. Ensure you have the legal right to download any content and respect copyright laws in your jurisdiction. The authors assume no liability for misuse.
 
 ## Contributing
 

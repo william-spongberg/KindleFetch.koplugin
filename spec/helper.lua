@@ -537,8 +537,9 @@ function helper.useLiveHttp()
         table.insert(http.requests, request.url)
         local response = live_responses[request.url]
         if not response then
-            local cmd = string.format("curl -sL --max-time %d -A %s -w '\\n%%{http_code}' %s", http.TIMEOUT or 60,
-                quote(request.headers and request.headers["User-Agent"] or "curl"), quote(request.url))
+            -- like luasocket, TIMEOUT limits each wait rather than the whole transfer
+            local cmd = string.format("curl -sL --connect-timeout %d --max-time 180 -A %s -w '\\n%%{http_code} %%{exitcode}' %s",
+                http.TIMEOUT or 60, quote(request.headers and request.headers["User-Agent"] or "curl"), quote(request.url))
             if request.proxy then
                 cmd = cmd .. " -x " .. quote(request.proxy)
             end
@@ -546,10 +547,10 @@ function helper.useLiveHttp()
             local output = pipe:read("*a")
             pipe:close()
 
-            local body, code = output:match("^(.*)\n(%d+)$")
+            local body, code, exit_code = output:match("^(.*)\n(%d+) (%d+)$")
             code = tonumber(code)
-            if not code or code == 0 then
-                return nil, "could not connect to " .. request.url
+            if not code or code == 0 or exit_code ~= "0" then
+                return nil, "could not fetch " .. request.url .. " (curl exit code " .. tostring(exit_code) .. ")"
             end
             response = {body, code}
             live_responses[request.url] = response

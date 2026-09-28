@@ -16,9 +16,8 @@ describe("StringUtil", function()
     end)
 
     -- every helper returns an empty string for invalid input rather than erroring
-    for _, name in ipairs({"trim", "collapseWhitespace", "collapseDots", "collapseDashes", "cleanEmojis",
-                           "convertHtmlToText", "removeExtension", "removeParentheses", "truncate", "cleanFileName",
-                           "replaceCarriageReturns"}) do
+    for _, name in ipairs({"trim", "collapseWhitespace", "collapseDots", "collapseDashes", "convertHtmlToText",
+                           "removeParentheses", "truncate", "cleanFileName", "replaceCarriageReturns"}) do
         it(name .. " returns an empty string for invalid input", function()
             assert.are.equal("", StringUtil[name](nil))
             assert.are.equal("", StringUtil[name](""))
@@ -35,18 +34,8 @@ describe("StringUtil", function()
         assert.are.equal("a-b-c", StringUtil.collapseDashes("a---b--c"))
     end)
 
-    it("removes the emojis Anna's Archive puts before book types", function()
-        assert.are.equal("Book (fiction)", StringUtil.cleanEmojis("📘 Book (fiction)"))
-        assert.are.equal("Comic book", StringUtil.cleanEmojis("💬 Comic book"))
-    end)
-
     it("converts html entities to text", function()
         assert.are.equal("Pride & Prejudice", StringUtil.convertHtmlToText("Pride &amp; Prejudice"))
-    end)
-
-    it("removes the file extension", function()
-        assert.are.equal("the.hobbit", StringUtil.removeExtension("the.hobbit.epub"))
-        assert.are.equal("no extension", StringUtil.removeExtension("no extension"))
     end)
 
     it("removes parenthesised and bracketed text", function()
@@ -59,9 +48,10 @@ describe("StringUtil", function()
     end)
 
     it("makes titles safe to use as file names", function()
-        assert.are.equal("Dune- Messiah", StringUtil.cleanFileName("Dune: Messiah (Book 2).epub"))
-        assert.are.equal("AC-DC - The Story", StringUtil.cleanFileName("AC/DC -- The Story.pdf"))
-        assert.are.equal("Title", StringUtil.cleanFileName("...Title... .epub"))
+        assert.are.equal("Dune- Messiah", StringUtil.cleanFileName("Dune: Messiah (Book 2)"))
+        assert.are.equal("AC-DC - The Story", StringUtil.cleanFileName("AC/DC -- The Story"))
+        assert.are.equal("Title", StringUtil.cleanFileName("...Title... "))
+        assert.are.equal("Mr. Mercedes", StringUtil.cleanFileName("Mr. Mercedes"))
     end)
 
     it("turns escaped line breaks from the github api into new lines", function()

@@ -65,7 +65,7 @@ describe("KindleFetch", function()
                 settings_shown = settings_shown + 1
             end
         })
-        helper.stub("api.annasapi", {
+        helper.stub("api.lglisearch", {
             search = function(_, query, page)
                 table.insert(searches, {query, page})
                 local result = search_results[page] or {{}}
@@ -158,9 +158,9 @@ describe("KindleFetch", function()
 
         it("opens the search dialog", function()
             local plugin = openUI()
-            menuItem(plugin, "Search Anna's Archive").callback()
+            menuItem(plugin, "Search Library Genesis").callback()
 
-            assert.are.equal("Search Anna's Archive", plugin.search_box.title)
+            assert.are.equal("Search Library Genesis", plugin.search_box.title)
             assert.are.equal(plugin.search_box, helper.lastShown())
         end)
 
@@ -234,10 +234,10 @@ describe("KindleFetch", function()
         end)
 
         it("reports search errors", function()
-            search_results[1] = {nil, "no Anna's Archive URLs available"}
+            search_results[1] = {nil, "no Library Genesis urls available"}
             search(openUI(), "dune")
 
-            assert.are.equal("Error: no Anna's Archive URLs available", helper.lastNotification())
+            assert.are.equal("Error: no Library Genesis urls available", helper.lastNotification())
             assert.are.equal(0, #menus)
         end)
 

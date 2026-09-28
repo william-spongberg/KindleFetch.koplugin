@@ -27,8 +27,8 @@ describe("HttpUtil", function()
     it("fetches a page with a browser user agent, following redirects", function()
         respond({"<html>results</html>", 1, 200})
 
-        assert.are.equal("<html>results</html>", HttpUtil.getBody("https://annas-archive.example/search?q=dune"))
-        assert.are.equal("https://annas-archive.example/search?q=dune", requests[1].url)
+        assert.are.equal("<html>results</html>", HttpUtil.getBody("https://libgen.example/index.php?req=dune"))
+        assert.are.equal("https://libgen.example/index.php?req=dune", requests[1].url)
         assert.are.equal("Mozilla/5.0", requests[1].headers["User-Agent"])
         assert.is_true(requests[1].redirect)
         assert.is_nil(requests[1].proxy)
@@ -38,21 +38,21 @@ describe("HttpUtil", function()
     it("returns the error when the request fails", function()
         respond({"", nil, "timeout"})
 
-        local body, err = HttpUtil.getBody("https://annas-archive.example")
+        local body, err = HttpUtil.getBody("https://libgen.example")
         assert.is_nil(body)
         assert.are.equal("timeout", err)
     end)
 
     it("treats an empty page as a failure", function()
         respond({"", 1, 200})
-        assert.is_nil(HttpUtil.getBody("https://annas-archive.example"))
+        assert.is_nil(HttpUtil.getBody("https://libgen.example"))
     end)
 
     it("retries through PROXY_URL when the direct request fails", function()
         helper.state.env.PROXY_URL = "http://proxy.example:8080"
         respond({"", nil, "connection refused"}, {"<html>via proxy</html>", 1, 200})
 
-        assert.are.equal("<html>via proxy</html>", HttpUtil.getBody("https://annas-archive.example"))
+        assert.are.equal("<html>via proxy</html>", HttpUtil.getBody("https://libgen.example"))
         assert.are.equal("http://proxy.example:8080", requests[2].proxy)
     end)
 
@@ -60,7 +60,7 @@ describe("HttpUtil", function()
         helper.state.env.PROXY_URL = "http://proxy.example:8080"
         respond({"", nil, "connection refused"}, {"", nil, "proxy unreachable"})
 
-        local body, err = HttpUtil.getBody("https://annas-archive.example")
+        local body, err = HttpUtil.getBody("https://libgen.example")
         assert.is_nil(body)
         assert.are.equal("proxy unreachable", err)
     end)
@@ -69,7 +69,7 @@ describe("HttpUtil", function()
         helper.state.env.PROXY_URL = false
         respond({"", nil, "connection refused"})
 
-        assert.is_nil(HttpUtil.getBody("https://annas-archive.example"))
+        assert.is_nil(HttpUtil.getBody("https://libgen.example"))
         assert.are.equal(1, #requests)
     end)
 end)

@@ -43,7 +43,7 @@ describe("SettingsPage", function()
 
         assert.are.same({"Show Book Covers: ☑", "Download Folder: " .. helper.abs(data_dir),
                          "Preferred Languages: en", "Preferred File Types: epub, pdf, cbr, cbz",
-                         "Preferred Book Types: book_fiction, book_comic"}, itemTexts(lastMenu()))
+                         "Preferred Book Types: fiction, comics"}, itemTexts(lastMenu()))
     end)
 
     it("toggles book covers", function()
@@ -152,24 +152,24 @@ describe("SettingsPage", function()
         it("are saved when the menu is closed", function()
             SettingsPage:showSettings()
             tap("Preferred Book Types")
-            assert.are.equal("☑ Book (fiction)", lastMenu().item_table[1].text)
+            assert.are.equal("☑ Fiction", lastMenu().item_table[1].text)
 
-            tap("Book (non-fiction)")
-            tap("Comic book")
+            tap("Non-fiction")
+            tap("☑ Comics")
             lastMenu().onClose()
 
-            assert.are.same({"book_fiction", "book_nonfiction"}, Settings:getPreferredBookTypes())
+            assert.are.same({"fiction", "nonfiction"}, Settings:getPreferredBookTypes())
             assert.are.equal("Book types updated", helper.lastNotification())
         end)
 
         it("cannot all be unticked", function()
             SettingsPage:showSettings()
             tap("Preferred Book Types")
-            tap("Book (fiction)")
-            tap("Comic book")
+            tap("☑ Fiction")
+            tap("☑ Comics")
             lastMenu().onClose()
 
-            assert.are.same({"book_fiction", "book_comic"}, Settings:getPreferredBookTypes())
+            assert.are.same({"fiction", "comics"}, Settings:getPreferredBookTypes())
             assert.are.equal("Select at least one book type", helper.lastNotification())
         end)
     end)

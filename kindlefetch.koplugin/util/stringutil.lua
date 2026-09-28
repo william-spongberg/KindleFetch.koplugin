@@ -38,38 +38,11 @@ function StringUtil.collapseDashes(text)
     return text:gsub("-+", "-")
 end
 
-function StringUtil.cleanEmojis(text)
-    if not StringUtil.assertValidString(text) then
-        return ""
-    end
-
-    -- remove emojis (these are all put before book type)
-    text = text:gsub("📗", "")
-    text = text:gsub("📘", "")
-    text = text:gsub("📕", "")
-    text = text:gsub("📰", "")
-    text = text:gsub("💬", "")
-    text = text:gsub("📝", "")
-    text = text:gsub("🤨", "")
-    text = text:gsub("🎶", "")
-    text = text:gsub("✅", "")
-
-    return StringUtil.trim(text)
-end
-
 function StringUtil.convertHtmlToText(text)
     if not StringUtil.assertValidString(text) then
         return ""
     end
     return util.htmlEntitiesToUtf8(text)
-end
-
-function StringUtil.removeExtension(text)
-    if not StringUtil.assertValidString(text) then
-        return ""
-    end
-    -- remove everything before last dot
-    return text:match("^(.+)%.[^%.]*$") or text
 end
 
 function StringUtil.removeParentheses(text)
@@ -100,7 +73,6 @@ function StringUtil.cleanFileName(text)
         return ""
     end
 
-    text = StringUtil.removeExtension(text)
     text = StringUtil.removeParentheses(text)
     text = text:gsub('[<>:"/\\|?*]', "-")  -- replace invalid chars with dash
     text = text:gsub("^[%s%.]+", "")  -- remove leading spaces/dots
