@@ -6,12 +6,21 @@ describe("KindleFetch", function()
     local cancelled_downloads
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
+    local opened
+
     local function openUI()
+        opened = nil
         return KindleFetch:new{
             ui = {
                 menu = {
                     registerToMainMenu = function() end
-                }
+                },
+                openFile = function(_, file)
+                    opened = {"openFile", file}
+                end,
+                switchDocument = function(_, file)
+                    opened = {"switchDocument", file}
+                end
             }
         }
     end
@@ -430,9 +439,12 @@ describe("KindleFetch", function()
             end
         end
 
+        local plugin
+
         before_each(function()
             search_results[1] = {{book("Dune"), book("AC/DC", "pdf")}}
-            search(openUI(), "dune")
+            plugin = openUI()
+            search(plugin, "dune")
         end)
 
         it("downloads the selected book into the download folder", function()
@@ -446,10 +458,28 @@ describe("KindleFetch", function()
             assert.are.equal("/mnt/us/documents/AC_DC.pdf", downloads[1].filepath)
         end)
 
-        it("says when the download has finished", function()
+        it("offers to read the book once it has downloaded", function()
             selectBook("Dune")
-            downloads[1].callback(true)
-            assert.are.equal("Downloaded Dune", helper.lastNotification())
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+
+            local dialog = helper.lastShown()
+            assert.are.equal("Downloaded Dune\nWould you like to read it now?", dialog.text)
+            assert.are.equal("Read now", dialog.ok_text)
+
+            dialog.ok_callback()
+            assert.are.same({"openFile", "/mnt/us/books/Dune.epub"}, opened)
+            assert.is_true(helper.wasClosed(menus[1]))
+        end)
+
+        it("switches to the downloaded book when already reading one", function()
+            plugin.ui.document = {}
+            selectBook("Dune")
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+            helper.lastShown().ok_callback()
+
+            assert.are.same({"switchDocument", "/mnt/us/books/Dune.epub"}, opened)
         end)
 
         it("says why a download failed", function()

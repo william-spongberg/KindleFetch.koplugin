@@ -227,7 +227,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
                 progress_widget:close()
                 LlgiAPI.active_downloads[book.md5] = nil -- cleanup after download finishes
                 UIManager:forceRePaint()
-                callback(ok, err)
+                callback(ok, err, filepath)
             end)
     end)
 end

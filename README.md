@@ -19,6 +19,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Book Cover Previews**: Display cover images in search results and download previews
 - **Download Progress**: Visual download progress bar with real-time file size information
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates
+- **Read Now**: Offers to open a book as soon as it has downloaded
 - **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available on Kindles
 - **Automatic Plugin Updates**: Checks for new plugin releases once per session and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu)
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails

@@ -19,11 +19,14 @@ describe("LlgiAPI", function()
         web.pages[adsUrl(mirror)] = fixtures.libgenAds(book.md5)
     end
 
-    local function onResult(ok, err)
+    local saved_filepath
+
+    local function onResult(ok, err, filepath)
         table.insert(results, {
             ok = ok,
             err = err
         })
+        saved_filepath = filepath
     end
 
     -- ask to download the book, then confirm the download prompt
@@ -162,6 +165,17 @@ describe("LlgiAPI", function()
             prompts[1].on_download(data_dir .. "/Books/Dune.epub")
 
             assert.are.equal(data_dir .. "/Books/Dune.epub", spawned[1].path)
+        end)
+
+        it("says where the book was saved", function()
+            LlgiAPI:downloadBook(book, filepath, onResult)
+            filepath = data_dir .. "/Books/Dune.epub"
+            prompts[1].on_download(filepath)
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({{ok = true}}, results)
+            assert.are.equal(data_dir .. "/Books/Dune.epub", saved_filepath)
         end)
 
         it("shows the progress again when a book that is already downloading is chosen", function()
