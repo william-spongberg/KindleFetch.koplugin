@@ -227,13 +227,17 @@ function CurlUtil.getCMD(download_url, filepath, exit_file, use_proxy)
     return cmd
 end
 
-function CurlUtil.download(download_url, filepath, use_proxy, background)
+-- max_time optionally limits how long each attempt (and retrying) can take, in seconds
+function CurlUtil.download(download_url, filepath, use_proxy, background, max_time)
 
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, download_url)
     cmd = CurlUtil.enableRetry(cmd, 2, 2)
     cmd = CurlUtil.setTimeout(cmd, 15)
+    if max_time then
+        cmd = string.format("%s --max-time %d --retry-max-time %d", cmd, max_time, max_time)
+    end
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)
     end

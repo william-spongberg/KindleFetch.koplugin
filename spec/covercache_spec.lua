@@ -31,8 +31,10 @@ describe("CoverCache", function()
 
     describe("download", function()
         it("downloads and remembers a cover", function()
-            CurlUtil.download = function(url, path)
+            CurlUtil.download = function(url, path, use_proxy, background, max_time)
                 assert.are.equal("https://covers.example/abc.jpg", url)
+                -- the download prompt waits for the cover, so a stalled one mustn't hold it up
+                assert.are.equal(10, max_time)
                 helper.writeFile(path, "jpeg")
                 return true
             end

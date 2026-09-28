@@ -13,6 +13,8 @@ local CoverCache = {}
 -- constants
 local CACHE_DIR = DataStorage:getSettingsDir() .. "/kindlefetch_covers/"
 local POLL_INTERVAL = 0.5
+-- the cover is fetched before the download prompt shows, so don't wait long for it
+local COVER_MAX_TIME = 10
 
 -- md5s of covers being downloaded, so they aren't downloaded twice at once
 local downloading = {}
@@ -64,10 +66,10 @@ function CoverCache:download(md5, url)
     ensureCacheDir()
     local path = self:getPath(md5)
     
-    local success = CurlUtil.download(url, path, false, false)
+    local success = CurlUtil.download(url, path, false, false, COVER_MAX_TIME)
     if not success and hasProxy() then
         LogUtil.debug("retrying cover download through proxy", md5)
-        success = CurlUtil.download(url, path, true, false)
+        success = CurlUtil.download(url, path, true, false, COVER_MAX_TIME)
     end
     if success then
         persistent_cache:set(path, md5)

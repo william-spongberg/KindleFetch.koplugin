@@ -134,6 +134,16 @@ describe("CurlUtil", function()
             assert.matches("--connect-timeout 15", cmd, 1, true)
         end)
 
+        it("can limit how long the download takes", function()
+            helper.stubExecute("curl -sL -f -o", fakeCurl("jpeg"))
+
+            CurlUtil.download("https://libgen.example/cover.jpg", filepath, false, false, 10)
+            assert.matches("--max-time 10 --retry-max-time 10", helper.state.executed[#helper.state.executed], 1, true)
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find("--max-time", 1, true))
+        end)
+
         it("fails and cleans up when curl fails", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("partial", 6))
 
