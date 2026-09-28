@@ -206,3 +206,12 @@ This plugin facilitates downloading books from Anna's Archive and Library Genesi
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request with improvements, bug fixes, or new features.
+
+### Running tests
+
+Tests live in `spec/` and run with [busted](https://lunarmodules.github.io/busted/), ideally on LuaJIT to match KOReader. KOReader modules are stubbed in `spec/helper.lua`, so no KOReader build is needed. The plugin update tests also need `zip` and `unzip`.
+
+```bash
+luarocks install busted
+busted            # run from the repository root
+```
