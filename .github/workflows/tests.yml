@@ -22,7 +22,15 @@ jobs:
       - uses: leafo/gh-actions-luarocks@v6
 
       - name: Install busted
-        run: luarocks install busted
+        run: |
+          luarocks install busted
+          luarocks install luacov
 
       - name: Run tests
-        run: busted
+        run: busted --coverage
+
+      - name: Report coverage
+        run: |
+          luacov
+          sed -n '/^Summary/,$p' luacov.report.out
+          { echo '```'; sed -n '/^Summary/,$p' luacov.report.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
