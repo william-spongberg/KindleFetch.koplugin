@@ -213,18 +213,4 @@ This plugin facilitates downloading books from Library Genesis. Ensure you have 
 
 Contributions are welcome! Please open an issue or submit a pull request with improvements, bug fixes, or new features.
 
-### Running tests
-
-Tests live in `spec/` and run with [busted](https://lunarmodules.github.io/busted/), ideally on LuaJIT to match KOReader. KOReader modules are stubbed in `spec/helper.lua`, so no KOReader build is needed. The plugin update tests also need `zip` and `unzip`, and the mirror tests scrape the live Wikipedia pages, so they need internet access.
-
-```bash
-luarocks install busted luacov
-busted            # run from the repository root
-busted --coverage && luacov   # coverage report in luacov.report.out
-```
-
-Tests run automatically on every push.
-
-### Releasing
-
-Run the **Release** workflow from the Actions tab, or with `gh workflow run release.yml -f bump=minor` (`major`, `minor` or `patch`). It runs the tests, increments `version.txt`, tags the release, and publishes `kindlefetch.koplugin.zip` along with a list of the commits since the last release.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for running KindleFetch on your computer (Linux or Windows), running the tests, and releasing.
