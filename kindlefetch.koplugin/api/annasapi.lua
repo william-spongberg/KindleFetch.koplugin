@@ -50,8 +50,11 @@ local function parseBookTable(html)
             -- Cell 6: Mirrors/Sources
             -- Cell 7: Language
             book.language = cells[8]:match('>([^<]+)</span>')
-            -- Cell 8: Book type
+            -- Cell 8: Book type (trimmed, as the emoji before it has left a space)
             book.book_type = cells[9]:match('>([^<]+)</span>')
+            if book.book_type then
+                book.book_type = StringUtil.trim(book.book_type)
+            end
             -- Cell 9: File type
             book.file_type = cells[10]:match('>([^<]+)</span>')
             -- Cell 10: File size
