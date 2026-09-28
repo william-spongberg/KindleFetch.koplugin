@@ -302,21 +302,17 @@ describe("KindleFetch", function()
             assert.are.equal(0, #searches)
         end)
 
-        it("offers to turn on wifi when it is off", function()
+        it("turns on wifi when offline, then searches once connected", function()
             helper.stubs.network.connected = false
-            helper.stubs.network.wifi_on = false
+            search_results[1] = {{book("Dune")}}
             search(openUI(), "dune")
-
             assert.are.equal("turn wifi on", helper.stubs.network.prompted)
             assert.are.equal(0, #searches)
-        end)
 
-        it("offers to connect when wifi is on but not connected", function()
-            helper.stubs.network.connected = false
-            search(openUI(), "dune")
-
-            assert.are.equal("connect to wifi", helper.stubs.network.prompted)
-            assert.are.equal(0, #searches)
+            helper.stubs.network.connected = true
+            helper.stubs.network.when_connected()
+            assert.are.same({{"dune", 1}}, searches)
+            assert.are.same({"Dune", "Load more"}, itemTexts(menus[1]))
         end)
 
         it("shows the books found, with a way to load more", function()
