@@ -16,7 +16,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
   - Mirror URLs (1 week expiry by default)
   - Book covers (500 entries max)
 - **Preferences**: Filter results by preferred languages, file types, and book types
-- **Book Cover Previews**: Display cover images in search results and download previews
+- **Book Cover Previews**: Display cover images in search results and download previews, with placeholders while they download
 - **Download Progress**: Visual download progress bar with real-time file size information
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates
 - **Read Now**: Offers to open a book as soon as it has downloaded

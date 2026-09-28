@@ -6,7 +6,6 @@ local Event = require("ui/event")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
 local LogUtil = require("util.logutil")
-local NotifyUtil = require("util.notifyutil")
 
 local CoverCache = {}
 
@@ -18,6 +17,8 @@ local COVER_MAX_TIME = 10
 
 -- md5s of covers being downloaded, so they aren't downloaded twice at once
 local downloading = {}
+-- md5s of covers that couldn't be downloaded this session, so they aren't shown as coming
+local unavailable = {}
 
 local persistent_cache = KindleFetchCache:new{
     filename = "kindlefetch_covercache.lua",
@@ -46,6 +47,11 @@ end
 function CoverCache:cacheExists(md5)
     -- must agree with get, as covers are shown using the path it returns
     return self:get(md5) ~= nil
+end
+
+-- whether a cover for the book is on its way, so worth showing a placeholder for
+function CoverCache:isComing(book)
+    return book.image_url ~= nil and not unavailable[book.md5] and not self:cacheExists(book.md5)
 end
 
 function CoverCache:get(md5)
@@ -130,8 +136,8 @@ local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs
 end
 
 -- download missing covers in the background, calling on_done with the number downloaded once finished, and
--- letting open search results know with a KindleFetchCoversDownloaded event. returns false when there was
--- nothing to download.
+-- letting open search results and download prompts know with a KindleFetchCoversDownloaded event, so they
+-- can replace the placeholders. returns false when there was nothing to download.
 function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     ensureCacheDir()
     on_done = on_done or function() end
@@ -146,14 +152,13 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
             table.insert(filepaths, self:getPath(book.md5))
             table.insert(md5s, book.md5)
             downloading[book.md5] = true
+            unavailable[book.md5] = nil
         end
     end
 
     if #md5s == 0 then
         return false
     end
-
-    NotifyUtil.info("Getting book covers...")
 
     local function finish(downloaded_paths)
         local downloaded = {}
@@ -167,12 +172,13 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
             if downloaded[filepaths[i]] then
                 persistent_cache:set(filepaths[i], md5)
                 count = count + 1
+            else
+                unavailable[md5] = true
             end
         end
 
-        if count > 0 then
-            UIManager:broadcastEvent(Event:new("KindleFetchCoversDownloaded"))
-        end
+        -- even when none downloaded, as their placeholders then need removing
+        UIManager:broadcastEvent(Event:new("KindleFetchCoversDownloaded"))
         on_done(count)
     end
 

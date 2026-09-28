@@ -178,14 +178,46 @@ describe("BookMenu", function()
             assert.are.equal("English [en] · Book (fiction) · epub", info)
         end)
 
+        it("show a placeholder while the cover downloads", function()
+            local menu = newMenu(1)
+            local item = menu:createBookItemWidget(book(1))[1]
+
+            assert.are.equal(3, #item)
+            assert.is_true(item[1][1].is_cover_placeholder)
+        end)
+
         it("show the cover once it has been downloaded", function()
             local menu = newMenu(1)
-            assert.are.equal(2, #menu:createBookItemWidget(book(1))[1])
-
             cacheCover("md5-1")
             local item = menu:createBookItemWidget(book(1))[1]
+
             assert.are.equal(3, #item)
             assert.are.equal(CoverCache:getPath("md5-1"), item[1][1].file)
+        end)
+
+        it("leave the cover out when the book doesn't have one", function()
+            local menu = newMenu(1)
+            local b = book(1)
+            b.image_url = nil
+
+            assert.are.equal(2, #menu:createBookItemWidget(b)[1])
+        end)
+
+        it("leave the cover out when it couldn't be downloaded", function()
+            local menu = newMenu(1)
+            require("util.curlutil").downloadMultiple = function()
+                return nil, nil, nil, "unable to launch curl"
+            end
+            CoverCache:downloadMultiple({book(1)}, 6)
+
+            assert.are.equal(2, #menu:createBookItemWidget(book(1))[1])
+        end)
+
+        it("leave out placeholders when covers are turned off", function()
+            local menu = newMenu(1)
+            require("settings.settings"):setShowBookCovers(false)
+
+            assert.are.equal(2, #menu:createBookItemWidget(book(1))[1])
         end)
     end)
 

@@ -82,6 +82,36 @@ describe("CoverCache", function()
         end)
     end)
 
+    describe("isComing", function()
+        it("is true for covers yet to download", function()
+            assert.is_true(CoverCache:isComing(book("a", "https://covers.example/a.jpg")))
+        end)
+
+        it("is false for books without a cover", function()
+            assert.is_false(CoverCache:isComing(book("a")))
+        end)
+
+        it("is false once the cover has downloaded", function()
+            fixtures.cacheCover(helper, "a")
+            assert.is_false(CoverCache:isComing(book("a", "https://covers.example/a.jpg")))
+        end)
+
+        it("is false once the cover couldn't be downloaded, until it's tried again", function()
+            local a = book("a", "https://covers.example/a.jpg")
+            CurlUtil.downloadMultiple = function()
+                return nil, nil, nil, "unable to launch curl"
+            end
+            CoverCache:downloadMultiple({a}, 6)
+            assert.is_false(CoverCache:isComing(a))
+
+            CurlUtil.downloadMultiple = function()
+                return 4000, "exit", "config"
+            end
+            CoverCache:downloadMultiple({a}, 6)
+            assert.is_true(CoverCache:isComing(a))
+        end)
+    end)
+
     describe("get", function()
         it("returns nil for covers that were never downloaded", function()
             assert.is_nil(CoverCache:get("abc"))
@@ -156,7 +186,8 @@ describe("CoverCache", function()
             assert.are.same({covers_dir .. "new.jpg"}, runs[1].paths)
             assert.are.equal(6, runs[1].parallel_jobs)
             assert.is_false(runs[1].use_proxy)
-            assert.are.equal("Getting book covers...", helper.lastNotification())
+            -- search results show placeholders, rather than a notification
+            assert.are.equal(0, #helper.state.notifications)
 
             -- nothing happens until curl has finished
             helper.tick()
@@ -192,7 +223,8 @@ describe("CoverCache", function()
             assert.are.same({0}, results)
             assert.is_false(helper.exists(covers_dir .. "a.jpg"))
             assert.is_false(CoverCache:cacheExists("a"))
-            assert.are.same({}, helper.state.broadcasts)
+            -- so the placeholders can be taken away
+            assert.are.same({"KindleFetchCoversDownloaded"}, helper.state.broadcasts)
         end)
 
         it("keeps the covers that downloaded when others fail", function()
