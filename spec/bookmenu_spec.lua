@@ -219,6 +219,14 @@ describe("BookMenu", function()
 
             assert.are.equal(2, #menu:createBookItemWidget(book(1))[1])
         end)
+
+        it("leave out covers already downloaded when covers are turned off", function()
+            local menu = newMenu(1)
+            cacheCover("md5-1")
+            require("settings.settings"):setShowBookCovers(false)
+
+            assert.are.equal(2, #menu:createBookItemWidget(book(1))[1])
+        end)
     end)
 
     describe("selecting", function()
