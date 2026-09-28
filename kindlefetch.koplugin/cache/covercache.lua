@@ -88,19 +88,22 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_done)
         return
     end
 
+    local results_file = CurlUtil.getResultsFile(config_file)
+    local results = CurlUtil.getTransferResults(results_file)
     FileUtil.removeFile(config_file)
+    FileUtil.removeFile(results_file)
 
-    -- a failed transfer may have left partial files, so only keep covers when every download succeeded
+    -- keep the covers that downloaded, removing any partial files left by ones that failed
     local downloaded = {}
     for _, path in ipairs(filepaths) do
-        if exit_code == 0 and FileUtil.getSize(path) > 0 then
+        if CurlUtil.isTransferComplete(results, path, exit_code) then
             table.insert(downloaded, path)
         else
             FileUtil.removeFile(path)
         end
     end
     if exit_code ~= 0 then
-        LogUtil.warn("cover downloads failed", CurlUtil.getErrorMeaning(exit_code))
+        LogUtil.warn("some cover downloads failed", CurlUtil.getErrorMeaning(exit_code))
     end
 
     on_done(downloaded)

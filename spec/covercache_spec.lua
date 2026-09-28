@@ -193,6 +193,21 @@ describe("CoverCache", function()
             assert.are.same({}, helper.state.broadcasts)
         end)
 
+        it("keeps the covers that downloaded when others fail", function()
+            CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg"), book("b", "https://covers.example/b.jpg")},
+                6, onDone)
+            -- curl writes each cover's result next to its config file
+            helper.writeFile(data_dir .. "/settings/curl_config.txt.results",
+                "0 " .. covers_dir .. "a.jpg\n28 " .. covers_dir .. "b.jpg\n")
+            finishRun(runs[1], {true, true}, 28)
+            helper.runScheduled()
+
+            assert.are.same({1}, results)
+            assert.is_true(CoverCache:cacheExists("a"))
+            assert.is_false(CoverCache:cacheExists("b"))
+            assert.is_false(helper.exists(covers_dir .. "b.jpg"))
+        end)
+
         it("stops when curl stops without reporting back", function()
             CurlUtil.isPidRunning = function()
                 return false

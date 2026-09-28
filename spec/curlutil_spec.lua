@@ -181,17 +181,22 @@ describe("CurlUtil", function()
     describe("downloadMultiple", function()
         local urls, paths
 
-        -- pretend to be curl --config: write each output listed in the config file
-        local function fakeParallelCurl(bodies, exit_code)
+        -- pretend to be curl --config: write each output listed in the config file, and each one's result
+        local function fakeParallelCurl(bodies, exit_code, transfer_exit_codes)
             return function(cmd)
                 local config = helper.readFile(cmd:match('%-%-config "([^"]+)"'))
+                local results = {}
                 local i = 0
                 for output in config:gmatch('output = "([^"]+)"') do
                     i = i + 1
                     if bodies[i] then
                         helper.writeFile(output, bodies[i])
                     end
+                    if transfer_exit_codes then
+                        table.insert(results, transfer_exit_codes[i] .. " " .. output)
+                    end
                 end
+                helper.writeFile(cmd:match("%-w '[^']*' > '([^']+)'"), table.concat(results, "\n"))
                 helper.writeFile(cmd:match("echo %$%? > '([^']+)'"), tostring(exit_code or 0))
             end
         end
@@ -211,6 +216,9 @@ describe("CurlUtil", function()
 
             local cmd = helper.state.executed[#helper.state.executed]
             assert.matches("--parallel --parallel-max 4", cmd, 1, true)
+            -- stalled files are given up on
+            assert.matches("--connect-timeout 15 --max-time 30", cmd, 1, true)
+            assert.matches("-w '%{exitcode} %{filename_effective}\\n'", cmd, 1, true)
             assert.matches("-e 'https://covers.example/'", cmd, 1, true)
             assert.matches("--retry 2", cmd, 1, true)
         end)
@@ -224,6 +232,15 @@ describe("CurlUtil", function()
 
             CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15)
             assert.is_false(helper.exists(config_file))
+        end)
+
+        it("keeps the files that downloaded when others fail", function()
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({"a", "partial", "c"}, 28, {0, 28, 0}))
+
+            assert.are.equal(2, CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15))
+            assert.is_true(helper.exists(paths[1]))
+            assert.is_false(helper.exists(paths[2]))
+            assert.is_true(helper.exists(paths[3]))
         end)
 
         it("discards everything and notifies when curl fails", function()
