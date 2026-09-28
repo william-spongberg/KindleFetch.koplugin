@@ -160,6 +160,7 @@ kindlefetch.koplugin/
    - Plugin resolves the current Library Genesis mirror URL (with weekly caching)
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
    - HTML table is parsed to extract book metadata (title, authors, year, language, file type, MD5 hash, cover image URL), keeping books in the preferred languages and file types
+   - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there
    - Results are cached (2 weeks max, 1000 entries) to minimise requests
    - Search results are displayed in a menu
 
