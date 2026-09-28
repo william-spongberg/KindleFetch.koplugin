@@ -149,6 +149,15 @@ function CurlUtil.pretendBrowser(curl_cmd)
     return curl_cmd .. " -A 'Mozilla/5.0'"
 end
 
+-- send the site as the referer, like a browser, as Library Genesis sends empty covers without one
+function CurlUtil.setReferer(curl_cmd, url)
+    local site = tostring(url):match("^(https?://[^/]+)")
+    if not site then
+        return curl_cmd
+    end
+    return string.format("%s -e %s", curl_cmd, CurlUtil.shellQuote(site .. "/"))
+end
+
 function CurlUtil.enableRetry(curl_cmd, count, delay)
     return string.format("%s --retry %d --retry-delay %d", curl_cmd, count, delay)
 end
@@ -192,6 +201,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background)
 
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
     cmd = CurlUtil.pretendBrowser(cmd)
+    cmd = CurlUtil.setReferer(cmd, download_url)
     cmd = CurlUtil.enableRetry(cmd, 2, 2)
     cmd = CurlUtil.setTimeout(cmd, 15)
     if use_proxy then
@@ -253,6 +263,8 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
 
     local cmd = string.format('curl -sL -f --config "%s"', config_file)
     cmd = CurlUtil.pretendBrowser(cmd)
+    -- covers for a page of search results all come from the same site
+    cmd = CurlUtil.setReferer(cmd, download_urls[1])
     if enable_retry then
         cmd = CurlUtil.enableRetry(cmd, 2, 2)
     end

@@ -30,6 +30,12 @@ describe("CurlUtil", function()
         assert.are.equal("'; rm -rf /'", CurlUtil.shellQuote("; rm -rf /"))
     end)
 
+    it("sends the site as the referer", function()
+        assert.are.equal("curl -e 'https://libgen.example/'",
+            CurlUtil.setReferer("curl", "https://libgen.example/fictioncovers/1/abc_small.jpg"))
+        assert.are.equal("curl", CurlUtil.setReferer("curl", "not a url"))
+    end)
+
     it("explains curl exit codes", function()
         assert.are.equal("could not resolve host", CurlUtil.getErrorMeaning(6))
         assert.are.equal("TLS certificate verification failed", CurlUtil.getErrorMeaning(60))
@@ -122,6 +128,8 @@ describe("CurlUtil", function()
             local cmd = helper.state.executed[#helper.state.executed]
             assert.matches("'https://libgen.example/get.php?md5=abc'", cmd, 1, true)
             assert.matches("-A 'Mozilla/5.0'", cmd, 1, true)
+            -- Library Genesis sends empty covers without a referer
+            assert.matches("-e 'https://libgen.example/'", cmd, 1, true)
             assert.matches("--retry 2 --retry-delay 2", cmd, 1, true)
             assert.matches("--connect-timeout 15", cmd, 1, true)
         end)
@@ -203,6 +211,7 @@ describe("CurlUtil", function()
 
             local cmd = helper.state.executed[#helper.state.executed]
             assert.matches("--parallel --parallel-max 4", cmd, 1, true)
+            assert.matches("-e 'https://covers.example/'", cmd, 1, true)
             assert.matches("--retry 2", cmd, 1, true)
         end)
 
