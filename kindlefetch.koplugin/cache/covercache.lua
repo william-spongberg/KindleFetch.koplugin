@@ -2,6 +2,7 @@ local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
 local FileUtil = require("util.fileutil")
 local UIManager = require("ui/uimanager")
+local Event = require("ui/event")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
 local LogUtil = require("util.logutil")
@@ -119,8 +120,9 @@ local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs
     end)
 end
 
--- download missing covers in the background, calling on_done with the number downloaded once finished.
--- returns false when there was nothing to download.
+-- download missing covers in the background, calling on_done with the number downloaded once finished, and
+-- letting open search results know with a KindleFetchCoversDownloaded event. returns false when there was
+-- nothing to download.
 function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     ensureCacheDir()
     on_done = on_done or function() end
@@ -159,6 +161,9 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
             end
         end
 
+        if count > 0 then
+            UIManager:broadcastEvent(Event:new("KindleFetchCoversDownloaded"))
+        end
         on_done(count)
     end
 

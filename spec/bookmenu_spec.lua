@@ -252,26 +252,16 @@ describe("BookMenu", function()
             assert.are.equal(5, requested.parallel_jobs)
             -- the menu isn't redrawn until they have downloaded
             assert.are.equal(0, #menu.item_group)
-
-            requested.on_done(3)
-            assert.are.equal(5, #menu.item_group)
         end)
 
-        it("does not redraw when the page has changed", function()
+        -- covers another search started downloading still show up once they download
+        it("redraws the page showing once covers have downloaded", function()
             local menu = newMenu(11)
-            menu:loadCoversForPage(1)
-            menu.page = 2
+            menu.page = 3
+            menu:onKindleFetchCoversDownloaded()
 
-            requested.on_done(5)
-            assert.are.equal(0, #menu.item_group)
-        end)
-
-        it("does not redraw when no covers downloaded", function()
-            local menu = newMenu(1)
-            menu:loadCoversForPage(1)
-
-            requested.on_done(0)
-            assert.are.equal(0, #menu.item_group)
+            assert.are.equal(2, #menu.item_group)
+            assert.are.equal("md5-11", menu.item_group[1].entry.book.md5)
         end)
 
         it("does nothing when every cover is there", function()

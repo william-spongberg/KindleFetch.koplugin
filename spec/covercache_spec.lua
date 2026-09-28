@@ -165,6 +165,8 @@ describe("CoverCache", function()
             helper.tick()
             assert.are.same({1}, results)
             assert.are.equal(covers_dir .. "new.jpg", CoverCache:get("new"))
+            -- so every open search result can show them
+            assert.are.same({"KindleFetchCoversDownloaded"}, helper.state.broadcasts)
         end)
 
         it("does not download covers that are already downloading", function()
@@ -188,6 +190,7 @@ describe("CoverCache", function()
             assert.are.same({0}, results)
             assert.is_false(helper.exists(covers_dir .. "a.jpg"))
             assert.is_false(CoverCache:cacheExists("a"))
+            assert.are.same({}, helper.state.broadcasts)
         end)
 
         it("stops when curl stops without reporting back", function()

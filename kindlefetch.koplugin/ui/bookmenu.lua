@@ -300,14 +300,14 @@ function BookMenu:loadCoversForPage(current_page)
     if #books_to_download > 0 then
         -- download all at once in parallel, in the background
         LogUtil.debug("downloading", #books_to_download, "covers in parallel")
-        CoverCache:downloadMultiple(books_to_download, items_per_page, function(count)
-            -- refresh menu to show downloaded covers, if the page is still showing
-            if count > 0 and self.page == current_page then
-                self:updateItems()
-                UIManager:setDirty(self, "full")
-            end
-        end)
+        CoverCache:downloadMultiple(books_to_download, items_per_page)
     end
+end
+
+-- redraw with covers once they have downloaded, even if another search started downloading them
+function BookMenu:onKindleFetchCoversDownloaded()
+    self:updateItems()
+    UIManager:setDirty(self, "full")
 end
 
 return BookMenu
