@@ -4,11 +4,12 @@ describe("Searching", function()
     after_each(H.closeAll)
 
     it("finds books on Library Genesis", function()
-        local menu = H.search(H.QUERY)
+        local menu = H.search(H.SEARCH_QUERY)
         H.shot("search-results")
 
+        -- enough to fill the page, even though most of Library Genesis' first results are in other languages
         local books = H.books(menu)
-        assert(#books > 0, "no books found")
+        assert(#books >= 10, "only found " .. #books .. " books")
         local preferred = {
             epub = true,
             pdf = true,
@@ -25,7 +26,7 @@ describe("Searching", function()
 
     it("shows book covers once they have downloaded", function()
         local CoverCache = require("cache.covercache")
-        local menu = H.search(H.QUERY)
+        local menu = H.search(H.SEARCH_QUERY)
 
         local on_first_page = {}
         for _, index in ipairs(menu.page_items[1]) do
@@ -48,7 +49,7 @@ describe("Searching", function()
 
     it("loads more books", function()
         local plugin = H.plugin()
-        local menu = H.search(H.QUERY)
+        local menu = H.search(H.SEARCH_QUERY)
         local count = #H.books(menu)
 
         H.tapMenuEntry(menu, function(item)
