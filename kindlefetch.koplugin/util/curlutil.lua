@@ -162,7 +162,7 @@ function CurlUtil.enableParallel(curl_cmd, max_parallel)
 end
 
 function CurlUtil.applyProxy(curl_cmd)
-    return string.format("%s %s", curl_cmd, CurlUtil.getProxyFlag())
+    return string.format("%s %s", curl_cmd, CurlUtil.getProxyFlag(true))
 end
 
 function CurlUtil.saveExitCode(cmd, exit_file)
