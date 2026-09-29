@@ -40,6 +40,15 @@ local function ensureTmpDir()
     lfs.mkdir(TMP_DIR)
 end
 
+-- os.time() is in seconds, and downloads can start within the same second (a book's cover and the book itself),
+-- so temporary files are numbered too, to keep each download's files its own
+local tmp_files_created = 0
+local function tmpFile(name, extension)
+    ensureTmpDir()
+    tmp_files_created = tmp_files_created + 1
+    return string.format("%s%s_%d_%d%s", TMP_DIR, name, os.time(), tmp_files_created, extension)
+end
+
 function CurlUtil.shellQuote(str)
     return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
 end
@@ -94,10 +103,7 @@ function CurlUtil.getRemoteFileSize(url)
 end
 
 function CurlUtil.createExitFile()
-    ensureTmpDir()
-
-    -- FIXME: os.time() is in seconds (for some reason), so overlaps are possible
-    local exit_file = TMP_DIR .. "curl_download_" .. tostring(os.time()) .. ".exitcode"
+    local exit_file = tmpFile("curl_download", ".exitcode")
     FileUtil.removeFile(exit_file)
 
     return exit_file
@@ -288,7 +294,7 @@ end
 function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, background, num_parallel_jobs, enable_retry, timeout)
     ensureTmpDir()
 
-    local config_file = TMP_DIR .. "curl_download_config_" .. tostring(os.time()) .. ".txt"
+    local config_file = tmpFile("curl_download_config", ".txt")
     local f = io.open(config_file, "w")
     
     for i, download_url in ipairs(download_urls) do

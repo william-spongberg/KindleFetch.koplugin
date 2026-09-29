@@ -86,6 +86,12 @@ describe("CurlUtil", function()
             assert.is_false(helper.exists(exit_file))
         end)
 
+        -- a book's cover and the book itself can start downloading within the same second
+        it("are different for downloads started within the same second", function()
+            helper.state.time = 1000
+            assert.are_not.equal(CurlUtil.createExitFile(), CurlUtil.createExitFile())
+        end)
+
         it("reads and removes the exit code once curl has finished", function()
             local exit_file = CurlUtil.createExitFile()
             assert.is_nil(CurlUtil.getExitCode(exit_file))
@@ -273,6 +279,19 @@ describe("CurlUtil", function()
             assert.are.equal(4242, pid)
             assert.is_not_nil(exit_file)
             assert.matches('output = "' .. paths[2] .. '"', helper.readFile(config_file), 1, true)
+        end)
+
+        it("keeps the files of downloads started within the same second apart", function()
+            helper.stubCommand("& echo $!", "4242\n")
+            helper.state.time = 1000
+
+            local _, first_exit, first_config = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
+            local _, second_exit, second_config = CurlUtil.downloadMultiple({urls[1]}, {paths[1]}, false, true, 4,
+                false, 15)
+            assert.are_not.equal(first_exit, second_exit)
+            assert.are_not.equal(first_config, second_config)
+            assert.are_not.equal(CurlUtil.getResultsFile(first_config), CurlUtil.getResultsFile(second_config))
+            assert.matches('output = "' .. paths[2] .. '"', helper.readFile(first_config), 1, true)
         end)
 
         it("cleans up when the background download cannot start", function()
