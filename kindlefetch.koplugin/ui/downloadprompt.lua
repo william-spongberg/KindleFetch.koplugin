@@ -9,6 +9,8 @@ local TextBoxWidget = require("ui/widget/textboxwidget")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local GestureRange = require("ui/gesturerange")
 local Button = require("ui/widget/button")
+local ButtonTable = require("ui/widget/buttontable")
+local TextWidget = require("ui/widget/textwidget")
 local ImageWidget = require("ui/widget/imagewidget")
 local DownloadMgr = require("ui/downloadmgr")
 local Font = require("ui/font")
@@ -26,15 +28,13 @@ DownloadPrompt.__index = DownloadPrompt
 
 local CONTENT_WIDTH = Screen:scaleBySize(380)
 local COVER_SIZE = Screen:scaleBySize(192)
-
-local function infoLine(label, value, width)
-    return TextBoxWidget:new{
-        width = width,
-        face = Font:getFace("cfont", 16),
-        text = string.format("%s: %s", label, value or "-"),
-        fgcolor = Blitbuffer.COLOR_BLACK
-    }
-end
+-- the title and the book's details in black, the rest in greys that are still dark enough to read on e-ink (#3)
+local AUTHOR_COLOR = Blitbuffer.COLOR_GRAY_4
+local LABEL_COLOR = Blitbuffer.COLOR_GRAY_6
+local TITLE_FACE = Font:getFace("cfont", 20)
+local AUTHOR_FACE = Font:getFace("cfont", 17)
+local DETAIL_FACE = Font:getFace("cfont", 15)
+local LABEL_FACE = Font:getFace("cfont", 14)
 
 function DownloadPrompt.new(book, filepath, on_download)
     local self = setmetatable({}, DownloadPrompt)
@@ -45,46 +45,6 @@ function DownloadPrompt.new(book, filepath, on_download)
     self.filepath = filepath
     self.on_download = on_download
     self.fullscreen_cover_shown = false
-
-    self:buildCover()
-
-    self.path_widget = Button:new{
-        text = self.filepath,
-        callback = function()
-            self:choosePath()
-        end,
-        bordersize = Size.border.default,
-        padding = Size.padding.default,
-        width = CONTENT_WIDTH
-    }
-
-    self.download_button = Button:new{
-        text = _("Download"),
-        callback = function()
-            self:close()
-
-            if self.on_download then
-                self.on_download(self.filepath)
-            end
-        end,
-        padding = Size.padding.default
-    }
-
-    self.frame = FrameContainer:new{
-        background = Blitbuffer.COLOR_WHITE,
-        bordersize = Size.border.window,
-        padding = Size.padding.large,
-        width = CONTENT_WIDTH + Size.padding.large * 2,
-        self:buildContent()
-    }
-
-    self.container = CenterContainer:new{
-        dimen = Geom:new{
-            w = Screen:getWidth(),
-            h = Screen:getHeight()
-        },
-        self.frame
-    }
 
     -- wrap everything in InputContainer to handle outside taps
     local parent_ref = self
@@ -110,9 +70,66 @@ function DownloadPrompt.new(book, filepath, on_download)
     function self.outer_container:onKindleFetchCoversDownloaded()
         parent_ref:refreshCover()
     end
+
+    self:buildCover()
+    self:buildPathButton()
+
+    -- as in KOReader's own dialogs
+    self.button_table = ButtonTable:new{
+        width = CONTENT_WIDTH + Size.padding.large * 2,
+        zero_sep = true,
+        show_parent = self.outer_container,
+        buttons = {{{
+            text = _("Cancel"),
+            id = "cancel",
+            callback = function()
+                self:close()
+            end
+        }, {
+            text = _("Download"),
+            id = "download",
+            callback = function()
+                self:download()
+            end
+        }}}
+    }
+
+    self.body = FrameContainer:new{
+        bordersize = 0,
+        padding = Size.padding.large,
+        self:buildContent()
+    }
+
+    self.frame = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = Size.border.window,
+        radius = Size.radius.window,
+        padding = 0,
+        VerticalGroup:new{
+            align = "left",
+            self.body,
+            self.button_table
+        }
+    }
+
+    self.container = CenterContainer:new{
+        dimen = Geom:new{
+            w = Screen:getWidth(),
+            h = Screen:getHeight()
+        },
+        self.frame
+    }
     self.outer_container[1] = self.container
 
     return self
+end
+
+function DownloadPrompt:download()
+    self:close()
+
+    if self.on_download then
+        self.on_download(self.filepath)
+    end
 end
 
 -- the full-size cover once it has downloaded (after the cover was first enlarged), otherwise the thumbnail from
@@ -174,7 +191,7 @@ end
 
 function DownloadPrompt:refreshCover()
     self:buildCover()
-    self.frame[1] = self:buildContent()
+    self.body[1] = self:buildContent()
     UIManager:setDirty(self.outer_container, "ui")
 
     -- show the full-size cover fullscreen too, if it arrived while the thumbnail was showing
@@ -184,55 +201,155 @@ function DownloadPrompt:refreshCover()
     end
 end
 
+-- the book's details that it has, as label and value pairs
+function DownloadPrompt:details()
+    local book = self.book
+    local details = {}
+    local function add(label, value)
+        if value and value ~= "" then
+            table.insert(details, {label, value})
+        end
+    end
+
+    local format = {}
+    if book.file_type and book.file_type ~= "" then
+        table.insert(format, book.file_type:upper())
+    end
+    if book.file_size and book.file_size ~= "" then
+        table.insert(format, book.file_size)
+    end
+    add(_("Format"), table.concat(format, " · "))
+    add(_("Language"), book.language)
+    add(_("Year"), book.year)
+    add(_("Type"), book.book_type)
+    return details
+end
+
+-- the book's details in two columns, their labels in grey
+function DownloadPrompt:buildDetails(width)
+    local details = self:details()
+
+    local label_width = 0
+    for _, detail in ipairs(details) do
+        local label = TextWidget:new{
+            text = detail[1],
+            face = LABEL_FACE
+        }
+        label_width = math.max(label_width, label:getSize().w)
+        label:free()
+    end
+    local gap = Size.padding.large
+
+    local rows = VerticalGroup:new{
+        align = "left"
+    }
+    for i, detail in ipairs(details) do
+        if i > 1 then
+            table.insert(rows, VerticalSpan:new{
+                width = Size.padding.small
+            })
+        end
+        table.insert(rows, HorizontalGroup:new{
+            align = "center",
+            TextBoxWidget:new{
+                width = label_width + Size.padding.small,
+                face = LABEL_FACE,
+                text = detail[1],
+                fgcolor = LABEL_COLOR
+            },
+            HorizontalSpan:new{
+                width = gap
+            },
+            TextBoxWidget:new{
+                width = width - label_width - Size.padding.small - gap,
+                face = DETAIL_FACE,
+                text = detail[2],
+                fgcolor = Blitbuffer.COLOR_BLACK
+            }
+        })
+    end
+    return rows
+end
+
 function DownloadPrompt:buildContent()
     -- the book's details take the whole width when there's no cover
     local text_width = self.cover and CONTENT_WIDTH - COVER_SIZE - Size.padding.large or CONTENT_WIDTH
 
     self.title = TextBoxWidget:new{
         width = text_width,
-        face = Font:getFace("cfont", 20),
+        face = TITLE_FACE,
         text = self.book.display_title or "",
         bold = true
     }
 
     self.author = TextBoxWidget:new{
         width = text_width,
-        face = Font:getFace("cfont", 17),
+        face = AUTHOR_FACE,
         text = self.book.authors or "",
-        fgcolor = Blitbuffer.COLOR_BLACK
+        fgcolor = AUTHOR_COLOR
     }
 
-    local details = VerticalGroup:new{self.title, VerticalSpan:new{
-        width = Size.padding.small
-    }, self.author, VerticalSpan:new{
-        width = Size.padding.default
-    }, infoLine(_("Year"), self.book.year, text_width), infoLine(_("Language"), self.book.language, text_width),
-                                      infoLine(_("Type"), self.book.book_type, text_width),
-                                      infoLine(_("Format"), self.book.file_type, text_width),
-                                      infoLine(_("Size"), self.book.file_size, text_width)}
+    self.details_group = self:buildDetails(text_width)
 
-    local header = details
-    if self.cover then
-        header = HorizontalGroup:new{self.cover, HorizontalSpan:new{
+    local about = VerticalGroup:new{
+        align = "left",
+        self.title,
+        VerticalSpan:new{
+            width = Size.padding.small
+        },
+        self.author,
+        VerticalSpan:new{
             width = Size.padding.large
-        }, details}
+        },
+        self.details_group
+    }
+
+    self.header = about
+    if self.cover then
+        self.header = HorizontalGroup:new{
+            align = "top",
+            self.cover,
+            HorizontalSpan:new{
+                width = Size.padding.large
+            },
+            about
+        }
     end
 
-    return VerticalGroup:new{header, VerticalSpan:new{
-        width = Size.padding.large
-    }, TextBoxWidget:new{
+    return VerticalGroup:new{
+        align = "left",
+        self.header,
+        VerticalSpan:new{
+            width = Size.padding.large * 2
+        },
+        TextBoxWidget:new{
+            width = CONTENT_WIDTH,
+            face = LABEL_FACE,
+            text = _("Download to"),
+            fgcolor = LABEL_COLOR
+        },
+        VerticalSpan:new{
+            width = Size.padding.small
+        },
+        self.path_widget
+    }
+end
+
+-- the download path, which can be tapped to choose another folder
+function DownloadPrompt:buildPathButton()
+    self.path_widget = Button:new{
+        text = self.filepath,
+        callback = function()
+            self:choosePath()
+        end,
+        text_font_size = 16,
+        text_font_bold = false,
+        bordersize = Size.border.thin,
+        radius = Size.radius.button,
+        padding = Size.padding.default,
         width = CONTENT_WIDTH,
-        face = Font:getFace("cfont", 14),
-        text = _("Download to:"),
-        fgcolor = Blitbuffer.COLOR_DARK_GRAY
-    }, VerticalSpan:new{
-        width = Size.padding.small
-    }, self.path_widget, VerticalSpan:new{
-        width = Size.padding.large
-    }, HorizontalGroup:new{
-        align = "center",
-        self.download_button
-    }}
+        max_width = CONTENT_WIDTH
+    }
 end
 
 function DownloadPrompt:choosePath()
@@ -242,21 +359,10 @@ function DownloadPrompt:choosePath()
             local filename = self.filepath:match("([^/]+)$") or ""
             self.filepath = dir .. "/" .. filename
 
-            -- recreate button to avoid font issues with new text being set
-            self.path_widget = Button:new{
-                text = self.filepath,
-                callback = function()
-                    self:choosePath()
-                end,
-                bordersize = Size.border.default,
-                padding = Size.padding.default,
-                width = CONTENT_WIDTH,
-                max_width = CONTENT_WIDTH
-            }
-
-            -- replace old widget in the layout
-            self.frame[1]:free()
-            self.frame[1] = self:buildContent()
+            -- recreate the button rather than setting its text, which keeps the old text's size
+            self:buildPathButton()
+            self.body[1]:free()
+            self.body[1] = self:buildContent()
 
             UIManager:forceRePaint()
         end

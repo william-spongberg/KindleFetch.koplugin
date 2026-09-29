@@ -15,9 +15,25 @@ describe("DownloadPrompt", function()
     end
 
     -- the group with the book's title, authors and details, beside the cover if there is one
-    local function detailsGroup(prompt)
-        local header = prompt.frame[1][1]
-        return prompt.cover and header[3] or header
+    -- the book's details, as label and value pairs
+    local function details(prompt)
+        local rows = {}
+        for _, row in ipairs(prompt.details_group) do
+            if row[1] and row[3] then
+                table.insert(rows, {row[1].text, row[3].text})
+            end
+        end
+        return rows
+    end
+
+    -- tap one of the buttons along the bottom
+    local function tapButton(prompt, id)
+        for _, button in ipairs(prompt.button_table.buttons[1]) do
+            if button.id == id then
+                return button.callback()
+            end
+        end
+        error("no button " .. id)
     end
 
     before_each(function()
@@ -46,27 +62,25 @@ describe("DownloadPrompt", function()
         assert.are.equal("Dune", prompt.title.text)
         assert.are.equal("Frank Herbert", prompt.author.text)
         assert.are.equal("/mnt/us/documents/Dune.epub", prompt.path_widget.text)
-
-        local details = {}
-        for _, widget in ipairs(detailsGroup(prompt)) do
-            if widget.text then
-                table.insert(details, widget.text)
-            end
-        end
-        assert.are.same({"Dune", "Frank Herbert", "Year: 1990", "Language: English [en]", "Type: Book (fiction)",
-                         "Format: epub", "Size: 1.2MB"}, details)
+        assert.are.same({{"Format", "EPUB · 1.2MB"}, {"Language", "English [en]"}, {"Year", "1990"},
+                         {"Type", "Book (fiction)"}}, details(prompt))
     end)
 
-    it("shows the author and details in black", function()
+    -- in greys dark enough to read on e-ink (#3)
+    it("shows the title and details in black, and the author and labels in grey", function()
         local prompt = newPrompt()
-        assert.are.equal("black", prompt.author.fgcolor)
-        assert.are.equal("black", detailsGroup(prompt)[5].fgcolor)
+        assert.are.equal("gray 4", prompt.author.fgcolor)
+        assert.are.equal("gray 6", prompt.details_group[1][1].fgcolor)
+        assert.are.equal("black", prompt.details_group[1][3].fgcolor)
+        assert.is_true(prompt.title.bold)
     end)
 
-    it("shows a dash for missing details", function()
+    it("leaves out missing details", function()
         book.year = nil
+        book.file_size = nil
         local prompt = newPrompt()
-        assert.are.equal("Year: -", detailsGroup(prompt)[5].text)
+        assert.are.same({{"Format", "EPUB"}, {"Language", "English [en]"}, {"Type", "Book (fiction)"}},
+            details(prompt))
     end)
 
     it("shows and closes", function()
@@ -81,9 +95,18 @@ describe("DownloadPrompt", function()
     it("downloads to the chosen path when confirmed", function()
         local prompt = newPrompt()
         prompt:show()
-        prompt.download_button.callback()
+        tapButton(prompt, "download")
 
         assert.are.same({"/mnt/us/documents/Dune.epub"}, downloads)
+        assert.is_true(helper.wasClosed(prompt.outer_container))
+    end)
+
+    it("closes without downloading when cancelled", function()
+        local prompt = newPrompt()
+        prompt:show()
+        tapButton(prompt, "cancel")
+
+        assert.are.same({}, downloads)
         assert.is_true(helper.wasClosed(prompt.outer_container))
     end)
 
@@ -95,7 +118,7 @@ describe("DownloadPrompt", function()
         assert.are.equal("/mnt/us/books/Dune.epub", prompt.filepath)
         assert.are.equal("/mnt/us/books/Dune.epub", prompt.path_widget.text)
 
-        prompt.download_button.callback()
+        tapButton(prompt, "download")
         assert.are.same({"/mnt/us/books/Dune.epub"}, downloads)
     end)
 
@@ -149,7 +172,7 @@ describe("DownloadPrompt", function()
             cacheCover()
             prompt.outer_container:onKindleFetchCoversDownloaded()
             assert.are.equal(prompt.cover_container, prompt.cover)
-            assert.are.equal(prompt.cover, prompt.frame[1][1][1])
+            assert.are.equal(prompt.cover, prompt.header[1])
         end)
 
         it("is taken away when it couldn't be downloaded", function()
