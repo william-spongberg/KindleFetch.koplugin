@@ -2,7 +2,7 @@
 
 <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/stars/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github star tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/downloads/william-spongberg/KindleFetch.koplugin/total.svg" height="25px" alt="Github downloads tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/v/release/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github release version tracker"></a>
 
-Download books from Library Genesis directly to your Kindle, entirely within the KOReader app.
+Download books from Library Genesis directly to your Kindle (or any e-reader running KOReader), entirely within the KOReader app.
 
 ## Overview
 
@@ -16,10 +16,11 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
   - Mirror URLs (1 week expiry by default)
   - Book covers (500 entries max)
 - **Preferences**: Filter results by preferred languages, file types, and book types
-- **Book Cover Previews**: Display cover images in search results and download previews, with placeholders while they download
+- **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders while they download; tap a cover in the download prompt to see it full size
 - **Download Progress**: Visual download progress bar with real-time file size information
-- **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates
+- **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download and choose its book again to see its progress, and downloads are cancelled when KOReader closes
 - **Read Now**: Offers to open a book as soon as it has downloaded
+- **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch, in KOReader's gesture manager)
 - **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available on Kindles
 - **Automatic Plugin Updates**: Checks for new plugin releases once per session and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu)
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
@@ -51,12 +52,12 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 <img width="400" alt="Search results while covers download" src="docs/screenshots/04-search-results-loading-covers.png" />
 <img width="400" alt="Search results with covers" src="docs/screenshots/05-search-results.png" />
 
-3. In the download prompt, optionally tap the book cover for a fullscreen preview or adjust the download location via the download path button.
+3. In the download prompt, optionally tap the book cover to see it full size, or tap the download path to choose another folder, then tap Download.
 
 <img width="400" alt="Download prompt" src="docs/screenshots/06-download-prompt.png" />
 <img width="400" alt="Fullscreen cover" src="docs/screenshots/07-download-cover.png" />
 
-4. Confirm the download and monitor progress; tap Hide to run in background or Cancel to stop.
+4. Monitor the download's progress; tap Hide to keep it downloading in the background (choose the book again to see its progress) or Cancel to stop it.
 
 <img width="400" alt="Download progress" src="docs/screenshots/08-download-progress.png" />
 
@@ -120,18 +121,19 @@ kindlefetch.koplugin/
 │   └── urlapi.lua             # Scrapes Wikipedia to discover current Library Genesis mirror URLs
 ├── ui/
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination
-│   ├── downloadprompt.lua     # Modal dialog for confirming download details, choosing save location, displaying metadata, and fullscreen cover preview
+│   ├── coverplaceholder.lua   # Placeholder shown in place of a cover while it downloads
+│   ├── downloadprompt.lua     # Dialog showing a book's details and cover (full size when tapped), where to save it, and a Download button
 │   └── downloadprogress.lua   # Renders a centered progress widget with cancel and hide buttons
 ├── cache/
 │   ├── cache.lua              # Generic caching system with expiry, size limits, and timestamp-based cleanup
-│   ├── searchcache.lua        # Caches search results by query, page, and filter preferences (2 week expiry, 1000-entry limit)
-│   ├── urlcache.lua           # Caches mirror URLs to minimize Wikipedia scraping (1 week expiry)
-│   └── covercache.lua         # Caches book cover images by MD5 hash (500-entry limit, persists across sessions)
+│   ├── searchcache.lua        # Caches search results by query, page, and filter preferences (2 weeks by default, 1000-entry limit)
+│   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
+│   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions)
 ├── updater/
 │   ├── curlupdater.lua        # Checks curl version and automatically installs static curl (8.17.0) if needed
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes
 └── util/
-    ├── curlutil.lua           # Manages curl downloads, background processes, parallel downloads, and version checking
+    ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
     ├── httputil.lua           # HTTP requests with timeout, proxy support, and automatic fallback
     ├── fileutil.lua           # File operations (size, creation, deletion, validation) and directory checks
     ├── stringutil.lua         # String utilities (trimming, validation, emoji removal, HTML entity conversion)
@@ -159,35 +161,35 @@ kindlefetch.koplugin/
 
 2. **Search Phase** (`LlgiSearch`)
    - User enters a search query via InputDialog
-   - Plugin resolves the current Library Genesis mirror URL (with weekly caching)
+   - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
    - HTML table is parsed to extract book metadata (title, authors, year, language, file type, MD5 hash, cover image URL), keeping books in the preferred languages and file types
    - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there
-   - Results are cached (2 weeks max, 1000 entries) to minimise requests
+   - Results are cached (2 weeks by default, 1000 entries max) to minimise requests
    - Search results are displayed in a menu
 
 3. **Cover Loading**
-   - On initial search result display, covers are loaded in the background
-   - Subsequent pages trigger `onPageChange` callback to load covers for visible items
-   - Covers are downloaded in parallel using curl's `--parallel` flag
+   - Covers for the page of results showing are downloaded in the background, in parallel using curl's `--parallel` flag, with placeholders shown until they arrive
+   - Turning the page loads the covers for that page
    - Downloaded covers are cached locally with persistent storage
-   - If cover download fails, book entry displays without cover image
+   - If a cover can't be downloaded, its book is shown without one
+   - Tapping a cover in the download prompt downloads the full-size cover, showing the thumbnail until it arrives
 
 4. **Download Phase** (`LlgiAPI`)
    - User selects a book and optionally changes the save location via DownloadPrompt
-   - Book cover image is fetched and cached locally
-   - Plugin resolves the current Library Genesis mirror URL (with weekly caching)
+   - The book's cover is fetched if it isn't cached already
+   - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Curl fetches the ads page using the book's MD5 hash to obtain a download URL
    - File size is determined from HTTP headers for progress calculation
    - A curl process is spawned to download the file in the background
    - Progress widget updates every 0.5 seconds with percentage and file size information
-   - On completion, file is saved to the configured download directory
+   - On completion, file is saved to the configured download directory, and the plugin offers to open it
 
 5. **Error Handling & Resilience**
-   - Network connectivity is verified before searching
+   - Wi-Fi is turned on before searching if it's off
    - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or corrupted downloads are detected and deleted
    - Failed mirrors are removed from cache; if all cached URLs fail they are re-scraped from Wikipedia
-   - User can cancel downloads at any time via the progress widget
+   - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes
    - Curl exit codes are mapped to human-readable error messages and the user is notified
 
 ### Environment Variables
@@ -202,7 +204,7 @@ If a search, book cover or book download fails, the plugin automatically retries
 
 ## Attribution
 
-This plugin is forked from [justrals/KindleFetch](https://github.com/justrals/KindleFetch). It uses a similar underlying logic, but focuses on easy UX and simplicity. The choice was made to only support downloads from Library Genesis due to limitiations and complexity surrounding Z-Library downloads.
+This plugin is forked from [justrals/KindleFetch](https://github.com/justrals/KindleFetch). It uses a similar underlying logic, but focuses on easy UX and simplicity. The choice was made to only support downloads from Library Genesis due to limitations and complexity surrounding Z-Library downloads, and as Anna's Archive now blocks automated access.
 
 ## License
 
@@ -216,4 +218,4 @@ This plugin facilitates downloading books from Library Genesis. Ensure you have 
 
 Contributions are welcome! Please open an issue or submit a pull request with improvements, bug fixes, or new features.
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for running KindleFetch on your computer (Linux or Windows), running the tests, and releasing.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for running KindleFetch on your computer (Linux), running the tests, and releasing.
