@@ -79,7 +79,7 @@ describe("Downloading", function()
 
         local since = #H.notifications
         H.tapButton("Cancel")
-        H.waitForNotification("Download failed: cancelled", 30, since)
+        H.waitForNotification("Download cancelled", 30, since)
         H.eq(0, #require("api.lgliapi"):getActiveDownloads(), "downloads in progress")
     end)
 end)

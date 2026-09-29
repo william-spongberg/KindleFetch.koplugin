@@ -346,8 +346,11 @@ function KindleFetch:downloadBook(book)
                 }
                 UIManager:show(dialog)
             end)
+        elseif err == "cancelled" then
+            LogUtil.debug("download cancelled", book.title)
+            NotifyUtil.info(_("Download cancelled"))
         else
-            LogUtil.warn("download failed for")
+            LogUtil.warn("download failed for", book.title, err)
             NotifyUtil.info(err and ("Download failed: " .. err) or "Download failed")
         end
     end)
