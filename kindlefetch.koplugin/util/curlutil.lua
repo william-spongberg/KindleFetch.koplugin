@@ -53,8 +53,25 @@ function CurlUtil.shellQuote(str)
     return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
 end
 
+-- where running processes are listed (changed by the tests)
+CurlUtil.PROC_DIR = "/proc"
+
 function CurlUtil.isPidRunning(pid)
     if not pid then
+        return false
+    end
+
+    -- downloads are checked on twice a second, so look in /proc rather than starting a shell each time to ask kill
+    local stat_file = io.open(string.format("%s/%d/stat", CurlUtil.PROC_DIR, pid), "r")
+    if stat_file then
+        local stat = stat_file:read("*l") or ""
+        stat_file:close()
+        -- a process that has finished, but hasn't been cleaned up yet, isn't running
+        return stat:match(".*%)%s+(%a)") ~= "Z"
+    end
+    local self_stat = io.open(CurlUtil.PROC_DIR .. "/self/stat", "r")
+    if self_stat then
+        self_stat:close()
         return false
     end
 

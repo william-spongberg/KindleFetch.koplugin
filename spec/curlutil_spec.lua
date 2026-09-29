@@ -54,6 +54,30 @@ describe("CurlUtil", function()
             assert.is_false(CurlUtil.isPidRunning(pid))
         end)
 
+        it("looks in /proc, without starting a shell", function()
+            local proc = helper.tmpdir("proc")
+            CurlUtil.PROC_DIR = proc
+            helper.writeFile(proc .. "/self/stat", "100 (luajit) R 1")
+            helper.writeFile(proc .. "/4242/stat", "4242 (sh (curl)) S 1 4242")
+            helper.writeFile(proc .. "/4343/stat", "4343 (sh) Z 1 4343")
+            helper.stubExecute("kill -0", function()
+                error("started a shell")
+            end)
+
+            assert.is_true(CurlUtil.isPidRunning(4242))
+            -- finished, but not cleaned up yet
+            assert.is_false(CurlUtil.isPidRunning(4343))
+            assert.is_false(CurlUtil.isPidRunning(4444))
+        end)
+
+        it("asks kill on systems without /proc", function()
+            CurlUtil.PROC_DIR = helper.tmpdir("no-proc")
+            helper.stubExecute("kill -0 4242", function()
+                return 0
+            end)
+            assert.is_true(CurlUtil.isPidRunning(4242))
+        end)
+
         it("ignores missing pids", function()
             assert.is_false(CurlUtil.isPidRunning(nil))
             CurlUtil.killPid(nil)
