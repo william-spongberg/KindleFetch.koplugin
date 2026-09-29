@@ -202,6 +202,30 @@ describe("CoverCache", function()
             assert.are.same({"KindleFetchCoversDownloaded"}, helper.state.broadcasts)
         end)
 
+        describe("full-size", function()
+            it("are downloaded from the thumbnail's address without _small, and kept apart from it", function()
+                local b = book("abc", "https://libgen.example/fictioncovers/1000/abc_small.jpg")
+                assert.is_nil(CoverCache:getFullSize(b))
+
+                assert.is_true(CoverCache:downloadFullSize(b))
+                assert.are.same({"https://libgen.example/fictioncovers/1000/abc.jpg"}, runs[1].urls)
+                assert.are.same({covers_dir .. "abc_full.jpg"}, runs[1].paths)
+
+                finishRun(runs[1], {true})
+                helper.tick()
+                assert.are.equal(covers_dir .. "abc_full.jpg", CoverCache:getFullSize(b))
+                assert.is_nil(CoverCache:get("abc"))
+                assert.is_false(CoverCache:downloadFullSize(b))
+            end)
+
+            it("aren't downloaded for covers that aren't thumbnails", function()
+                assert.is_false(CoverCache:downloadFullSize(book("abc", "https://covers.example/abc.jpg")))
+                assert.is_false(CoverCache:downloadFullSize(book("abc")))
+                assert.are.equal(0, #runs)
+                assert.is_nil(CoverCache:getFullSize(book("abc")))
+            end)
+        end)
+
         it("does not download covers that are already downloading", function()
             local books = {book("a", "https://covers.example/a.jpg")}
             CoverCache:downloadMultiple(books, 6, onDone)

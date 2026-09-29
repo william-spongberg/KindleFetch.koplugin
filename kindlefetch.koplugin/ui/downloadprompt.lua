@@ -115,14 +115,21 @@ function DownloadPrompt.new(book, filepath, on_download)
     return self
 end
 
+-- the full-size cover once it has downloaded (after the cover was first enlarged), otherwise the thumbnail from
+-- the search results
+function DownloadPrompt:coverFile()
+    return CoverCache:getFullSize(self.book) or CoverCache:get(self.book.md5)
+end
+
 -- the book's cover (which can be tapped to show it fullscreen), a placeholder while it downloads, or nothing
 function DownloadPrompt:buildCover()
     self.cover = nil
     self.cover_container = nil
 
-    if CoverCache:cacheExists(self.book.md5) then
+    local cover_file = self:coverFile()
+    if cover_file then
         local cover_image = ImageWidget:new{
-            file = CoverCache:get(self.book.md5),
+            file = cover_file,
             width = COVER_SIZE,
             height = COVER_SIZE,
             scale_factor = 0,
@@ -169,6 +176,12 @@ function DownloadPrompt:refreshCover()
     self:buildCover()
     self.frame[1] = self:buildContent()
     UIManager:setDirty(self.outer_container, "ui")
+
+    -- show the full-size cover fullscreen too, if it arrived while the thumbnail was showing
+    if self.fullscreen_cover_shown and self.fullscreen_file ~= self:coverFile() then
+        self:closeFullscreenCover()
+        self:showFullscreenCover()
+    end
 end
 
 function DownloadPrompt:buildContent()
@@ -259,14 +272,18 @@ function DownloadPrompt:toggleFullscreenCover()
 end
 
 function DownloadPrompt:showFullscreenCover()
-    if not CoverCache:cacheExists(self.book.md5) then
+    local cover_file = self:coverFile()
+    if not cover_file then
         return
     end
 
     self.fullscreen_cover_shown = true
+    self.fullscreen_file = cover_file
+    -- only get the full-size cover once it's wanted, showing the thumbnail until it arrives
+    CoverCache:downloadFullSize(self.book)
 
     local fullscreen_image = ImageWidget:new{
-        file = CoverCache:get(self.book.md5),
+        file = cover_file,
         width = Screen:getWidth(),
         height = Screen:getHeight(),
         scale_factor = 0,

@@ -193,6 +193,62 @@ describe("DownloadPrompt", function()
             assert.are.equal(closed, #helper.state.closed)
         end)
 
+        describe("full-size", function()
+            local CoverCache, runs
+
+            before_each(function()
+                CoverCache = require("cache.covercache")
+                runs = {}
+                local CurlUtil = require("util.curlutil")
+                CurlUtil.downloadMultiple = function(urls, paths)
+                    table.insert(runs, {
+                        urls = urls,
+                        paths = paths
+                    })
+                    return 4000, CurlUtil.createExitFile(), data_dir .. "/curl_config.txt"
+                end
+                CurlUtil.isPidRunning = function()
+                    return true
+                end
+                book.image_url = "https://libgen.example/fictioncovers/1000/dune_small.jpg"
+                cacheCover()
+            end)
+
+            it("is only downloaded once the cover is enlarged, showing the thumbnail until then", function()
+                local prompt = newPrompt()
+                assert.are.equal(0, #runs)
+
+                prompt.cover_container:onTapCover()
+                assert.are.same({"https://libgen.example/fictioncovers/1000/dune.jpg"}, runs[1].urls)
+                assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
+            end)
+
+            it("replaces the thumbnail once it arrives", function()
+                local prompt = newPrompt()
+                prompt.cover_container:onTapCover()
+                local thumbnail = prompt.fullscreen_container
+
+                fixtures.cacheCover(helper, book.md5 .. "_full")
+                prompt.outer_container:onKindleFetchCoversDownloaded()
+                assert.is_true(helper.wasClosed(thumbnail))
+                assert.is_true(prompt.fullscreen_cover_shown)
+                assert.are.equal(prompt.fullscreen_container, helper.lastShown())
+                assert.are.equal(CoverCache:getFullSize(book), prompt.fullscreen_file)
+                assert.are.equal(CoverCache:getFullSize(book), prompt.cover_container[1][1].file)
+                assert.are.equal(1, #runs)
+            end)
+
+            it("leaves the thumbnail showing when it couldn't be downloaded", function()
+                local prompt = newPrompt()
+                prompt.cover_container:onTapCover()
+                local thumbnail = prompt.fullscreen_container
+
+                prompt.outer_container:onKindleFetchCoversDownloaded()
+                assert.is_false(helper.wasClosed(thumbnail))
+                assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
+            end)
+        end)
+
         it("closes along with the prompt", function()
             cacheCover()
             local prompt = newPrompt()
