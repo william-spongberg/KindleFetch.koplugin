@@ -48,7 +48,7 @@ local function parseBook(row, base_url)
 
     -- cover, title, authors, publisher, year, language, pages, size, extension, mirrors
     if #cells < 10 then
-        LogUtil.warn("skipped row with missing cells")
+        LogUtil.debug("skipped row with missing cells, e.g. the table's header")
         return nil
     end
 
