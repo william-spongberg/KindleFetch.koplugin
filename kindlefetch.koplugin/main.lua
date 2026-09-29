@@ -1,7 +1,7 @@
 local Dispatcher = require("dispatcher")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
-local ConfirmBox = require("ui/widget/confirmbox")
+local ButtonDialog = require("ui/widget/buttondialog")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
@@ -322,16 +322,29 @@ function KindleFetch:downloadBook(book)
             LogUtil.debug("downloaded book to", saved_filepath)
             -- ask on the next tick, once the download progress has closed
             UIManager:nextTick(function()
-                -- the title in bold on a line of its own, so it stands out from the question
-                UIManager:show(ConfirmBox:new{
-                    text = string.format("%s%s\n%s%s%s\n\n%s", TextBoxWidget.PTF_HEADER, _("Downloaded"),
+                -- centred, with the title in bold on a line of its own, so it stands out from the question
+                local dialog
+                dialog = ButtonDialog:new{
+                    title = string.format("%s%s\n%s%s%s\n\n%s", TextBoxWidget.PTF_HEADER, _("Downloaded"),
                         TextBoxWidget.PTF_BOLD_START, book.title, TextBoxWidget.PTF_BOLD_END,
                         _("Would you like to read it now?")),
-                    ok_text = _("Read now"),
-                    ok_callback = function()
-                        self:openBook(saved_filepath)
-                    end
-                })
+                    title_align = "center",
+                    buttons = {{{
+                        text = _("Cancel"),
+                        id = "close",
+                        callback = function()
+                            UIManager:close(dialog)
+                        end
+                    }, {
+                        text = _("Read now"),
+                        id = "read",
+                        callback = function()
+                            UIManager:close(dialog)
+                            self:openBook(saved_filepath)
+                        end
+                    }}}
+                }
+                UIManager:show(dialog)
             end)
         else
             LogUtil.warn("download failed for")

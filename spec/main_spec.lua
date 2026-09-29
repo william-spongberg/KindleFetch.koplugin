@@ -485,13 +485,27 @@ describe("KindleFetch", function()
             helper.tick()
 
             local dialog = helper.lastShown()
-            -- the title is bold, on a line of its own
-            assert.are.equal("\u{FFF1}Downloaded\n\u{FFF2}Dune\u{FFF3}\n\nWould you like to read it now?", dialog.text)
-            assert.are.equal("Read now", dialog.ok_text)
+            -- centred, with the title in bold on a line of its own
+            assert.are.equal("\u{FFF1}Downloaded\n\u{FFF2}Dune\u{FFF3}\n\nWould you like to read it now?", dialog.title)
+            assert.are.equal("center", dialog.title_align)
+            local read_now = dialog.buttons[1][2]
+            assert.are.equal("Read now", read_now.text)
 
-            dialog.ok_callback()
+            read_now.callback()
+            assert.is_true(helper.wasClosed(dialog))
             assert.are.same({"openFile", "/mnt/us/books/Dune.epub"}, opened)
             assert.is_true(helper.wasClosed(menus[1]))
+        end)
+
+        it("closes the offer to read the book when cancelled", function()
+            selectBook("Dune")
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+
+            local dialog = helper.lastShown()
+            dialog.buttons[1][1].callback()
+            assert.is_true(helper.wasClosed(dialog))
+            assert.is_nil(opened)
         end)
 
         it("switches to the downloaded book when already reading one", function()
@@ -499,7 +513,7 @@ describe("KindleFetch", function()
             selectBook("Dune")
             downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
             helper.tick()
-            helper.lastShown().ok_callback()
+            helper.lastShown().buttons[1][2].callback()
 
             assert.are.same({"switchDocument", "/mnt/us/books/Dune.epub"}, opened)
         end)

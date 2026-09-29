@@ -488,7 +488,7 @@ local WIDGET_MODULES = {"ui/gesturerange", "ui/widget/container/centercontainer"
                         "ui/widget/verticalgroup", "ui/widget/horizontalgroup", "ui/widget/verticalspan",
                         "ui/widget/horizontalspan", "ui/widget/textboxwidget", "ui/widget/textwidget",
                         "ui/widget/imagewidget", "ui/widget/button", "ui/widget/progresswidget",
-                        "ui/widget/confirmbox", "ui/widget/iconwidget",
+                        "ui/widget/confirmbox", "ui/widget/buttondialog", "ui/widget/iconwidget",
                         "ui/widget/buttontable"}
 
 local CONSTANT_MODULES = {
