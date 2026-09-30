@@ -53,10 +53,131 @@ describe("CurlUpdater", function()
             assert.matches("curl v7.68.0 is installed.\nMinimum required: v8.17.0", dialog.input, 1, true)
         end)
 
+        it("fails when the curl version cannot be read", function()
+            helper.stubCommand("curl --version", "curl . (unknown)\n")
+            assert.is_false(CurlUpdater.checkVersion())
+            assert.are.equal(0, #helper.state.shown)
+        end)
+
         it("fails when curl is not installed", function()
             helper.stubCommand("curl --version", "")
             assert.is_false(CurlUpdater.checkVersion())
             assert.are.equal(0, #helper.state.shown)
+        end)
+    end)
+
+    describe("installing", function()
+        local commands
+
+        -- record the install commands instead of running them, failing the ones listed in failures
+        -- (find_backup failing means the system curl has not been backed up yet)
+        local function stubInstall(failures)
+            failures = failures or {}
+            commands = {}
+            local steps = {
+                chmod = "chmod +x",
+                remount_rw = "mntroot rw",
+                remount_ro = "mntroot ro",
+                find_backup = "test -f '/usr/bin/curl.system.bak'",
+                backup = "cp '/usr/bin/curl' '/usr/bin/curl.system.bak'",
+                install = "/curl-armhf' '/usr/bin/curl'",
+                permissions = "chmod 755 '/usr/bin/curl'"
+            }
+            for step, pattern in pairs(steps) do
+                helper.stubExecute(pattern, function()
+                    table.insert(commands, step)
+                    return failures[step] and 256 or 0
+                end)
+            end
+        end
+
+        local function acceptUpdate()
+            installedCurl("7.68.0")
+            CurlUpdater.checkVersion()
+            helper.lastShown().buttons[1][2].callback()
+        end
+
+        before_each(function()
+            CurlUtil.download = function(_, filepath)
+                helper.writeFile(filepath, "curl binary")
+                return true
+            end
+        end)
+
+        it("backs up the system curl, then installs the static build", function()
+            stubInstall({find_backup = true})
+            acceptUpdate()
+
+            assert.are.same({"chmod", "remount_rw", "find_backup", "backup", "install", "permissions", "remount_ro"},
+                commands)
+            assert.are.equal("Updated curl to v8.17.0", helper.lastNotification())
+        end)
+
+        it("keeps an existing backup of the system curl", function()
+            stubInstall()
+            acceptUpdate()
+
+            assert.are.same({"chmod", "remount_rw", "find_backup", "install", "permissions", "remount_ro"}, commands)
+        end)
+
+        it("does nothing when the user cancels", function()
+            stubInstall()
+            installedCurl("7.68.0")
+            CurlUpdater.checkVersion()
+            local dialog = helper.lastShown()
+            dialog.buttons[1][1].callback()
+
+            assert.is_true(helper.wasClosed(dialog))
+            assert.are.same({}, commands)
+        end)
+
+        it("removes the download when it cannot be made executable", function()
+            stubInstall({chmod = true})
+            acceptUpdate()
+
+            assert.are.same({"chmod"}, commands)
+            assert.is_false(helper.exists(data_dir .. "/cache/kindlefetch/curl-armhf"))
+            assert.are.equal("Failed to set file permissions", helper.lastNotification())
+        end)
+
+        it("stops when the root filesystem cannot be made writable", function()
+            stubInstall({remount_rw = true})
+            acceptUpdate()
+
+            assert.are.same({"chmod", "remount_rw"}, commands)
+            assert.are.equal("Failed to remount root as read-write", helper.lastNotification())
+        end)
+
+        it("makes the root filesystem read-only again when the backup fails", function()
+            stubInstall({find_backup = true, backup = true})
+            acceptUpdate()
+
+            assert.are.same({"chmod", "remount_rw", "find_backup", "backup", "remount_ro"}, commands)
+            assert.are.equal("Failed to create curl backup", helper.lastNotification())
+        end)
+
+        it("makes the root filesystem read-only again when installing fails", function()
+            stubInstall({install = true})
+            acceptUpdate()
+
+            assert.are.same({"chmod", "remount_rw", "find_backup", "install", "remount_ro"}, commands)
+            assert.are.equal("Failed to install new curl update", helper.lastNotification())
+        end)
+
+        it("reports when the root filesystem cannot be made read-only again", function()
+            stubInstall({install = true, remount_ro = true})
+            acceptUpdate()
+            assert.are.equal("Failed to remount root as read-only", helper.lastNotification())
+
+            stubInstall({remount_ro = true})
+            acceptUpdate()
+            assert.are.equal("Failed to remount root as read-only", helper.lastNotification())
+        end)
+
+        it("carries on when the installed curl's permissions cannot be set", function()
+            stubInstall({permissions = true})
+            acceptUpdate()
+            assert.are.equal("Updated curl to v8.17.0", helper.lastNotification())
         end)
     end)
 

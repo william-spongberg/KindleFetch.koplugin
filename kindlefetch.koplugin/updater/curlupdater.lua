@@ -33,6 +33,17 @@ local function getCurlVersion()
     return version
 end
 
+-- remount root as read-only, returning false if it could not be
+local function remountReadOnly()
+    LogUtil.debug("remounting rootfs as read-only")
+    if os.execute("mntroot ro 2>/dev/null") ~= 0 then
+        LogUtil.warn("failed to remount rootfs as read-only")
+        NotifyUtil.info("Failed to remount root as read-only")
+        return false
+    end
+    return true
+end
+
 -- update curl using static release from moparisthebest/static-curl
 -- basically adds safe guards around the sh script given here https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
 local function updateCurl()
@@ -80,6 +91,7 @@ local function updateCurl()
             CurlUtil.shellQuote(backup_curl))) ~= 0 then
             LogUtil.warn("failed to backup curl to", backup_curl)
             NotifyUtil.info("Failed to create curl backup")
+            remountReadOnly()
             return false
         end
     end
@@ -90,13 +102,7 @@ local function updateCurl()
         string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(system_curl))) ~= 0 then
         LogUtil.warn("failed to install static curl")
         NotifyUtil.info("Failed to install new curl update")
-
-        -- back to read only perms
-        LogUtil.debug("remounting rootfs as read-only") 
-        if os.execute("mntroot ro 2>/dev/null") ~= 0 then
-            LogUtil.warn("failed to remount rootfs as read-only")
-            NotifyUtil.info("Failed to remount root as read-only")
-        end
+        remountReadOnly()
         return false
     end
 
@@ -105,11 +111,7 @@ local function updateCurl()
         LogUtil.warn("failed to set curl permissions (continuing anyway)")
     end
 
-    -- remount as read-only
-    LogUtil.debug("remounting rootfs as read-only")
-    if os.execute("mntroot ro 2>/dev/null") ~= 0 then
-        LogUtil.warn("failed to remount rootfs as read-only")
-        NotifyUtil.info("Failed to remount root as read-only")
+    if not remountReadOnly() then
         return false
     end
 

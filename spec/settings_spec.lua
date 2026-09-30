@@ -55,6 +55,53 @@ describe("KindleFetchSettings", function()
         end)
     end)
 
+    describe("setDownloadDir", function()
+        it("saves folders that exist", function()
+            local books = helper.tmpdir("books")
+            assert.is_true(Settings:setDownloadDir(books))
+            assert.are.equal(books, Settings:getDownloadDir())
+        end)
+
+        it("refuses folders that do not exist", function()
+            local ok, err = Settings:setDownloadDir(data_dir .. "/missing")
+            assert.is_false(ok)
+            assert.are.equal("Invalid directory path", err)
+        end)
+    end)
+
+    describe("preferences", function()
+        it("are saved", function()
+            Settings:setShowBookCovers(false)
+            Settings:setPreferredLanguages({"fr", "de"})
+            Settings:setPreferredFileTypes({"mobi"})
+            Settings:setPreferredBookTypes({"book_nonfiction"})
+
+            assert.is_false(Settings:getShowBookCovers())
+            assert.are.same({"fr", "de"}, Settings:getPreferredLanguages())
+            assert.are.same({"mobi"}, Settings:getPreferredFileTypes())
+            assert.are.same({"book_nonfiction"}, Settings:getPreferredBookTypes())
+        end)
+
+        it("offer every choice Anna's Archive supports", function()
+            assert.are.same({text = "English", code = "en"}, Settings:getAvailableLanguages()[1])
+            assert.are.equal(100, #Settings:getAvailableLanguages())
+            assert.are.same({"cbr", "cbz"}, Settings:getComicFileTypes())
+            assert.are.same({"epub", "mobi", "azw", "azw3", "kfx", "fb2", "lit", "prc", "lrf", "snb", "updb"},
+                Settings:getEbookFileTypes())
+            assert.are.same({"pdf", "txt", "rtf", "doc", "docx", "odt", "djvu"}, Settings:getDocumentFileTypes())
+            assert.are.same({"jpg", "tif", "pdb"}, Settings:getImageFileTypes())
+            assert.are.same({"chm", "htm", "html", "htmlz", "mht"}, Settings:getWebFileTypes())
+            assert.are.same({"book_fiction", "book_nonfiction", "book_unknown", "book_comic", "standards_document"},
+                (function()
+                    local codes = {}
+                    for _, book_type in ipairs(Settings:getAvailableBookTypes()) do
+                        table.insert(codes, book_type.code)
+                    end
+                    return codes
+                end)())
+        end)
+    end)
+
     describe("load", function()
         it("saves a usable download folder on devices without a home dir", function()
             helper.stubs.device.home_dir = nil

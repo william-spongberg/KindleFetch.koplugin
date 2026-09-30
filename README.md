@@ -209,11 +209,12 @@ Contributions are welcome! Please open an issue or submit a pull request with im
 
 ### Running tests
 
-Tests live in `spec/` and run with [busted](https://lunarmodules.github.io/busted/), ideally on LuaJIT to match KOReader. KOReader modules are stubbed in `spec/helper.lua`, so no KOReader build is needed. The plugin update tests also need `zip` and `unzip`.
+Tests live in `spec/` and run with [busted](https://lunarmodules.github.io/busted/), ideally on LuaJIT to match KOReader. KOReader modules are stubbed in `spec/helper.lua`, so no KOReader build is needed. The plugin update tests also need `zip` and `unzip`, and the mirror tests scrape the live Wikipedia pages, so they need internet access.
 
 ```bash
-luarocks install busted
+luarocks install busted luacov
 busted            # run from the repository root
+busted --coverage && luacov   # coverage report in luacov.report.out
 ```
 
 Tests run automatically on every push.

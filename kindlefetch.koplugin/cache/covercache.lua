@@ -31,7 +31,8 @@ function CoverCache:getPath(md5)
 end
 
 function CoverCache:cacheExists(md5)
-    return FileUtil.isValidFile(self:getPath(md5))
+    -- must agree with get, as covers are shown using the path it returns
+    return self:get(md5) ~= nil
 end
 
 function CoverCache:get(md5)

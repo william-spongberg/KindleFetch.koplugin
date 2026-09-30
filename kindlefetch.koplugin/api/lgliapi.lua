@@ -89,7 +89,7 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         end
 
         FileUtil.removeFile(filepath)
-        callback(false, CurlUtil.getErrorMeaning(exit_code))
+        callback(false, exit_code == 0 and "download produced empty file" or CurlUtil.getErrorMeaning(exit_code))
         return
     end
 
@@ -188,13 +188,14 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     end
 
     if not download_url then
-        -- scrape new urls since all current have failed, and search again
-        if not retrying then
-            LlgiAPI:_startDownload(book, filepath, callback, true)
-        end
-
         progress_widget:close()
         LlgiAPI.active_downloads[book.md5] = nil
+
+        -- scrape new urls since all current have failed, and search again
+        if not retrying then
+            return LlgiAPI:_startDownload(book, filepath, callback, true)
+        end
+
         callback(false, last_err or "all Library Genesis mirrors failed")
         return
     end

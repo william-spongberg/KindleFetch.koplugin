@@ -50,8 +50,11 @@ local function parseBookTable(html)
             -- Cell 6: Mirrors/Sources
             -- Cell 7: Language
             book.language = cells[8]:match('>([^<]+)</span>')
-            -- Cell 8: Book type
+            -- Cell 8: Book type (trimmed, as the emoji before it has left a space)
             book.book_type = cells[9]:match('>([^<]+)</span>')
+            if book.book_type then
+                book.book_type = StringUtil.trim(book.book_type)
+            end
             -- Cell 9: File type
             book.file_type = cells[10]:match('>([^<]+)</span>')
             -- Cell 10: File size
@@ -122,13 +125,12 @@ function AnnasAPI:search(query, page, retrying)
             local books = parseBookTable(html)
             LogUtil.debug("parsed", #books, "books for", query)
 
-            if books then
-                -- add new query result to cache before returning
+            -- add new query result to cache before returning, unless empty as the page may have been an error
+            if #books > 0 then
                 SearchCache:set(books, query, page, languages, file_types, book_types)
-                return books
             end
 
-            return nil
+            return books
         end
 
         LogUtil.warn("failed url:")
@@ -140,7 +142,7 @@ function AnnasAPI:search(query, page, retrying)
 
     -- scrape new urls since all current have failed, and search again
     if not retrying then
-        AnnasAPI:search(query, page, true)
+        return AnnasAPI:search(query, page, true)
     end
 
     return nil, last_err or "all Anna's Archive mirrors failed"
