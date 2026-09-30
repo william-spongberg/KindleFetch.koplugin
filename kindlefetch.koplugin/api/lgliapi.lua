@@ -236,8 +236,12 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     callback = callback or function()
     end
 
-    if LlgiAPI.active_downloads[book.md5] then
-        callback(false, "this book is already downloading")
+    -- show the progress of a book that is already downloading, in case it was hidden
+    local active_download = LlgiAPI.active_downloads[book.md5]
+    if active_download then
+        if not active_download.progress_widget.is_visible then
+            active_download.progress_widget:toggleVisibility()
+        end
         return
     end
 

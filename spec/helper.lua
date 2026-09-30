@@ -549,9 +549,11 @@ function helper.useLiveHttp()
         table.insert(http.requests, request.url)
         local response = live_responses[request.url]
         if not response then
-            -- like luasocket, TIMEOUT limits each wait rather than the whole transfer
-            local cmd = string.format("curl -sL --connect-timeout %d --max-time 180 -A %s -w '\\n%%{http_code} %%{exitcode}' %s",
-                http.TIMEOUT or 60, quote(request.headers and request.headers["User-Agent"] or "curl"), quote(request.url))
+            -- like luasocket, TIMEOUT limits each wait for data rather than the whole transfer
+            local timeout = http.TIMEOUT or 60
+            local cmd = string.format(
+                "curl -sL --connect-timeout %d --speed-time %d --speed-limit 1 --max-time 120 -A %s -w '\\n%%{http_code} %%{exitcode}' %s",
+                timeout, timeout, quote(request.headers and request.headers["User-Agent"] or "curl"), quote(request.url))
             if request.proxy then
                 cmd = cmd .. " -x " .. quote(request.proxy)
             end
