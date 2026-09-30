@@ -298,13 +298,15 @@ function BookMenu:loadCoversForPage(current_page)
     end
 
     if #books_to_download > 0 then
-        -- download all at once in parallel
+        -- download all at once in parallel, in the background
         LogUtil.debug("downloading", #books_to_download, "covers in parallel")
-        CoverCache:downloadMultiple(books_to_download, items_per_page)
-
-        -- refresh menu to show downloaded covers
-        self:updateItems()
-        UIManager:setDirty(self, "full")
+        CoverCache:downloadMultiple(books_to_download, items_per_page, function(count)
+            -- refresh menu to show downloaded covers, if the page is still showing
+            if count > 0 and self.page == current_page then
+                self:updateItems()
+                UIManager:setDirty(self, "full")
+            end
+        end)
     end
 end
 
