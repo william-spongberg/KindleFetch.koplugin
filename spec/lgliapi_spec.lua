@@ -412,6 +412,8 @@ describe("LlgiAPI", function()
 
             LlgiAPI:cancelAllDownloads()
             assert.is_true(widget.cancelled)
+            assert.are.same({spawned[1].pid}, killed)
+            assert.is_true(helper.wasClosed(widget.container))
             assert.is_false(helper.exists(filepath))
             assert.are.same({}, LlgiAPI:getActiveDownloads())
 

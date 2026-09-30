@@ -56,6 +56,14 @@ function KindleFetch:onDispatcherRegisterActions()
     })
 end
 
+-- cancel downloads when KOReader exits or restarts, so curl isn't left running and partial books are removed
+-- (without returning true, so the event still reaches the rest of KOReader)
+function KindleFetch:onExit()
+    LogUtil.debug("cancelling downloads before exiting")
+    LlgiAPI:cancelAllDownloads()
+end
+KindleFetch.onRestart = KindleFetch.onExit
+
 -- sent by the dispatcher action, e.g. when a gesture is assigned to it
 function KindleFetch:onKindleFetch()
     self:setupUI()

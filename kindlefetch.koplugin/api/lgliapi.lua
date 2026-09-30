@@ -308,8 +308,8 @@ end
 
 function LlgiAPI:cancelAllDownloads()
     for id, download_info in pairs(self.active_downloads) do
-        download_info.progress_widget.cancelled = true
-        download_info.progress_widget:close()
+        -- stops curl straight away, as there may not be another poll to stop it (e.g. when exiting)
+        download_info.progress_widget:cancel()
         FileUtil.removeFile(download_info.filepath)
     end
     self.active_downloads = {}
