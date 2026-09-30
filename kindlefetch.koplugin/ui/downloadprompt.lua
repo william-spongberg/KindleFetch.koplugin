@@ -19,6 +19,7 @@ local Geom = require("ui/geometry")
 local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
 local LogUtil = require("util.logutil")
+local NotifyUtil = require("util.notifyutil")
 local CoverCache = require("cache.covercache")
 local CoverPlaceholder = require("ui.coverplaceholder")
 local _ = require("gettext")
@@ -386,7 +387,7 @@ function DownloadPrompt:showFullscreenCover()
     self.fullscreen_cover_shown = true
     self.fullscreen_file = cover_file
     -- only get the full-size cover once it's wanted, showing the thumbnail until it arrives
-    CoverCache:downloadFullSize(self.book)
+    local loading_full_size = CoverCache:downloadFullSize(self.book)
 
     local fullscreen_image = ImageWidget:new{
         file = cover_file,
@@ -429,6 +430,10 @@ function DownloadPrompt:showFullscreenCover()
 
     UIManager:show(self.fullscreen_container)
     UIManager:setDirty(self.fullscreen_container, "full")
+    -- over the thumbnail, so it's clear something is happening
+    if loading_full_size then
+        NotifyUtil.info(_("Loading full-size cover..."))
+    end
 end
 
 function DownloadPrompt:closeFullscreenCover()

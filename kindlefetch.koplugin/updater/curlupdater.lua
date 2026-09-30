@@ -14,24 +14,6 @@ local CURL_REPO_URL = "https://github.com/moparisthebest/static-curl"
 
 local CurlUpdater = {}
 
--- get the installed curl version
-local function getCurlVersion()
-    local pipe = io.popen("curl --version 2>/dev/null", "r")
-    if not pipe then
-        return nil
-    end
-
-    local output = pipe:read("*l")
-    pipe:close()
-
-    if not output then
-        return nil
-    end
-
-    -- curl version output format: "curl X.Y.Z (platform) ..."
-    local version = output:match("^curl%s+([%d%.]+)")
-    return version
-end
 
 -- remount root as read-only, returning false if it could not be
 local function remountReadOnly()
@@ -47,7 +29,7 @@ end
 -- update curl using static release from moparisthebest/static-curl
 -- basically adds safe guards around the sh script given here https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
 local function updateCurl()
-    LogUtil.debug("attempting to install static curl v" .. MIN_VERSION)
+    LogUtil.info("installing static curl " .. MIN_VERSION)
     NotifyUtil.info("Updating curl...")
 
     -- download curl
@@ -58,7 +40,7 @@ local function updateCurl()
     LogUtil.debug("downloading static curl", download_url)
     local success, err = CurlUtil.download(download_url, curl_path, false, false)
     if not success then
-        LogUtil.warn("failed to download static curl", err)
+        LogUtil.warn("could not download static curl from", download_url, "error:", err)
         NotifyUtil.info("Failed to download curl update")
         return false
     end
@@ -67,7 +49,7 @@ local function updateCurl()
     local chmod_cmd = string.format("chmod +x %s", CurlUtil.shellQuote(curl_path))
     if os.execute(chmod_cmd) ~= 0 then
         os.remove(curl_path) -- remove downloaded file
-        LogUtil.warn("failed to set executable permission")
+        LogUtil.warn("could not make", curl_path, "executable")
         NotifyUtil.info("Failed to set file permissions")
         return false
     end
@@ -89,7 +71,7 @@ local function updateCurl()
         LogUtil.debug("backing up system curl")
         if os.execute(string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(system_curl),
             CurlUtil.shellQuote(backup_curl))) ~= 0 then
-            LogUtil.warn("failed to backup curl to", backup_curl)
+            LogUtil.warn("could not back up", system_curl, "to", backup_curl)
             NotifyUtil.info("Failed to create curl backup")
             remountReadOnly()
             return false
@@ -100,7 +82,7 @@ local function updateCurl()
     LogUtil.debug("installing static curl to " .. system_curl)
     if os.execute(
         string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(system_curl))) ~= 0 then
-        LogUtil.warn("failed to install static curl")
+        LogUtil.warn("could not copy", curl_path, "to", system_curl)
         NotifyUtil.info("Failed to install new curl update")
         remountReadOnly()
         return false
@@ -115,7 +97,7 @@ local function updateCurl()
         return false
     end
 
-    LogUtil.debug("static curl installation completed successfully")
+    LogUtil.info("installed static curl " .. MIN_VERSION)
     NotifyUtil.info("Updated curl to v" .. MIN_VERSION)
     return true
 end
@@ -135,7 +117,7 @@ local function promptCurlUpdate(current_version, min_version)
             text = _("Cancel"),
             callback = function()
                 UIManager:close(confirm_dialog)
-                LogUtil.debug("user declined curl update")
+                LogUtil.info("curl update declined")
             end
         }, {
             text = _("Update"),
@@ -159,7 +141,7 @@ function CurlUpdater.checkVersion()
     end
     LogUtil.debug("checking curl version")
 
-    local current_version_str = getCurlVersion()
+    local current_version_str = CurlUtil.getVersion()
     if not current_version_str then
         LogUtil.warn("curl not found or version could not be determined")
         return false
@@ -176,10 +158,7 @@ function CurlUpdater.checkVersion()
         return false
     end
 
-    LogUtil.debug("curl version check", {
-        current = current_version_str,
-        minimum = MIN_VERSION
-    })
+    LogUtil.info("curl is version", current_version_str, "and needs at least", MIN_VERSION)
 
     local cmp = VersionUtil.compareVersions(current_version, min_version_parsed)
     if cmp >= 0 then
@@ -187,7 +166,7 @@ function CurlUpdater.checkVersion()
         return true
     end
 
-    LogUtil.warn("curl version is below minimum")
+    LogUtil.warn("curl", current_version_str, "is older than", MIN_VERSION .. ", asking to update it")
     return promptCurlUpdate(current_version_str, MIN_VERSION)
 end
 

@@ -47,6 +47,7 @@ describe("Downloading", function()
         ls:close()
         assert(downloaded, "no book in " .. H.books_dir)
 
+        local plugin = H.plugin()
         H.tapButton("Read now")
         local ReaderUI = require("apps/reader/readerui")
         local reader = H.waitFor("the book to open", 120, function()
@@ -54,6 +55,9 @@ describe("Downloading", function()
         end)
         H.eq(downloaded, reader.document.file, "book opened")
         assert(reader.document:getPageCount() > 0, "the book has no pages")
+        -- which would otherwise show again once the book is closed
+        assert(not H.isShown(plugin.search_box), "the search box is still open behind the book")
+        assert(not H.isShown(plugin.books_menu), "the search results are still open behind the book")
         H.shot("reading")
     end)
 

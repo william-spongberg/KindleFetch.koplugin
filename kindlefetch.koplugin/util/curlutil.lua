@@ -86,6 +86,20 @@ function CurlUtil.killPid(pid)
     os.execute(string.format("kill %d 2>/dev/null", pid))
 end
 
+-- the installed curl's version, e.g. "8.17.0", or nil if curl isn't there
+function CurlUtil.getVersion()
+    local pipe = io.popen("curl --version 2>/dev/null", "r")
+    if not pipe then
+        return nil
+    end
+
+    local output = pipe:read("*l")
+    pipe:close()
+
+    -- "curl X.Y.Z (platform) ..."
+    return output and output:match("^curl%s+([%d%.]+)")
+end
+
 function CurlUtil.getErrorMeaning(exit_code)
     return CURL_ERRORS[exit_code] or "(curl exit code " .. tostring(exit_code) .. ")"
 end
@@ -116,6 +130,14 @@ function CurlUtil.getRemoteFileSize(url)
         end
     end
 
+    if not file_size then
+        local statuses = {}
+        for status in headers:gmatch("(HTTP[/%d%.]+ %d+)") do
+            table.insert(statuses, status)
+        end
+        LogUtil.warn("no file size from", LogUtil.site(url), "responses:",
+            #statuses > 0 and table.concat(statuses, ", ") or "none")
+    end
     return file_size
 end
 
@@ -294,15 +316,13 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
             })
             return true
         else
-            LogUtil.warn("download produced empty file")
+            LogUtil.warn("download from", LogUtil.site(download_url), "to", filepath, "produced an empty file")
             FileUtil.removeFile(filepath)
             return false, "download produced empty file"
         end
     else
-        LogUtil.warn("download failed", {
-            filepath = filepath,
-            exit_code = exit_code
-        })
+        LogUtil.warn("download from", LogUtil.site(download_url), "to", filepath, "failed: curl exit code",
+            exit_code, "(" .. CurlUtil.getErrorMeaning(exit_code) .. ")")
         FileUtil.removeFile(filepath)
         return false, CurlUtil.getErrorMeaning(exit_code)
     end

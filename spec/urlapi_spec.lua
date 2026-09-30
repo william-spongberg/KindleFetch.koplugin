@@ -35,6 +35,15 @@ describe("UrlApi", function()
             assert.are.equal(1, #http.requests)
         end)
 
+        -- as it takes a while, especially on the first search
+        it("say when they're being looked up on Wikipedia, but not when they're cached", function()
+            UrlApi:getLibgenUrls()
+            assert.are.same({"Looking up Library Genesis mirrors..."}, helper.state.notifications)
+
+            UrlApi:getLibgenUrls()
+            assert.are.equal(1, #helper.state.notifications)
+        end)
+
         it("can be removed once they stop working", function()
             local urls = UrlApi:getLibgenUrls()
             UrlApi:deleteLibgenUrl(urls[1])

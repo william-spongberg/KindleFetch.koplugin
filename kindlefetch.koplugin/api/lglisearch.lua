@@ -176,18 +176,22 @@ local function fetchResults(params, retrying)
 
     local last_err
     for _, url in ipairs(base_urls) do
-        LogUtil.debug("trying Library Genesis url:", url)
-        local html, err = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
+        local html, err, status = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
 
         if html and html:find('id="tablelibgen"', 1, true) then
             return html, nil, url
         end
 
         if html and isBlocked(html) then
-            LogUtil.warn("search blocked by ddos protection on", url)
+            LogUtil.warn("searching", LogUtil.site(url), "was blocked by its DDoS protection (HTTP", status, #html,
+                "bytes)")
             last_err = BLOCKED_ERROR
         else
-            LogUtil.warn("failed url:", url)
+            if html then
+                -- e.g. an error page, or a page Library Genesis has changed the layout of
+                LogUtil.warn("unexpected search page from", LogUtil.site(url) .. ": HTTP", status, #html, "bytes:",
+                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200))
+            end
             last_err = err or "unexpected response from Library Genesis"
             -- delete from url cache
             UrlApi:deleteLibgenUrl(url)
@@ -196,6 +200,7 @@ local function fetchResults(params, retrying)
 
     -- scrape new urls since all current have failed, and search again
     if not retrying and last_err ~= BLOCKED_ERROR then
+        LogUtil.info("every mirror failed, looking them up again")
         return fetchResults(params, true)
     end
 
@@ -210,8 +215,11 @@ function LlgiSearch:search(query, page)
     local book_types = KindleFetchSettings:getPreferredBookTypes()
 
     -- check cache first (ignoring results cached by older versions, which were just a list of books)
+    LogUtil.info(string.format("searching for %q from page %d, in %s, as %s, from %s", query, page,
+        table.concat(languages, "/"), table.concat(file_types, "/"), table.concat(book_types, "/")))
     local cached = SearchCache:get(query, page, languages, file_types, book_types)
     if cached and cached.books then
+        LogUtil.info("showing", #cached.books, "books saved from an earlier search")
         return cached.books, nil, cached.next_page
     end
 
@@ -230,7 +238,8 @@ function LlgiSearch:search(query, page)
         end
 
         local page_books, results = LlgiSearch.parseResults(html, url, languages, file_types)
-        LogUtil.debug("parsed", #page_books, "books from", results, "results for", query, "page", next_page)
+        LogUtil.info(string.format("page %d from %s: kept %d of its %d results", next_page, LogUtil.site(url),
+            #page_books, results))
         for _, book in ipairs(page_books) do
             if not seen[book.md5] then
                 seen[book.md5] = true
@@ -248,6 +257,8 @@ function LlgiSearch:search(query, page)
         end
     end
 
+    LogUtil.info(string.format("found %d books for %q%s", #books, query,
+        next_page and ", and more from page " .. next_page or ""))
     -- add new query result to cache before returning, unless empty as the page may have been an error
     if #books > 0 then
         SearchCache:set({

@@ -648,6 +648,22 @@ function helper.runScheduled()
     end
 end
 
+-- the first message logged at level (e.g. "info") that matches pattern, without the plugin's prefix
+function helper.logged(level, pattern)
+    for _, log in ipairs(helper.state.logs) do
+        if log[1] == level then
+            local parts = {}
+            for i = 3, #log do
+                table.insert(parts, tostring(log[i]))
+            end
+            local message = table.concat(parts, " ")
+            if message:find(pattern) then
+                return message
+            end
+        end
+    end
+end
+
 function helper.lastNotification()
     return helper.state.notifications[#helper.state.notifications]
 end

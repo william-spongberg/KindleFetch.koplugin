@@ -140,6 +140,11 @@ describe("KindleFetch", function()
             end
         })
         helper.stub("cache.covercache", {})
+        helper.stub("util.curlutil", {
+            getVersion = function()
+                return "8.17.0"
+            end
+        })
         helper.stub("updater.curlupdater", {
             checkVersion = function()
                 checks.curl = checks.curl + 1
@@ -169,6 +174,21 @@ describe("KindleFetch", function()
             assert.is_nil(openUI():onRestart())
             assert.are.equal(1, cancelled_downloads)
         end)
+    end)
+
+    -- to make sense of a crash.log from someone's device
+    it("logs the versions and settings in use, once per session", function()
+        openUI()
+        openUI()
+
+        local summaries = {}
+        for _, log in ipairs(helper.state.logs) do
+            if log[1] == "info" and tostring(log[3]):find("^KindleFetch %S+ on KOReader") then
+                table.insert(summaries, log[3])
+            end
+        end
+        assert.are.equal(1, #summaries)
+        assert.matches("KindleFetch 0.4 on KOReader .*, curl 8.17.0", summaries[1])
     end)
 
     describe("after an update", function()
@@ -494,7 +514,9 @@ describe("KindleFetch", function()
             read_now.callback()
             assert.is_true(helper.wasClosed(dialog))
             assert.are.same({"openFile", "/mnt/us/books/Dune.epub"}, opened)
+            -- closing the search box too, which would otherwise show again once the book is closed
             assert.is_true(helper.wasClosed(menus[1]))
+            assert.is_true(helper.wasClosed(plugin.search_box))
         end)
 
         it("closes the offer to read the book when cancelled", function()

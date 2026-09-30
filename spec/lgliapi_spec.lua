@@ -270,6 +270,9 @@ describe("LlgiAPI", function()
             assert.is_true(helper.wasClosed(widget.container))
             assert.are.same({}, LlgiAPI:getActiveDownloads())
             assert.are.equal(MB, #helper.readFile(filepath))
+            -- for reading crash.log from a device
+            assert.is_truthy(helper.logged("info", '^downloading "Dune" %(epub, .-, md5 %x+%) to '))
+            assert.is_truthy(helper.logged("info", '^downloaded "Dune": ' .. MB .. " bytes in %d+s$"))
         end)
 
         it("works without knowing the file size", function()
@@ -361,6 +364,9 @@ describe("LlgiAPI", function()
             helper.runScheduled()
             assert.are.same({{ok = false, err = "HTTP error response"}}, results)
             assert.is_false(helper.exists(filepath))
+            -- with what's needed to work out why from crash.log
+            assert.matches('download of "Dune" from [%w%.]+ failed after %d+s: curl exit code 22 %(HTTP error ' ..
+                               'response%), ' .. MB / 2 .. " of %d+ bytes", helper.logged("warn", "failed after"))
         end)
 
         it("fails when the downloaded file is empty", function()

@@ -3,7 +3,8 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local ButtonDialog = require("ui/widget/buttondialog")
 local TextBoxWidget = require("ui/widget/textboxwidget")
-local Screen = require("device").screen
+local Device = require("device")
+local Screen = Device.screen
 local UIManager = require("ui/uimanager")
 local DownloadMgr = require("ui/downloadmgr")
 local Menu = require("ui/widget/menu")
@@ -31,14 +32,36 @@ local _ = require("gettext")
 local update_check_scheduled = false
 local version_checked = false
 
+local function installedVersion()
+    return FileUtil.readFile(PathUtil.getPluginPath() .. "/version.txt")
+end
+
+-- what's needed to make sense of a crash.log from someone else's device
+local function logEnvironment()
+    local CurlUtil = require("util.curlutil")
+    local ok, koreader_version = pcall(function()
+        return require("version"):getCurrentRevision()
+    end)
+    local device = Device:isKindle() and "Kindle" or (Device.isKobo and Device:isKobo()) and "Kobo" or
+                       Device:isAndroid() and "Android" or Device:isSDL() and "computer" or "device"
+    local proxy_url = os.getenv("PROXY_URL")
+    LogUtil.info(string.format("KindleFetch %s on KOReader %s, %s %s, curl %s%s", installedVersion() or "unknown",
+        ok and koreader_version or "unknown", device, tostring(Device.model), CurlUtil.getVersion() or "not found",
+        proxy_url and proxy_url ~= "" and ", with PROXY_URL set" or ""))
+    LogUtil.info("downloading to", KindleFetchSettings:getDownloadDir(), "with covers",
+        KindleFetchSettings:getShowBookCovers() and "on" or "off", "and update checks",
+        KindleFetchSettings:getCheckForUpdates() and "on" or "off")
+end
+
 -- clear caches left by other versions of the plugin, as their contents may not work with this one
 local function clearCachesAfterUpdate()
-    local version = FileUtil.readFile(PathUtil.getPluginPath() .. "/version.txt")
+    local version = installedVersion()
     if not version or version == KindleFetchSettings:getLastVersion() then
         return
     end
 
-    LogUtil.debug("plugin version changed, clearing caches", version)
+    LogUtil.info("KindleFetch was", KindleFetchSettings:getLastVersion() or "not installed",
+        "before, so clearing its caches")
     SearchCache:clear()
     UrlCache:clear()
     KindleFetchSettings:setLastVersion(version)
@@ -78,6 +101,7 @@ function KindleFetch:init()
 
     if not version_checked then
         version_checked = true
+        logEnvironment()
         clearCachesAfterUpdate()
     end
 
@@ -188,11 +212,14 @@ function KindleFetch:performSearch()
 
     -- check for errors
     if err or not books then
+        err = err or "search failed"
+        LogUtil.warn(string.format("search for %q failed: %s", query, err))
         NotifyUtil.info("Error: " .. err)
         return
     end
     if #books == 0 then
-        LogUtil.warn("no books to show after search")
+        LogUtil.info(string.format("no books found for %q with the preferred languages, file types and book types",
+            query))
         NotifyUtil.info("No books found")
         return
     end
@@ -205,11 +232,8 @@ function KindleFetch:search(query, page)
     local books, err, next_page = LlgiSearch:search(query, page)
 
     if not books or type(books) ~= "table" then
-        LogUtil.warn("API search failed for")
         return nil, err
     end
-
-    LogUtil.debug("API returned", #books, "raw books for", query, "page", page)
 
     return books, nil, next_page
 end
@@ -304,8 +328,12 @@ local function buildDownloadPath(book)
 end
 
 function KindleFetch:openBook(filepath)
+    -- close the results and the search box behind them too, which would otherwise show again once the book is closed
     if self.books_menu then
         UIManager:close(self.books_menu)
+    end
+    if self.search_box then
+        UIManager:close(self.search_box)
     end
 
     if self.ui.document then

@@ -18,34 +18,40 @@ function HttpUtil.requestBody(request_url, proxy_url)
         redirect = true
     }
 
+    -- status is the HTTP status code, or what went wrong if there wasn't a response
     local body = table.concat(response_body)
-    if not ok or body == "" then
-        return nil, status or "empty response"
+    if not ok then
+        return nil, tostring(status or "no response")
+    end
+    if body == "" then
+        return nil, "empty response (HTTP " .. tostring(status) .. ")", status
     end
 
-    return body
+    return body, nil, status
 end
 
+-- a page's body and HTTP status, or nil and what went wrong
 function HttpUtil.getBody(url)
-    LogUtil.debug("fetching page for url", url)
-    local body, err = HttpUtil.requestBody(url)
+    LogUtil.debug("fetching", url)
+    local body, err, status = HttpUtil.requestBody(url)
     if body then
-        LogUtil.debug("page fetched", #body, "bytes return")
-        return body
+        LogUtil.debug("fetched", #body, "bytes, HTTP", status, "from", url)
+        return body, nil, status
     end
+    LogUtil.warn("could not fetch", url, "error:", err)
 
-    -- use proxy as backup
+    -- use proxy as backup (without logging its address, which may include a password)
     local proxy_url = os.getenv("PROXY_URL")
     if proxy_url and proxy_url ~= "" then
-        LogUtil.warn("direct fetch failed, retrying through proxy")
-        body, err = HttpUtil.requestBody(url, proxy_url)
+        LogUtil.info("retrying through the proxy")
+        body, err, status = HttpUtil.requestBody(url, proxy_url)
         if body then
-            return body
+            return body, nil, status
         end
+        LogUtil.warn("could not fetch", url, "through the proxy either, error:", err)
     end
 
-    LogUtil.warn("failed to fetch page for")
-    return nil, err
+    return nil, err, status
 end
 
 return HttpUtil

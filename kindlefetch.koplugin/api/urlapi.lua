@@ -2,6 +2,8 @@ local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local UrlCache = require("cache.urlcache")
 local LogUtil = require("util.logutil")
+local NotifyUtil = require("util.notifyutil")
+local _ = require("gettext")
 
 local UrlApi = {}
 
@@ -27,18 +29,23 @@ function UrlApi:getUrls(key, url, parse)
         return cached
     end
 
+    -- this takes a while, especially on the first search, so say what's happening
+    NotifyUtil.info(_("Looking up Library Genesis mirrors..."))
     local html, err = HttpUtil.getBody(url)
     if not html then
+        LogUtil.warn("could not look up mirrors on", url, "error:", err)
         return nil, err
     end
 
     local urls = parse(html)
 
     if urls then
+        LogUtil.info("found mirrors on", LogUtil.site(url) .. ":", table.concat(urls, ", "))
         UrlCache:set(urls, key)
         return urls
     end
 
+    LogUtil.warn("found no mirrors on", url, "(" .. #html .. " bytes)")
     return nil
 end
 
@@ -47,6 +54,7 @@ function UrlApi:getLibgenUrls()
 end
 
 function UrlApi:deleteLibgenUrl(url)
+    LogUtil.info("dropping mirror", LogUtil.site(url), "as it failed")
     return UrlCache:deleteValueFromKey(url, LIBGEN_KEY)
 end
 
