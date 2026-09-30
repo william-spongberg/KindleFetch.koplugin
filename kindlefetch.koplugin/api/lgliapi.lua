@@ -32,11 +32,15 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
     local bytes_downloaded = FileUtil.getSize(filepath)
 
     -- cap at 99% while still in progress and under the total size
-    if total_size and total_size > 0 then
+    if total_size and total_size > 0 and bytes_downloaded <= total_size then
         local percentage = math.min(bytes_downloaded / total_size, 0.99)
         progress_widget:update(percentage,
             string.format("%d%% · %.1f / %.1f MB", math.floor(percentage * 100), bytes_downloaded / (1024 * 1024),
                 total_size / (1024 * 1024)))
+    elseif bytes_downloaded > 0 then
+        -- the size wasn't known, or was wrong
+        progress_widget:update(progress_widget.percentage or 0,
+            string.format("%.1f MB", bytes_downloaded / (1024 * 1024)))
     end
 
     LogUtil.debug("download progress", {

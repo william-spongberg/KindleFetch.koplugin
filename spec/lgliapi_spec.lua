@@ -227,12 +227,33 @@ describe("LlgiAPI", function()
         end)
 
         it("stays below 100% until curl has finished", function()
+            remote_size = 2 * MB
             download()
             local widget = progress()
 
             curlWrote(2 * MB)
             helper.tick()
             assert.are.equal(0.99, widget.bar_widget.percentage)
+        end)
+
+        it("shows how much has downloaded when the file is bigger than its size said", function()
+            remote_size = 638
+            download()
+            local widget = progress()
+
+            curlWrote(2 * MB)
+            helper.tick()
+            assert.are.equal("2.0 MB", widget.status_widget.text)
+        end)
+
+        it("shows how much has downloaded when the size is unknown", function()
+            remote_size = nil
+            download()
+            local widget = progress()
+
+            curlWrote(MB / 2)
+            helper.tick()
+            assert.are.equal("0.5 MB", widget.status_widget.text)
         end)
 
         it("finishes once curl exits successfully", function()
