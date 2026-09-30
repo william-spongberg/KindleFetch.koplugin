@@ -628,7 +628,8 @@ function helper.useLiveHttp()
             -- like luasocket, TIMEOUT limits each wait for data rather than the whole transfer
             local timeout = http.TIMEOUT or 60
             local cmd = string.format(
-                "curl -sL --connect-timeout %d --speed-time %d --speed-limit 1 --max-time 120 -A %s -w '\\n%%{http_code} %%{exitcode}' %s",
+                "curl -sL --connect-timeout %d --speed-time %d --speed-limit 1 --max-time 120 -A %s "
+                    .. "-w '\\n%%{http_code} %%{exitcode}' %s",
                 timeout,
                 timeout,
                 quote(request.headers and request.headers["User-Agent"] or "curl"),

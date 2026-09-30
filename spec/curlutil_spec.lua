@@ -342,7 +342,7 @@ describe("CurlUtil", function()
         it("cleans up when the background download cannot start", function()
             helper.stubCommand("& echo $!", "")
 
-            local pid, exit_file, config_file, err = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
+            local pid, _, _, err = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
             assert.is_nil(pid)
             assert.are.equal("unable to determine curl pid", err)
             assert.are.same({}, helper.readDir(data_dir .. "/settings/tmp"))

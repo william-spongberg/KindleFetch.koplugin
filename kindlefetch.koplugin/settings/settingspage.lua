@@ -3,7 +3,6 @@ local UIManager = require("ui/uimanager")
 local DownloadMgr = require("ui/downloadmgr")
 local Menu = require("ui/widget/menu")
 local Screen = require("device").screen
-local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local _ = require("gettext")
 

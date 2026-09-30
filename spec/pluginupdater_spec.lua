@@ -161,7 +161,8 @@ for _, layout in ipairs(LAYOUTS) do
             it("downloads the release asset for the new version", function()
                 acceptUpdate()
                 assert.are.equal(
-                    "https://github.com/william-spongberg/KindleFetch.koplugin/releases/download/v0.4/kindlefetch.koplugin.zip",
+                    "https://github.com/william-spongberg/KindleFetch.koplugin/releases/download/v0.4/"
+                        .. "kindlefetch.koplugin.zip",
                     downloaded_url
                 )
             end)

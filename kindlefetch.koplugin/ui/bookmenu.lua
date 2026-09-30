@@ -11,10 +11,8 @@ local HorizontalGroup = require("ui/widget/horizontalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local TextBoxWidget = require("ui/widget/textboxwidget")
-local TextWidget = require("ui/widget/textwidget")
 local ImageWidget = require("ui/widget/imagewidget")
 local Blitbuffer = require("ffi/blitbuffer")
-local LeftContainer = require("ui/widget/container/leftcontainer")
 local UIManager = require("ui/uimanager")
 local StringUtil = require("util.stringutil")
 local Screen = require("device").screen
@@ -213,7 +211,6 @@ function BookMenu:setupItemHeights()
         if #items > items_per_page then
             table.insert(self.page_items, items)
             items = {}
-            current_y = 0
         end
     end
 

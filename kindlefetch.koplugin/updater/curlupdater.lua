@@ -26,7 +26,8 @@ local function remountReadOnly()
 end
 
 -- update curl using static release from moparisthebest/static-curl
--- basically adds safe guards around the sh script given here https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
+-- basically adds safe guards around the sh script given here:
+-- https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
 local function updateCurl()
     LogUtil.info("installing static curl " .. MIN_VERSION)
     NotifyUtil.info("Updating curl...")

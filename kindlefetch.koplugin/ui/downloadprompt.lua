@@ -62,7 +62,7 @@ function DownloadPrompt.new(book, filepath, on_download)
             },
         },
     }
-    function self.outer_container:onTapOutside(arg, ges)
+    function self.outer_container.onTapOutside(_, _, ges)
         if ges.pos:notIntersectWith(parent_ref.frame.dimen) then
             parent_ref:close()
             return true
@@ -70,7 +70,7 @@ function DownloadPrompt.new(book, filepath, on_download)
         return false
     end
     -- show the cover once it has downloaded, or take its placeholder away if it couldn't be
-    function self.outer_container:onKindleFetchCoversDownloaded()
+    function self.outer_container.onKindleFetchCoversDownloaded()
         parent_ref:refreshCover()
     end
 

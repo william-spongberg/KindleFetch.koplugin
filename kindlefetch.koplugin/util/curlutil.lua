@@ -1,8 +1,6 @@
 local NotifyUtil = require("util.notifyutil")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
-local Device = require("device")
-local UIManager = require("ui/uimanager")
 local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
 
@@ -256,7 +254,8 @@ function CurlUtil.isTransferComplete(results, filepath, exit_code)
 end
 
 function CurlUtil.saveExitCode(cmd, exit_file)
-    local command = string.format("(%s; echo $? > %s)", cmd, CurlUtil.shellQuote(exit_file)) -- save exit code to exit_file
+    -- save exit code to exit_file
+    local command = string.format("(%s; echo $? > %s)", cmd, CurlUtil.shellQuote(exit_file))
     command = string.format("%s >/dev/null 2>&1", command) -- do not print errors to terminal
 
     return command
@@ -298,7 +297,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
     LogUtil.debug("curl download command", cmd)
 
     if background then
-        local cmd = CurlUtil.echoPid(cmd)
+        cmd = CurlUtil.echoPid(cmd)
         local pid, err = CurlUtil.spawnCurlPid(cmd, exit_file)
         if not pid or err then
             return nil, nil, err

@@ -1,4 +1,3 @@
-local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local UrlCache = require("cache.urlcache")
 local LogUtil = require("util.logutil")

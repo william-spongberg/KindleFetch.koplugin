@@ -222,7 +222,8 @@ local function fetchResults(params, refresh)
             )
             last_err = BLOCKED_ERROR
         elseif html or status then
-            -- it answered, but not with results: e.g. an error page, or a page Library Genesis has changed the layout of
+            -- it answered, but not with results: e.g. an error page, or a page Library Genesis has changed the
+            -- layout of
             if html then
                 LogUtil.warn(
                     "unexpected search page from",

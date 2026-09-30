@@ -103,12 +103,23 @@ function fixtures.libgenRow(book)
         .. '">b</a></span> '
         .. '<span class="badge badge-secondary"">f 6270247</span></nobr>'
 
-    local cover = book.cover
-            and ('<a href="edition.php?id=6270247"><img src="' .. book.cover .. '" style="max-height:70px;max-width:150px;height:auto;width:auto;"></a>')
-        or ""
-    local mirrors = book.md5
-            and ('<a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" ' .. 'href="/ads.php?md5=' .. book.md5 .. '"><span class="badge badge-primary">1</span></a> ' .. '<a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" ' .. 'href="https://randombook.org/book/' .. book.md5 .. '"><span class="badge badge-primary">2</span></a>')
-        or ""
+    local cover = ""
+    if book.cover then
+        local style = "max-height:70px;max-width:150px;height:auto;width:auto;"
+        cover = '<a href="edition.php?id=6270247"><img src="' .. book.cover .. '" style="' .. style .. '"></a>'
+    end
+    local mirrors = ""
+    if book.md5 then
+        local mirror_tooltip = 'data-toggle="tooltip" data-placement="bottom" data-html="true"'
+        mirrors = "<a " .. mirror_tooltip .. ' title="libgen" href="/ads.php?md5=' .. book.md5 .. '">'
+        mirrors = mirrors .. '<span class="badge badge-primary">1</span></a> '
+        mirrors = mirrors
+            .. "<a "
+            .. mirror_tooltip
+            .. ' title="Randombook" href="https://randombook.org/book/'
+            .. book.md5
+        mirrors = mirrors .. '"><span class="badge badge-primary">2</span></a>'
+    end
 
     local cells = {
         cell(cover),
@@ -123,7 +134,6 @@ function fixtures.libgenRow(book)
         cell(mirrors),
     }
     if book.cells then
-        local unpack = table.unpack or unpack
         cells = { unpack(cells, 1, book.cells) }
     end
     return "<tr>\n" .. table.concat(cells) .. "</tr>\n"

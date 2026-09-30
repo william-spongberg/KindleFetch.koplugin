@@ -6,8 +6,6 @@ local TextBoxWidget = require("ui/widget/textboxwidget")
 local Device = require("device")
 local Screen = Device.screen
 local UIManager = require("ui/uimanager")
-local DownloadMgr = require("ui/downloadmgr")
-local Menu = require("ui/widget/menu")
 local KindleFetchSettings = require("settings.settings")
 local SettingsPage = require("settings.settingspage")
 local util = require("util")
@@ -18,7 +16,6 @@ local LlgiAPI = require("api.lgliapi")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
-local CoverCache = require("cache.covercache")
 local SearchCache = require("cache.searchcache")
 local UrlCache = require("cache.urlcache")
 local CurlUpdater = require("updater.curlupdater")
@@ -231,7 +228,8 @@ function KindleFetch:performSearch()
         return
     end
 
-    -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once connected,
+    -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once
+    -- connected,
     -- unless the results are saved from an earlier search
     if not NetworkMgr:isConnected() and not LlgiSearch:isCached(query, 1) then
         NetworkMgr:runWhenConnected(function()

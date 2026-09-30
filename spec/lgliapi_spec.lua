@@ -22,12 +22,12 @@ describe("LlgiAPI", function()
 
     local saved_filepath
 
-    local function onResult(ok, err, filepath)
+    local function onResult(ok, err, path)
         table.insert(results, {
             ok = ok,
             err = err,
         })
-        saved_filepath = filepath
+        saved_filepath = path
     end
 
     -- ask to download the book, then confirm the download prompt

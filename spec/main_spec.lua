@@ -1,5 +1,4 @@
 local helper = require("helper")
-local fixtures = require("fixtures")
 
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
