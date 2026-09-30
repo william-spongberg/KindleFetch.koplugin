@@ -190,6 +190,15 @@ describe("KindleFetch", function()
             assert.are.equal("KindleFetch", helper.state.actions.kindlefetch_action.event)
         end)
 
+        it("opens the search dialog when the dispatcher action is used", function()
+            local plugin = openUI()
+            local event = helper.state.actions.kindlefetch_action.event
+
+            -- KOReader calls the on<Event> handler for the action's event
+            assert.is_true(plugin["on" .. event](plugin))
+            assert.are.equal(plugin.search_box, helper.lastShown())
+        end)
+
         it("checks for updates once the UI is ready", function()
             openUI()
             assert.are.same({curl = 0, plugin = 0}, checks)
