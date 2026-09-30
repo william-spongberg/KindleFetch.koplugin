@@ -338,9 +338,6 @@ local AVAILABLE_BOOK_TYPES = {{
     text = "Comics",
     code = "comics"
 }, {
-    text = "Fiction (Russian)",
-    code = "fiction_rus"
-}, {
     text = "Magazines",
     code = "magazines"
 }, {

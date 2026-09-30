@@ -46,13 +46,13 @@ describe("LlgiSearch", function()
         end)
 
         it("maps every book type to a Library Genesis topic", function()
-            local params = LlgiSearch.buildParams("dune", 1, {"fiction", "fiction_rus", "nonfiction", "comics",
+            local params = LlgiSearch.buildParams("dune", 1, {"fiction", "nonfiction", "comics",
                                                                 "magazines", "articles", "standards", "unknown"})
             local topics = {}
             for topic in params:gmatch("topics%%5B%%5D=(%a)") do
                 table.insert(topics, topic)
             end
-            assert.are.same({"f", "r", "l", "c", "m", "a", "s"}, topics)
+            assert.are.same({"f", "l", "c", "m", "a", "s"}, topics)
         end)
 
         it("reads each book from the results table", function()

@@ -39,28 +39,31 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 #### Search → Kindle Fetch → Search Library Genesis
 
-<img width="400" height="533" alt="FileManager_2026-07-12_135936" src="https://github.com/user-attachments/assets/7cbd408b-a778-48d0-b2cf-faef8fc8064e" />
-<img width="400" height="533" alt="FileManager_2026-07-12_135944" src="https://github.com/user-attachments/assets/01568d65-a1ae-4701-b7af-567f57df1f92" />
-<img width="400" height="533" alt="FileManager_2026-07-12_135948" src="https://github.com/user-attachments/assets/dc877805-3e67-4a37-b5c8-ea8e08889e4c" />
+<img width="400" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" />
+<img width="400" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
 1. Enter a book title, author, or keyword in the search box.
 
-<img width="400" height="533" alt="Screenshot From 2026-07-19 15-48-12" src="https://github.com/user-attachments/assets/26d9a11c-fcbe-49a4-8420-4c371b2f44b3" />
+<img width="400" alt="Search box" src="docs/screenshots/03-search-dialog.png" />
 
-3. Browse the results and tap a book to download.
+2. Browse the results and tap a book to download. Placeholders show while the covers download.
 
-<img width="400" height="533" alt="Screenshot From 2026-07-19 15-48-33" src="https://github.com/user-attachments/assets/f7245229-d4aa-4a08-ade7-285fa52282b6" />
-<img width="400" height="533" alt="Screenshot From 2026-07-19 16-26-45" src="https://github.com/user-attachments/assets/815d7d60-2d06-4ff8-9560-18dc58ec8e4c" />
+<img width="400" alt="Search results while covers download" src="docs/screenshots/04-search-results-loading-covers.png" />
+<img width="400" alt="Search results with covers" src="docs/screenshots/05-search-results.png" />
 
-5. In the download prompt, optionally tap the book cover for a fullscreen preview or adjust the download location via the download path button
+3. In the download prompt, optionally tap the book cover for a fullscreen preview or adjust the download location via the download path button.
 
-<img width="400" height="533" alt="Screenshot From 2026-07-19 15-48-41" src="https://github.com/user-attachments/assets/3dd1ce46-02b4-45b5-a1c8-ac495f3748eb" />
-<img width="400" height="533" alt="Screenshot From 2026-07-19 15-48-44" src="https://github.com/user-attachments/assets/43baaa36-7fb6-4fbb-b632-617874794144" />
+<img width="400" alt="Download prompt" src="docs/screenshots/06-download-prompt.png" />
+<img width="400" alt="Fullscreen cover" src="docs/screenshots/07-download-cover.png" />
 
-6. Confirm the download and monitor progress; tap Hide to run in background or Cancel to stop.
+4. Confirm the download and monitor progress; tap Hide to run in background or Cancel to stop.
 
-<img width="400" height="533" alt="Screenshot From 2026-07-19 15-51-06" src="https://github.com/user-attachments/assets/e49fcbeb-c1df-413d-be8b-376e60facf19" />
-<img width="400" height="533" alt="Screenshot From 2026-07-19 15-56-06" src="https://github.com/user-attachments/assets/49bd7f2e-b707-4337-84ff-3f7efc702b0d" />
+<img width="400" alt="Download progress" src="docs/screenshots/08-download-progress.png" />
+
+5. Once the book has downloaded, tap Read now to open it.
+
+<img width="400" alt="Read now prompt" src="docs/screenshots/09-download-finished.png" />
+<img width="400" alt="Reading the downloaded book" src="docs/screenshots/10-reading.png" />
 
 Downloaded books are saved to your configured download location.
 
@@ -70,18 +73,16 @@ Downloaded books are saved to your configured download location.
 
 - **Show Book Covers**: Enable or disable cover image display in search results (default: enabled)
 
-<img width="400" height="533" alt="Screenshot From 2026-07-19 16-26-40" src="https://github.com/user-attachments/assets/75589b17-aeaf-4c1c-9ea9-20f9ae75442d" />
-<img width="400" height="533" alt="Screenshot From 2026-07-19 15-58-51" src="https://github.com/user-attachments/assets/59dd8a28-cf89-4410-b376-18d534be1913" />
+<img width="400" alt="Settings" src="docs/screenshots/11-settings.png" />
+<img width="400" alt="Search results without covers" src="docs/screenshots/12-search-results-without-covers.png" />
 
 - **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`)
 
-<img width="400" height="533" alt="FileManager_2026-07-12_135959" src="https://github.com/user-attachments/assets/a866e96d-0ac1-4bde-a815-38e0fbfbe57a" />
-<img width="400" height="533" alt="FileManager_2026-07-12_140015" src="https://github.com/user-attachments/assets/649f50aa-c81c-486e-a38c-c2351db9f720" />
+<img width="400" alt="Choosing the download folder" src="docs/screenshots/13-settings-download-folder.png" />
 
 - **Preferred Languages**: Choose which languages to prioritise in search results
 
-<img width="400" height="533" alt="FileManager_2026-07-12_140024" src="https://github.com/user-attachments/assets/6b629965-bb15-4d09-8e63-ec77fe9c260d" />
-
+<img width="400" alt="Preferred languages" src="docs/screenshots/14-settings-languages.png" />
 
 - **Preferred File Types**: Select desired formats across five categories:
   - Ebooks: EPUB, MOBI, AZW, AZW3, KFX, FB2, LIT, PRC, LRF, SNB, UPDB
@@ -90,16 +91,17 @@ Downloaded books are saved to your configured download location.
   - Images: JPG, TIF, PDB
   - Web: CHM, HTM, HTML, HTMLZ, MHT
 
-<img width="400" height="533" alt="FileManager_2026-07-12_140030" src="https://github.com/user-attachments/assets/2f4cff54-240e-49d6-9293-3982f0a0523b" />
+<img width="400" alt="Preferred file types" src="docs/screenshots/15-settings-file-types.png" />
 
+- **Preferred Book Types**: Filter by fiction, non-fiction, comics, magazines, scientific articles, or standards
 
-- **Preferred Book Types**: Filter by fiction, non-fiction, comics, Russian fiction, magazines, scientific articles, or standards
-
-<img width="400" height="533" alt="FileManager_2026-07-12_140038" src="https://github.com/user-attachments/assets/1576b6c1-f5b0-4fd8-b907-841080495950" />
+<img width="400" alt="Preferred book types" src="docs/screenshots/16-settings-book-types.png" />
 
 - **Check for Updates Automatically**: Check for plugin and curl updates once per session while connected (default: enabled)
 
 - **Keep Searches For / Keep Mirrors For**: How long search results (default: 14 days) and Library Genesis mirror URLs (default: 7 days) are cached
+
+<img width="400" alt="How long searches are kept" src="docs/screenshots/17-settings-cache.png" />
 
 ## How It Works
 

@@ -2,6 +2,7 @@ local Dispatcher = require("dispatcher")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local ConfirmBox = require("ui/widget/confirmbox")
+local TextBoxWidget = require("ui/widget/textboxwidget")
 local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
 local DownloadMgr = require("ui/downloadmgr")
@@ -321,8 +322,11 @@ function KindleFetch:downloadBook(book)
             LogUtil.debug("downloaded book to", saved_filepath)
             -- ask on the next tick, once the download progress has closed
             UIManager:nextTick(function()
+                -- the title in bold on a line of its own, so it stands out from the question
                 UIManager:show(ConfirmBox:new{
-                    text = string.format(_("Downloaded %s\nWould you like to read it now?"), book.title),
+                    text = string.format("%s%s\n%s%s%s\n\n%s", TextBoxWidget.PTF_HEADER, _("Downloaded"),
+                        TextBoxWidget.PTF_BOLD_START, book.title, TextBoxWidget.PTF_BOLD_END,
+                        _("Would you like to read it now?")),
                     ok_text = _("Read now"),
                     ok_callback = function()
                         self:openBook(saved_filepath)
