@@ -102,6 +102,12 @@ describe("KindleFetchSettings", function()
         end)
     end)
 
+    it("remembers the plugin version it last ran", function()
+        assert.is_nil(Settings:getLastVersion())
+        Settings:setLastVersion("0.4")
+        assert.are.equal("0.4", Settings:getLastVersion())
+    end)
+
     describe("preferred book types", function()
         it("are converted from the ones used for Anna's Archive", function()
             helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {

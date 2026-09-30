@@ -2,7 +2,7 @@ local helper = require("helper")
 local fixtures = require("fixtures")
 
 describe("KindleFetch", function()
-    local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown
+    local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
     local function openUI()
@@ -47,7 +47,8 @@ describe("KindleFetch", function()
         }
         settings = {
             show_covers = true,
-            download_dir = "/mnt/us/documents"
+            download_dir = "/mnt/us/documents",
+            last_version = "0.4"
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
 
@@ -58,6 +59,34 @@ describe("KindleFetch", function()
             end,
             getDownloadDir = function()
                 return settings.download_dir
+            end,
+            getLastVersion = function()
+                return settings.last_version
+            end,
+            setLastVersion = function(_, version)
+                settings.last_version = version
+            end
+        })
+
+        cleared = {
+            search = 0,
+            mirrors = 0
+        }
+        helper.stub("cache.searchcache", {
+            clear = function()
+                cleared.search = cleared.search + 1
+            end
+        })
+        helper.stub("cache.urlcache", {
+            clear = function()
+                cleared.mirrors = cleared.mirrors + 1
+            end
+        })
+        plugin_dir = helper.tmpdir("plugin")
+        helper.writeFile(plugin_dir .. "/version.txt", "0.4\n")
+        helper.stub("util.pathutil", {
+            getPluginPath = function()
+                return plugin_dir
             end
         })
         helper.stub("settings.settingspage", {
@@ -105,6 +134,49 @@ describe("KindleFetch", function()
 
         -- KOReader loads main.lua once per session
         KindleFetch = dofile("kindlefetch.koplugin/main.lua")
+    end)
+
+    after_each(helper.cleanup)
+
+    describe("after an update", function()
+        it("clears cached searches and mirrors", function()
+            settings.last_version = "0.3"
+            openUI()
+
+            assert.are.same({search = 1, mirrors = 1}, cleared)
+            assert.are.equal("0.4", settings.last_version)
+        end)
+
+        it("clears them the first time the plugin runs", function()
+            settings.last_version = nil
+            openUI()
+
+            assert.are.same({search = 1, mirrors = 1}, cleared)
+            assert.are.equal("0.4", settings.last_version)
+        end)
+
+        it("keeps them while the version stays the same", function()
+            openUI()
+            assert.are.same({search = 0, mirrors = 0}, cleared)
+        end)
+
+        it("only checks once per session", function()
+            settings.last_version = "0.3"
+            openUI()
+            settings.last_version = "0.2"
+            openUI()
+
+            assert.are.same({search = 1, mirrors = 1}, cleared)
+        end)
+
+        it("does nothing when the installed version is unknown", function()
+            settings.last_version = "0.3"
+            os.remove(plugin_dir .. "/version.txt")
+            openUI()
+
+            assert.are.same({search = 0, mirrors = 0}, cleared)
+            assert.are.equal("0.3", settings.last_version)
+        end)
     end)
 
     describe("init", function()
