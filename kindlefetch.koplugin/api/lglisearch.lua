@@ -38,6 +38,21 @@ local function parseTitle(cell)
             return text
         end
     end
+
+    -- comic issues can leave the link without text, with the title only in its tooltip (after when it was added and
+    -- its ID), e.g. "Hello, I'm Johnny Cash(Spire 1976)"
+    for tooltip in cell:gmatch('title="([^"]*)"%s+href="edition%.php%?id=%d+"') do
+        local text = stripTags(tooltip:match(".*<br>(.*)$") or "")
+        if text ~= "" then
+            return text
+        end
+    end
+
+    -- or failing that, the series it's an issue of
+    local series = stripTags(cell:match('href="series%.php%?id=%d+"%s*>(.-)</a>') or "")
+    if series ~= "" then
+        return series
+    end
 end
 
 local function parseBook(row, base_url)

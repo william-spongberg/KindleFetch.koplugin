@@ -79,6 +79,36 @@ describe("LlgiSearch", function()
             assert.are.equal("Dune Messiah", books[2].title)
         end)
 
+        -- as most comic issues are, which were all skipped before
+        it("finds a comic issue's title in its tooltip when the page leaves it out", function()
+            results(mirrors[1], {{
+                md5 = "4dc14e7148d7150c77634508303d76d8",
+                series = "Dune Comics",
+                issue = "",
+                title = "Dune - House Atreides(Boom 2020)",
+                title_in_tooltip_only = true,
+                book_type = "Comics issue",
+                language = "English",
+                file_type = "cbr"
+            }})
+            local book = LlgiSearch:search("dune", 1)[1]
+
+            -- without what's in brackets, like every title
+            assert.are.equal("Dune - House Atreides", book.title)
+            assert.are.equal("Comics issue", book.book_type)
+        end)
+
+        it("names a comic issue after its series when there's no title at all", function()
+            results(mirrors[1], {{
+                md5 = "4dc14e7148d7150c77634508303d76d8",
+                series = "Dune Comics",
+                issue = "",
+                language = "English",
+                file_type = "cbr"
+            }})
+            assert.are.equal("Dune Comics", LlgiSearch:search("dune", 1)[1].title)
+        end)
+
         it("finds the title after a comic's series and issue number", function()
             results(mirrors[1], {{
                 md5 = "e0d1e178d828288622b7ee6b8dc4dfbe",

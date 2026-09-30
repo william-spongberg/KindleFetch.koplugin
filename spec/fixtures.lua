@@ -77,7 +77,8 @@ function fixtures.libgenRow(book)
     elseif book.series then
         title = "<b>" .. book.series .. "</b><br>"
     end
-    if book.title then
+    -- some comic issues leave the title out of the page, apart from the tooltips
+    if book.title and not book.title_in_tooltip_only then
         title = title .. "<a " .. tooltip .. ' href="edition.php?id=317043">' .. book.title .. " <i></i></a>"
     end
     if book.isbn then
