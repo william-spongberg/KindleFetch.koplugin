@@ -10,7 +10,7 @@ function fixtures.fakeWeb(helper)
         pages = {},
         fetched = {},
         scrapes = 0,
-        wikipedia_down = false
+        wikipedia_down = false,
     }
     helper.useLiveHttp()
     local HttpUtil = require("util.httputil")
@@ -67,13 +67,20 @@ end
 
 -- one row of Library Genesis' search results (index.php with covers=on), with the same markup as the real page
 function fixtures.libgenRow(book)
-    local tooltip = 'data-toggle="tooltip" data-placement="right" data-html="true" ' ..
-                        'title="Add/Edit : 2021-06-18/2021-10-17; ID: 6518940<br>' .. (book.title or "") .. '"'
+    local tooltip = 'data-toggle="tooltip" data-placement="right" data-html="true" '
+        .. 'title="Add/Edit : 2021-06-18/2021-10-17; ID: 6518940<br>'
+        .. (book.title or "")
+        .. '"'
     local title = ""
     if book.series and book.issue then
         -- comics link the series and the issue number before the title
-        title = '<b><a href="series.php?id=164150">' .. book.series .. ' </a><a ' .. tooltip ..
-                    ' href="edition.php?id=317043"><i> ' .. book.issue .. '</i></a></b><br>'
+        title = '<b><a href="series.php?id=164150">'
+            .. book.series
+            .. " </a><a "
+            .. tooltip
+            .. ' href="edition.php?id=317043"><i> '
+            .. book.issue
+            .. "</i></a></b><br>"
     elseif book.series then
         title = "<b>" .. book.series .. "</b><br>"
     end
@@ -82,27 +89,42 @@ function fixtures.libgenRow(book)
         title = title .. "<a " .. tooltip .. ' href="edition.php?id=317043">' .. book.title .. " <i></i></a>"
     end
     if book.isbn then
-        title = title .. "<br><a " .. tooltip .. ' href="edition.php?id=317043"><i><font color="green"> ' .. book.isbn ..
-                    "</font></a></i>"
+        title = title
+            .. "<br><a "
+            .. tooltip
+            .. ' href="edition.php?id=317043"><i><font color="green"> '
+            .. book.isbn
+            .. "</font></a></i>"
     end
-    title = title .. ' <nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" ' ..
-                'data-html="true" title="' .. (book.book_type or "Book") .. '">b</a></span> ' ..
-                '<span class="badge badge-secondary"">f 6270247</span></nobr>'
+    title = title
+        .. ' <nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" '
+        .. 'data-html="true" title="'
+        .. (book.book_type or "Book")
+        .. '">b</a></span> '
+        .. '<span class="badge badge-secondary"">f 6270247</span></nobr>'
 
-    local cover = book.cover and ('<a href="edition.php?id=6270247"><img src="' .. book.cover ..
-                      '" style="max-height:70px;max-width:150px;height:auto;width:auto;"></a>') or ""
-    local mirrors = book.md5 and ('<a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" ' ..
-                        'href="/ads.php?md5=' .. book.md5 .. '"><span class="badge badge-primary">1</span></a> ' ..
-                        '<a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" ' ..
-                        'href="https://randombook.org/book/' .. book.md5 .. '"><span class="badge badge-primary">2</span></a>') or ""
+    local cover = book.cover
+            and ('<a href="edition.php?id=6270247"><img src="' .. book.cover .. '" style="max-height:70px;max-width:150px;height:auto;width:auto;"></a>')
+        or ""
+    local mirrors = book.md5
+            and ('<a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" ' .. 'href="/ads.php?md5=' .. book.md5 .. '"><span class="badge badge-primary">1</span></a> ' .. '<a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" ' .. 'href="https://randombook.org/book/' .. book.md5 .. '"><span class="badge badge-primary">2</span></a>')
+        or ""
 
-    local cells = {cell(cover), cell(title), cell(book.authors), cell('<a href="publisher.php?id=17868">Ace</a>'),
-                   cell(book.year and ("<nobr>" .. book.year .. "</nobr>")), cell(book.language), cell("412"),
-                   cell(book.file_size and ('<nobr><a href="/file.php?id=6518940">' .. book.file_size .. "</a></nobr>")),
-                   cell(book.file_type), cell(mirrors)}
+    local cells = {
+        cell(cover),
+        cell(title),
+        cell(book.authors),
+        cell('<a href="publisher.php?id=17868">Ace</a>'),
+        cell(book.year and ("<nobr>" .. book.year .. "</nobr>")),
+        cell(book.language),
+        cell("412"),
+        cell(book.file_size and ('<nobr><a href="/file.php?id=6518940">' .. book.file_size .. "</a></nobr>")),
+        cell(book.file_type),
+        cell(mirrors),
+    }
     if book.cells then
         local unpack = table.unpack or unpack
-        cells = {unpack(cells, 1, book.cells)}
+        cells = { unpack(cells, 1, book.cells) }
     end
     return "<tr>\n" .. table.concat(cells) .. "</tr>\n"
 end
@@ -112,9 +134,10 @@ function fixtures.libgenResults(books)
     for _, book in ipairs(books) do
         table.insert(rows, fixtures.libgenRow(book))
     end
-    return '<html><head><title>Library Genesis</title></head><body><table class="table  table-striped" ' ..
-               'id="tablelibgen"><thead><tr><th scope="col" class="first_col">Title</th></tr></thead><tbody>' ..
-               table.concat(rows) .. "</tbody></table></body></html>"
+    return '<html><head><title>Library Genesis</title></head><body><table class="table  table-striped" '
+        .. 'id="tablelibgen"><thead><tr><th scope="col" class="first_col">Title</th></tr></thead><tbody>'
+        .. table.concat(rows)
+        .. "</tbody></table></body></html>"
 end
 
 fixtures.DUNE = {
@@ -127,7 +150,7 @@ fixtures.DUNE = {
     year = "1990",
     language = "English",
     file_type = "epub",
-    file_size = "1 MB"
+    file_size = "1 MB",
 }
 
 fixtures.MESSIAH = {
@@ -138,13 +161,14 @@ fixtures.MESSIAH = {
     year = "1987",
     language = "English",
     file_type = "pdf",
-    file_size = "3 MB"
+    file_size = "3 MB",
 }
 
 -- Library Genesis' ads.php page links to get.php with a download key
 function fixtures.libgenAds(md5)
-    return [[<html><body><table id="main"><tr><td><a href="get.php?md5=]] .. md5 ..
-               [[&key=ABC123"><h2>GET</h2></a></td></tr></table></body></html>]]
+    return [[<html><body><table id="main"><tr><td><a href="get.php?md5=]]
+        .. md5
+        .. [[&key=ABC123"><h2>GET</h2></a></td></tr></table></body></html>]]
 end
 
 return fixtures

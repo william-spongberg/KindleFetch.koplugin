@@ -26,74 +26,83 @@ function SettingsPage:showSettings()
     local search_cache_days = KindleFetchSettings:getSearchCacheExpiryDays()
     local mirror_cache_days = KindleFetchSettings:getMirrorCacheExpiryDays()
 
-    local menu_items = {{
-        text = _(string.format("Show Book Covers: %s", show_book_covers and "☑" or "☐")),
-        callback = function()
-            UIManager:close(menu)
-            UIManager:setDirty(menu, "full")
-            this:changeBookCoverVisibility()
-        end
-    }, {
-        text = _("Download Folder: ") .. download_dir,
-        callback = function()
-            UIManager:close(menu)
-            UIManager:setDirty(menu, "full")
-            this:changeDownloadFolder()
-        end
-    }, {
-        text = _("Preferred Languages: ") .. table.concat(languages, ", "),
-        callback = function()
-            UIManager:close(menu)
-            UIManager:setDirty(menu, "full")
-            this:changeLanguages()
-        end
-    }, {
-        text = _("Preferred File Types: ") .. table.concat(file_types, ", "),
-        callback = function()
-            UIManager:close(menu)
-            UIManager:setDirty(menu, "full")
-            this:changeFileTypes()
-        end
-    }, {
-        text = _("Preferred Book Types: ") .. table.concat(book_types, ", "),
-        callback = function()
-            UIManager:close(menu)
-            UIManager:setDirty(menu, "full")
-            this:changeBookTypes()
-        end
-    }, {
-        text = _(string.format("Check for Updates Automatically: %s", check_for_updates and "☑" or "☐")),
-        callback = function()
-            UIManager:close(menu)
-            UIManager:setDirty(menu, "full")
-            this:changeCheckForUpdates()
-        end
-    }, {
-        text = _("Keep Searches For: ") .. formatDays(search_cache_days),
-        callback = function()
-            UIManager:close(menu)
-            UIManager:setDirty(menu, "full")
-            this:changeCacheExpiry(_("Keep Searches For"), search_cache_days, function(days)
-                KindleFetchSettings:setSearchCacheExpiryDays(days)
-            end)
-        end
-    }, {
-        text = _("Keep Mirrors For: ") .. formatDays(mirror_cache_days),
-        callback = function()
-            UIManager:close(menu)
-            UIManager:setDirty(menu, "full")
-            this:changeCacheExpiry(_("Keep Mirrors For"), mirror_cache_days, function(days)
-                KindleFetchSettings:setMirrorCacheExpiryDays(days)
-            end)
-        end
-    }}
+    local menu_items = {
+        {
+            text = _(string.format("Show Book Covers: %s", show_book_covers and "☑" or "☐")),
+            callback = function()
+                UIManager:close(menu)
+                UIManager:setDirty(menu, "full")
+                this:changeBookCoverVisibility()
+            end,
+        },
+        {
+            text = _("Download Folder: ") .. download_dir,
+            callback = function()
+                UIManager:close(menu)
+                UIManager:setDirty(menu, "full")
+                this:changeDownloadFolder()
+            end,
+        },
+        {
+            text = _("Preferred Languages: ") .. table.concat(languages, ", "),
+            callback = function()
+                UIManager:close(menu)
+                UIManager:setDirty(menu, "full")
+                this:changeLanguages()
+            end,
+        },
+        {
+            text = _("Preferred File Types: ") .. table.concat(file_types, ", "),
+            callback = function()
+                UIManager:close(menu)
+                UIManager:setDirty(menu, "full")
+                this:changeFileTypes()
+            end,
+        },
+        {
+            text = _("Preferred Book Types: ") .. table.concat(book_types, ", "),
+            callback = function()
+                UIManager:close(menu)
+                UIManager:setDirty(menu, "full")
+                this:changeBookTypes()
+            end,
+        },
+        {
+            text = _(string.format("Check for Updates Automatically: %s", check_for_updates and "☑" or "☐")),
+            callback = function()
+                UIManager:close(menu)
+                UIManager:setDirty(menu, "full")
+                this:changeCheckForUpdates()
+            end,
+        },
+        {
+            text = _("Keep Searches For: ") .. formatDays(search_cache_days),
+            callback = function()
+                UIManager:close(menu)
+                UIManager:setDirty(menu, "full")
+                this:changeCacheExpiry(_("Keep Searches For"), search_cache_days, function(days)
+                    KindleFetchSettings:setSearchCacheExpiryDays(days)
+                end)
+            end,
+        },
+        {
+            text = _("Keep Mirrors For: ") .. formatDays(mirror_cache_days),
+            callback = function()
+                UIManager:close(menu)
+                UIManager:setDirty(menu, "full")
+                this:changeCacheExpiry(_("Keep Mirrors For"), mirror_cache_days, function(days)
+                    KindleFetchSettings:setMirrorCacheExpiryDays(days)
+                end)
+            end,
+        },
+    }
 
-    menu = Menu:new{
+    menu = Menu:new {
         item_table = menu_items,
         covers_fullscreen = true,
         is_borderless = true,
         width = this.dimen.w,
-        height = this.dimen.h
+        height = this.dimen.h,
     }
     UIManager:show(menu)
     UIManager:setDirty(menu, "full")
@@ -126,17 +135,17 @@ function SettingsPage:changeCacheExpiry(title, current_days, save)
                 UIManager:close(menu)
                 UIManager:setDirty(menu, "full")
                 this:showSettings()
-            end
+            end,
         })
     end
 
-    menu = Menu:new{
+    menu = Menu:new {
         title = title,
         item_table = items,
         covers_fullscreen = true,
         is_borderless = true,
         width = this.dimen.w,
-        height = this.dimen.h
+        height = this.dimen.h,
     }
     UIManager:show(menu)
     UIManager:setDirty(menu, "full")
@@ -151,7 +160,7 @@ end
 function SettingsPage:changeDownloadFolder()
     local this = self
 
-    DownloadMgr:new{
+    DownloadMgr:new {
         title = _("Choose download directory"),
         onConfirm = function(dir)
             local ok, err = KindleFetchSettings:setDownloadDir(dir)
@@ -162,7 +171,7 @@ function SettingsPage:changeDownloadFolder()
             else
                 NotifyUtil.info("Error: " .. err)
             end
-        end
+        end,
     }:chooseDir()
 end
 
@@ -188,11 +197,11 @@ function SettingsPage:changeLanguages()
                     UIManager:close(menu)
                     UIManager:setDirty(menu, "full")
                     showMenu()
-                end
+                end,
             })
         end
 
-        menu = Menu:new{
+        menu = Menu:new {
             title = _("Preferred Languages"),
             item_table = items,
             covers_fullscreen = true,
@@ -222,7 +231,7 @@ function SettingsPage:changeLanguages()
                 else
                     NotifyUtil.info("Select at least one language")
                 end
-            end
+            end,
         }
 
         UIManager:show(menu)
@@ -235,22 +244,28 @@ end
 function SettingsPage:changeFileTypes()
     local this = self
 
-    local categories = {{
-        name = _("Ebooks"),
-        types = KindleFetchSettings:getEbookFileTypes()
-    }, {
-        name = _("Comics"),
-        types = KindleFetchSettings:getComicFileTypes()
-    }, {
-        name = _("Documents"),
-        types = KindleFetchSettings:getDocumentFileTypes()
-    }, {
-        name = _("Images"),
-        types = KindleFetchSettings:getImageFileTypes()
-    }, {
-        name = _("Web"),
-        types = KindleFetchSettings:getWebFileTypes()
-    }}
+    local categories = {
+        {
+            name = _("Ebooks"),
+            types = KindleFetchSettings:getEbookFileTypes(),
+        },
+        {
+            name = _("Comics"),
+            types = KindleFetchSettings:getComicFileTypes(),
+        },
+        {
+            name = _("Documents"),
+            types = KindleFetchSettings:getDocumentFileTypes(),
+        },
+        {
+            name = _("Images"),
+            types = KindleFetchSettings:getImageFileTypes(),
+        },
+        {
+            name = _("Web"),
+            types = KindleFetchSettings:getWebFileTypes(),
+        },
+    }
 
     local selected = {}
 
@@ -265,7 +280,7 @@ function SettingsPage:changeFileTypes()
         for _, category in ipairs(categories) do
             table.insert(items, {
                 text = "── " .. category.name .. " ──",
-                enabled = false
+                enabled = false,
             })
 
             for _, ext in ipairs(category.types) do
@@ -276,12 +291,12 @@ function SettingsPage:changeFileTypes()
                         UIManager:close(menu)
                         UIManager:setDirty(menu, "full")
                         showMenu()
-                    end
+                    end,
                 })
             end
         end
 
-        menu = Menu:new{
+        menu = Menu:new {
             title = _("Preferred File Types"),
             item_table = items,
             covers_fullscreen = true,
@@ -314,7 +329,7 @@ function SettingsPage:changeFileTypes()
                 else
                     NotifyUtil.info("Select at least one file type")
                 end
-            end
+            end,
         }
 
         UIManager:show(menu)
@@ -346,11 +361,11 @@ function SettingsPage:changeBookTypes()
                     UIManager:close(menu)
                     UIManager:setDirty(menu, "full")
                     showMenu()
-                end
+                end,
             })
         end
 
-        menu = Menu:new{
+        menu = Menu:new {
             title = _("Preferred Book Types"),
             item_table = items,
             covers_fullscreen = true,
@@ -381,7 +396,7 @@ function SettingsPage:changeBookTypes()
                 else
                     NotifyUtil.info("Select at least one book type")
                 end
-            end
+            end,
         }
 
         UIManager:show(menu)

@@ -1,0 +1,9 @@
+# Formats the plugin and its tests: stylua . (from the repository root)
+column_width = 120
+line_endings = "Unix"
+indent_type = "Spaces"
+indent_width = 4
+quote_style = "AutoPreferDouble"
+# keep Widget:new{...} and require("...") as they're written
+call_parentheses = "Input"
+collapse_simple_statement = "Never"

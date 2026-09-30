@@ -41,93 +41,93 @@ end
 -- create the widgets, again whenever shown after being hidden, as KOReader frees widgets once they're closed
 function DownloadProgress:build()
     -- title
-    self.text_widget = TextBoxWidget:new{
+    self.text_widget = TextBoxWidget:new {
         text = self.title,
         face = Font:getFace("cfont", 18),
         width = CONTENT_WIDTH,
-        alignment = "center"
+        alignment = "center",
     }
 
     -- download percentage
-    self.status_widget = TextWidget:new{
+    self.status_widget = TextWidget:new {
         text = self.status_text,
         face = Font:getFace("cfont", 16),
         width = CONTENT_WIDTH,
-        alignment = "center"
+        alignment = "center",
     }
 
-    self.status_container = CenterContainer:new{
-        dimen = Geom:new{
+    self.status_container = CenterContainer:new {
+        dimen = Geom:new {
             w = CONTENT_WIDTH,
-            h = 25
+            h = 25,
         },
-        self.status_widget
+        self.status_widget,
     }
 
-    self.bar_widget = ProgressWidget:new{
+    self.bar_widget = ProgressWidget:new {
         width = CONTENT_WIDTH,
         height = Screen:scaleBySize(16),
-        percentage = self.percentage
+        percentage = self.percentage,
     }
 
     -- cancel button
-    self.cancel_button = Button:new{
+    self.cancel_button = Button:new {
         text = _("Cancel"),
         callback = function()
             self:cancel()
         end,
-        padding = Size.padding.default
+        padding = Size.padding.default,
     }
 
     -- hide button
-    self.hide_button = Button:new{
+    self.hide_button = Button:new {
         text = _("Hide"),
         callback = function()
             self:toggleVisibility()
         end,
-        padding = Size.padding.default
+        padding = Size.padding.default,
     }
 
     -- button group
-    self.button_group = HorizontalGroup:new{
+    self.button_group = HorizontalGroup:new {
         align = "center",
         self.cancel_button,
-        HorizontalSpan:new{
-            width = Size.padding.default
+        HorizontalSpan:new {
+            width = Size.padding.default,
         },
-        self.hide_button
+        self.hide_button,
     }
 
-    self.frame = FrameContainer:new{
+    self.frame = FrameContainer:new {
         background = Blitbuffer.COLOR_WHITE,
         bordersize = Size.border.window,
         padding = Size.padding.large,
         width = CONTENT_WIDTH + Size.padding.large * 2,
 
-        VerticalGroup:new{
+        VerticalGroup:new {
             align = "center",
             self.text_widget,
-            VerticalSpan:new{
-                width = Size.padding.default
+            VerticalSpan:new {
+                width = Size.padding.default,
             },
             self.bar_widget,
-            VerticalSpan:new{
-                width = Size.padding.small
+            VerticalSpan:new {
+                width = Size.padding.small,
             },
             self.status_container,
-            VerticalSpan:new{
-                width = Size.padding.large
+            VerticalSpan:new {
+                width = Size.padding.large,
             },
-            self.button_group
-        }
+            self.button_group,
+        },
     }
 
-    self.container = CenterContainer:new{
-        dimen = Geom:new{
+    self.container = CenterContainer:new {
+        dimen = Geom:new {
             w = Screen:getWidth(),
-            h = Screen:getHeight()
+            h = Screen:getHeight(),
         },
-        self.frame
+        self.frame,
     }
 end
 

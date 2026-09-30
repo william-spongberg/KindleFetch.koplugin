@@ -10,23 +10,23 @@ local CoverPlaceholder = {}
 function CoverPlaceholder.new(width, height)
     local icon_size = math.floor(width / 2)
 
-    return FrameContainer:new{
+    return FrameContainer:new {
         background = Blitbuffer.COLOR_LIGHT_GRAY,
         bordersize = 0,
         padding = 0,
         is_cover_placeholder = true,
-        CenterContainer:new{
-            dimen = Geom:new{
+        CenterContainer:new {
+            dimen = Geom:new {
                 w = width,
-                h = height
+                h = height,
             },
-            IconWidget:new{
+            IconWidget:new {
                 icon = "book.opened",
                 width = icon_size,
                 height = icon_size,
-                alpha = true
-            }
-        }
+                alpha = true,
+            },
+        },
     }
 end
 

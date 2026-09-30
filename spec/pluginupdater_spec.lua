@@ -9,15 +9,18 @@ local LATEST_RELEASE = [[{
 }]]
 
 -- where KOReader keeps its data and user plugins on each kind of device
-local LAYOUTS = {{
-    name = "kindle/kobo",
-    absolute = false, -- data dir is "."
-    plugins_dir = "/plugins/"
-}, {
-    name = "android",
-    absolute = true, -- data dir is "/sdcard/koreader", plugins are found through "<data dir>/plugins/"
-    plugins_dir = "/plugins//"
-}}
+local LAYOUTS = {
+    {
+        name = "kindle/kobo",
+        absolute = false, -- data dir is "."
+        plugins_dir = "/plugins/",
+    },
+    {
+        name = "android",
+        absolute = true, -- data dir is "/sdcard/koreader", plugins are found through "<data dir>/plugins/"
+        plugins_dir = "/plugins//",
+    },
+}
 
 for _, layout in ipairs(LAYOUTS) do
     describe("PluginUpdater on " .. layout.name, function()
@@ -137,8 +140,13 @@ for _, layout in ipairs(LAYOUTS) do
                 helper.writeFile(build_dir .. "/kindlefetch.koplugin/main.lua", "-- v0.4\n")
                 helper.writeFile(build_dir .. "/kindlefetch.koplugin/version.txt", "0.4\n")
                 release_zip = helper.abs(build_dir) .. "/kindlefetch.koplugin.zip"
-                helper.run(string.format("cd %s && zip -qr %s kindlefetch.koplugin", helper.quote(build_dir),
-                    helper.quote(release_zip)))
+                helper.run(
+                    string.format(
+                        "cd %s && zip -qr %s kindlefetch.koplugin",
+                        helper.quote(build_dir),
+                        helper.quote(release_zip)
+                    )
+                )
 
                 downloaded_url = nil
                 CurlUtil.download = function(url, filepath)
@@ -154,7 +162,8 @@ for _, layout in ipairs(LAYOUTS) do
                 acceptUpdate()
                 assert.are.equal(
                     "https://github.com/william-spongberg/KindleFetch.koplugin/releases/download/v0.4/kindlefetch.koplugin.zip",
-                    downloaded_url)
+                    downloaded_url
+                )
             end)
 
             it("replaces the installed plugin with the new release", function()
@@ -163,8 +172,7 @@ for _, layout in ipairs(LAYOUTS) do
                 assert.are.equal("-- v0.4\n", helper.readFile(plugin_path .. "/main.lua"))
                 assert.are.equal("0.4", helper.readFile(plugin_path .. "/version.txt"))
                 assert.is_false(helper.exists(plugin_path .. "/util/pathutil.lua"))
-                assert.are.equal("Plugin updated. Please restart KOReader to apply changes.",
-                    helper.lastNotification())
+                assert.are.equal("Plugin updated. Please restart KOReader to apply changes.", helper.lastNotification())
             end)
 
             it("cleans up the backup and downloaded files", function()
@@ -187,8 +195,13 @@ for _, layout in ipairs(LAYOUTS) do
                 local build_dir = helper.tmpdir("bad-release")
                 helper.writeFile(build_dir .. "/KindleFetch-main/main.lua", "-- v0.4\n")
                 local bad_zip = helper.abs(build_dir) .. "/release.zip"
-                helper.run(string.format("cd %s && zip -qr %s KindleFetch-main", helper.quote(build_dir),
-                    helper.quote(bad_zip)))
+                helper.run(
+                    string.format(
+                        "cd %s && zip -qr %s KindleFetch-main",
+                        helper.quote(build_dir),
+                        helper.quote(bad_zip)
+                    )
+                )
                 release_zip = bad_zip
                 acceptUpdate()
 

@@ -30,7 +30,7 @@ describe("SettingsPage", function()
         data_dir = helper.tmpdir("data")
         helper.state.data_dir = data_dir
         helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
-            download_dir = helper.abs(data_dir)
+            download_dir = helper.abs(data_dir),
         }
         Settings = require("settings.settings")
         SettingsPage = require("settings.settingspage")
@@ -41,13 +41,17 @@ describe("SettingsPage", function()
     it("shows the current settings", function()
         SettingsPage:showSettings()
 
-        assert.are.same({"Show Book Covers: ☑", "Download Folder: " .. helper.abs(data_dir),
-                         "Preferred Languages: en", "Preferred File Types: epub, mobi, azw, fb2, prc, cbr, cbz, " ..
-                             "pdf, txt, rtf, doc, docx, odt, djvu, jpg, tif, pdb, chm, htm, html, htmlz",
-                         "Preferred Book Types: fiction, nonfiction, comics, magazines, articles, standards",
-                         "Check for Updates Automatically: ☑",
-                         "Keep Searches For: 14 days", "Keep Mirrors For: 7 days"},
-            itemTexts(lastMenu()))
+        assert.are.same({
+            "Show Book Covers: ☑",
+            "Download Folder: " .. helper.abs(data_dir),
+            "Preferred Languages: en",
+            "Preferred File Types: epub, mobi, azw, fb2, prc, cbr, cbz, "
+                .. "pdf, txt, rtf, doc, docx, odt, djvu, jpg, tif, pdb, chm, htm, html, htmlz",
+            "Preferred Book Types: fiction, nonfiction, comics, magazines, articles, standards",
+            "Check for Updates Automatically: ☑",
+            "Keep Searches For: 14 days",
+            "Keep Mirrors For: 7 days",
+        }, itemTexts(lastMenu()))
     end)
 
     it("toggles book covers", function()
@@ -76,7 +80,10 @@ describe("SettingsPage", function()
             SettingsPage:showSettings()
             tap("Keep Searches For")
             assert.are.equal("Keep Searches For", lastMenu().title)
-            assert.are.same({"○ 1 day", "○ 3 days", "○ 7 days", "◉ 14 days", "○ 30 days"}, itemTexts(lastMenu()))
+            assert.are.same(
+                { "○ 1 day", "○ 3 days", "○ 7 days", "◉ 14 days", "○ 30 days" },
+                itemTexts(lastMenu())
+            )
 
             tap("30 days")
             assert.are.equal(30, Settings:getSearchCacheExpiryDays())
@@ -135,7 +142,7 @@ describe("SettingsPage", function()
             tap("French")
             lastMenu().onClose()
 
-            assert.are.same({"es", "fr"}, Settings:getPreferredLanguages())
+            assert.are.same({ "es", "fr" }, Settings:getPreferredLanguages())
             assert.are.equal("Languages updated", helper.lastNotification())
             assert.are.equal("Preferred Languages: es, fr", lastMenu().item_table[3].text)
         end)
@@ -146,7 +153,7 @@ describe("SettingsPage", function()
             tap("English")
             lastMenu().onClose()
 
-            assert.are.same({"en"}, Settings:getPreferredLanguages())
+            assert.are.same({ "en" }, Settings:getPreferredLanguages())
             assert.are.equal("Select at least one language", helper.lastNotification())
         end)
     end)
@@ -171,8 +178,27 @@ describe("SettingsPage", function()
             tap("☑ pdf")
             lastMenu().onClose()
 
-            assert.are.same({"epub", "azw", "fb2", "prc", "cbr", "cbz", "txt", "rtf", "doc", "docx", "odt", "djvu", "jpg",
-                             "tif", "pdb", "chm", "htm", "html", "htmlz"}, Settings:getPreferredFileTypes())
+            assert.are.same({
+                "epub",
+                "azw",
+                "fb2",
+                "prc",
+                "cbr",
+                "cbz",
+                "txt",
+                "rtf",
+                "doc",
+                "docx",
+                "odt",
+                "djvu",
+                "jpg",
+                "tif",
+                "pdb",
+                "chm",
+                "htm",
+                "html",
+                "htmlz",
+            }, Settings:getPreferredFileTypes())
             assert.are.equal("File types updated", helper.lastNotification())
         end)
 
@@ -200,20 +226,29 @@ describe("SettingsPage", function()
             tap("☑ Comics")
             lastMenu().onClose()
 
-            assert.are.same({"fiction", "magazines", "articles", "standards"}, Settings:getPreferredBookTypes())
+            assert.are.same({ "fiction", "magazines", "articles", "standards" }, Settings:getPreferredBookTypes())
             assert.are.equal("Book types updated", helper.lastNotification())
         end)
 
         it("cannot all be unticked", function()
             SettingsPage:showSettings()
             tap("Preferred Book Types")
-            for _, name in ipairs({"Fiction", "Non-fiction", "Comics", "Magazines", "Scientific articles", "Standards"}) do
+            for _, name in ipairs({
+                "Fiction",
+                "Non-fiction",
+                "Comics",
+                "Magazines",
+                "Scientific articles",
+                "Standards",
+            }) do
                 tap("☑ " .. name)
             end
             lastMenu().onClose()
 
-            assert.are.same({"fiction", "nonfiction", "comics", "magazines", "articles", "standards"},
-                Settings:getPreferredBookTypes())
+            assert.are.same(
+                { "fiction", "nonfiction", "comics", "magazines", "articles", "standards" },
+                Settings:getPreferredBookTypes()
+            )
             assert.are.equal("Select at least one book type", helper.lastNotification())
         end)
     end)

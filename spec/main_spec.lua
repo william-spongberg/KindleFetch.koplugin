@@ -12,18 +12,18 @@ describe("KindleFetch", function()
 
     local function openUI()
         opened = nil
-        return KindleFetch:new{
+        return KindleFetch:new {
             ui = {
                 menu = {
-                    registerToMainMenu = function() end
+                    registerToMainMenu = function() end,
                 },
                 openFile = function(_, file)
-                    opened = {"openFile", file}
+                    opened = { "openFile", file }
                 end,
                 switchDocument = function(_, file)
-                    opened = {"switchDocument", file}
-                end
-            }
+                    opened = { "switchDocument", file }
+                end,
+            },
         }
     end
 
@@ -32,7 +32,7 @@ describe("KindleFetch", function()
             md5 = title:lower(),
             title = title,
             display_title = title,
-            file_type = file_type or "epub"
+            file_type = file_type or "epub",
         }
     end
 
@@ -55,16 +55,16 @@ describe("KindleFetch", function()
         helper.reset()
         checks = {
             curl = 0,
-            plugin = 0
+            plugin = 0,
         }
         settings = {
             show_covers = true,
             download_dir = "/mnt/us/documents",
             last_version = "0.4",
             check_for_updates = true,
-            languages = {"en"},
-            file_types = {"epub"},
-            book_types = {"fiction"}
+            languages = { "en" },
+            file_types = { "epub" },
+            book_types = { "fiction" },
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
         saved = {}
@@ -94,45 +94,45 @@ describe("KindleFetch", function()
             end,
             getPreferredBookTypes = function()
                 return settings.book_types
-            end
+            end,
         })
 
         cleared = {
             search = 0,
-            mirrors = 0
+            mirrors = 0,
         }
         helper.stub("cache.searchcache", {
             clear = function()
                 cleared.search = cleared.search + 1
-            end
+            end,
         })
         helper.stub("cache.urlcache", {
             clear = function()
                 cleared.mirrors = cleared.mirrors + 1
-            end
+            end,
         })
         plugin_dir = helper.tmpdir("plugin")
         helper.writeFile(plugin_dir .. "/version.txt", "0.4\n")
         helper.stub("util.pathutil", {
             getPluginPath = function()
                 return plugin_dir
-            end
+            end,
         })
         helper.stub("settings.settingspage", {
             showSettings = function()
                 settings_shown = settings_shown + 1
-            end
+            end,
         })
         helper.stub("api.lglisearch", {
             search = function(_, query, page)
-                table.insert(searches, {query, page})
+                table.insert(searches, { query, page })
                 -- books, error, and the page to carry on from
-                local result = search_results[page] or {{}}
+                local result = search_results[page] or { {} }
                 return result[1], result[2], result[3]
             end,
             isCached = function(_, query, page)
                 return saved[query .. " " .. page] == true
-            end
+            end,
         })
         cancelled_downloads = 0
         helper.stub("api.lgliapi", {
@@ -143,9 +143,9 @@ describe("KindleFetch", function()
                 table.insert(downloads, {
                     book = download_book,
                     filepath = filepath,
-                    callback = callback
+                    callback = callback,
                 })
-            end
+            end,
         })
         helper.stub("ui.bookmenu", {
             new = function(_, menu)
@@ -155,24 +155,24 @@ describe("KindleFetch", function()
                 end
                 table.insert(menus, menu)
                 return menu
-            end
+            end,
         })
         helper.stub("cache.covercache", {})
         helper.stub("util.curlutil", {
             getVersion = function()
                 return "8.17.0"
-            end
+            end,
         })
         helper.stub("updater.curlupdater", {
             checkVersion = function()
                 checks.curl = checks.curl + 1
-            end
+            end,
         })
         helper.stub("updater.pluginupdater", {
             checkForUpdates = function(user_requested)
                 checks.plugin = checks.plugin + 1
                 checks.user_requested = user_requested
-            end
+            end,
         })
 
         -- KOReader loads main.lua once per session
@@ -214,7 +214,7 @@ describe("KindleFetch", function()
             settings.last_version = "0.3"
             openUI()
 
-            assert.are.same({search = 1, mirrors = 1}, cleared)
+            assert.are.same({ search = 1, mirrors = 1 }, cleared)
             assert.are.equal("0.4", settings.last_version)
         end)
 
@@ -222,13 +222,13 @@ describe("KindleFetch", function()
             settings.last_version = nil
             openUI()
 
-            assert.are.same({search = 1, mirrors = 1}, cleared)
+            assert.are.same({ search = 1, mirrors = 1 }, cleared)
             assert.are.equal("0.4", settings.last_version)
         end)
 
         it("keeps them while the version stays the same", function()
             openUI()
-            assert.are.same({search = 0, mirrors = 0}, cleared)
+            assert.are.same({ search = 0, mirrors = 0 }, cleared)
         end)
 
         it("only checks once per session", function()
@@ -237,7 +237,7 @@ describe("KindleFetch", function()
             settings.last_version = "0.2"
             openUI()
 
-            assert.are.same({search = 1, mirrors = 1}, cleared)
+            assert.are.same({ search = 1, mirrors = 1 }, cleared)
         end)
 
         it("does nothing when the installed version is unknown", function()
@@ -245,7 +245,7 @@ describe("KindleFetch", function()
             os.remove(plugin_dir .. "/version.txt")
             openUI()
 
-            assert.are.same({search = 0, mirrors = 0}, cleared)
+            assert.are.same({ search = 0, mirrors = 0 }, cleared)
             assert.are.equal("0.3", settings.last_version)
         end)
     end)
@@ -267,10 +267,10 @@ describe("KindleFetch", function()
 
         it("checks for updates once the UI is ready", function()
             openUI()
-            assert.are.same({curl = 0, plugin = 0}, checks)
+            assert.are.same({ curl = 0, plugin = 0 }, checks)
 
             helper.runScheduled()
-            assert.are.same({curl = 1, plugin = 1, user_requested = false}, checks)
+            assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
         end)
 
         it("does not check for updates when automatic checks are turned off", function()
@@ -278,7 +278,7 @@ describe("KindleFetch", function()
             openUI()
             helper.runScheduled()
 
-            assert.are.same({curl = 0, plugin = 0}, checks)
+            assert.are.same({ curl = 0, plugin = 0 }, checks)
         end)
 
         it("only checks for updates once per session", function()
@@ -288,19 +288,19 @@ describe("KindleFetch", function()
             openUI()
             helper.runScheduled()
 
-            assert.are.same({curl = 1, plugin = 1, user_requested = false}, checks)
+            assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
         end)
 
         it("waits for a network connection before checking for updates", function()
             helper.stubs.network.connected = false
             openUI()
             helper.runScheduled()
-            assert.are.same({curl = 0, plugin = 0}, checks)
+            assert.are.same({ curl = 0, plugin = 0 }, checks)
 
             helper.stubs.network.connected = true
             openUI()
             helper.runScheduled()
-            assert.are.same({curl = 1, plugin = 1, user_requested = false}, checks)
+            assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
         end)
     end)
 
@@ -333,19 +333,19 @@ describe("KindleFetch", function()
             settings.check_for_updates = false
             menuItem(openUI(), "Check for updates").callback()
 
-            assert.are.same({curl = 1, plugin = 1, user_requested = true}, checks)
+            assert.are.same({ curl = 1, plugin = 1, user_requested = true }, checks)
             assert.are.equal("Checking for updates...", helper.lastNotification())
         end)
 
         it("connects to wifi before checking for updates", function()
             helper.stubs.network.connected = false
             menuItem(openUI(), "Check for updates").callback()
-            assert.are.same({curl = 0, plugin = 0}, checks)
+            assert.are.same({ curl = 0, plugin = 0 }, checks)
             assert.are.equal("turn wifi on", helper.stubs.network.prompted)
 
             helper.stubs.network.connected = true
             helper.stubs.network.when_connected()
-            assert.are.same({curl = 1, plugin = 1, user_requested = true}, checks)
+            assert.are.same({ curl = 1, plugin = 1, user_requested = true }, checks)
         end)
     end)
 
@@ -369,69 +369,75 @@ describe("KindleFetch", function()
         end)
 
         -- as nothing could be found
-        for _, preference in ipairs({{"languages", "language"}, {"file_types", "file type"}, {"book_types", "book type"}}) do
+        for _, preference in ipairs({
+            { "languages", "language" },
+            { "file_types", "file type" },
+            { "book_types", "book type" },
+        }) do
             it("says when every " .. preference[2] .. " is turned off, rather than searching", function()
                 settings[preference[1]] = {}
                 search(openUI(), "dune")
 
                 assert.are.equal(0, #searches)
-                assert.are.equal("Error: turn on at least one " .. preference[2] .. " in Kindle Fetch's settings",
-                    helper.lastNotification())
+                assert.are.equal(
+                    "Error: turn on at least one " .. preference[2] .. " in Kindle Fetch's settings",
+                    helper.lastNotification()
+                )
             end)
         end
 
         it("shows results saved from an earlier search without turning on wifi", function()
             helper.stubs.network.connected = false
             saved["dune 1"] = true
-            search_results[1] = {{book("Dune")}}
+            search_results[1] = { { book("Dune") } }
             search(openUI(), "dune")
 
             assert.is_nil(helper.stubs.network.prompted)
-            assert.are.same({{"dune", 1}}, searches)
-            assert.are.same({"Dune"}, itemTexts(menus[1]))
+            assert.are.same({ { "dune", 1 } }, searches)
+            assert.are.same({ "Dune" }, itemTexts(menus[1]))
         end)
 
         it("turns on wifi when offline, then searches once connected", function()
             helper.stubs.network.connected = false
-            search_results[1] = {{book("Dune")}, nil, 2}
+            search_results[1] = { { book("Dune") }, nil, 2 }
             search(openUI(), "dune")
             assert.are.equal("turn wifi on", helper.stubs.network.prompted)
             assert.are.equal(0, #searches)
 
             helper.stubs.network.connected = true
             helper.stubs.network.when_connected()
-            assert.are.same({{"dune", 1}}, searches)
-            assert.are.same({"Dune", "Load more"}, itemTexts(menus[1]))
+            assert.are.same({ { "dune", 1 } }, searches)
+            assert.are.same({ "Dune", "Load more" }, itemTexts(menus[1]))
         end)
 
         it("shows the books found, with a way to load more", function()
-            search_results[1] = {{book("Dune"), book("Dune Messiah")}, nil, 2}
+            search_results[1] = { { book("Dune"), book("Dune Messiah") }, nil, 2 }
             search(openUI(), "  dune  ")
 
-            assert.are.same({{"dune", 1}}, searches)
+            assert.are.same({ { "dune", 1 } }, searches)
             assert.are.equal("Searching...", helper.state.notifications[1])
-            assert.are.same({"Dune", "Dune Messiah", "Load more"}, itemTexts(menus[1]))
+            assert.are.same({ "Dune", "Dune Messiah", "Load more" }, itemTexts(menus[1]))
             assert.are.equal(menus[1], helper.lastShown())
         end)
 
         it("doesn't offer more books at the end of the results", function()
-            search_results[1] = {{book("Dune")}}
+            search_results[1] = { { book("Dune") } }
             search(openUI(), "dune")
 
-            assert.are.same({"Dune"}, itemTexts(menus[1]))
+            assert.are.same({ "Dune" }, itemTexts(menus[1]))
         end)
 
         it("loads covers for each page shown", function()
-            search_results[1] = {{book("Dune")}}
+            search_results[1] = { { book("Dune") } }
             search(openUI(), "dune")
             menus[1].onPageChange(2)
 
-            assert.are.same({1, 2}, menus[1].covers_loaded)
+            assert.are.same({ 1, 2 }, menus[1].covers_loaded)
         end)
 
         it("does not load covers when they are turned off", function()
             settings.show_covers = false
-            search_results[1] = {{book("Dune")}}
+            search_results[1] = { { book("Dune") } }
             search(openUI(), "dune")
             menus[1].onPageChange(2)
 
@@ -439,7 +445,7 @@ describe("KindleFetch", function()
         end)
 
         it("reports search errors", function()
-            search_results[1] = {nil, "no Library Genesis urls available"}
+            search_results[1] = { nil, "no Library Genesis urls available" }
             search(openUI(), "dune")
 
             assert.are.equal("Error: no Library Genesis urls available", helper.lastNotification())
@@ -464,64 +470,64 @@ describe("KindleFetch", function()
 
         before_each(function()
             plugin = openUI()
-            search_results[1] = {{book("Dune"), book("Dune Messiah")}, nil, 2}
+            search_results[1] = { { book("Dune"), book("Dune Messiah") }, nil, 2 }
             search(plugin, "dune")
         end)
 
         it("adds the next books to the list", function()
-            search_results[2] = {{book("Children of Dune")}, nil, 4}
+            search_results[2] = { { book("Children of Dune") }, nil, 4 }
             loadMore()
 
-            assert.are.same({{"dune", 1}, {"dune", 2}}, searches)
+            assert.are.same({ { "dune", 1 }, { "dune", 2 } }, searches)
             assert.is_true(helper.wasClosed(menus[1]))
-            assert.are.same({"Dune", "Dune Messiah", "Children of Dune", "Load more"}, itemTexts(menus[2]))
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "Load more" }, itemTexts(menus[2]))
         end)
 
         it("carries on from where the last search stopped", function()
-            search_results[2] = {{book("Children of Dune")}, nil, 4}
+            search_results[2] = { { book("Children of Dune") }, nil, 4 }
             loadMore()
-            search_results[4] = {{book("God Emperor of Dune")}}
+            search_results[4] = { { book("God Emperor of Dune") } }
             loadMore()
 
-            assert.are.same({"dune", 4}, searches[3])
+            assert.are.same({ "dune", 4 }, searches[3])
             -- the end of the results
-            assert.are.same({"Dune", "Dune Messiah", "Children of Dune", "God Emperor of Dune"}, itemTexts(menus[3]))
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "God Emperor of Dune" }, itemTexts(menus[3]))
         end)
 
         it("turns on wifi first when offline, then loads them once connected", function()
             helper.stubs.network.connected = false
-            search_results[2] = {{book("Children of Dune")}}
+            search_results[2] = { { book("Children of Dune") } }
             loadMore()
             assert.are.equal("turn wifi on", helper.stubs.network.prompted)
             assert.are.equal(1, #searches)
 
             helper.stubs.network.connected = true
             helper.stubs.network.when_connected()
-            assert.are.same({"dune", 2}, searches[2])
+            assert.are.same({ "dune", 2 }, searches[2])
         end)
 
         it("loads the next books without wifi when they're saved from an earlier search", function()
             helper.stubs.network.connected = false
             saved["dune 2"] = true
-            search_results[2] = {{book("Children of Dune")}}
+            search_results[2] = { { book("Children of Dune") } }
             loadMore()
 
             assert.is_nil(helper.stubs.network.prompted)
-            assert.are.same({"dune", 2}, searches[2])
+            assert.are.same({ "dune", 2 }, searches[2])
         end)
 
         it("stays on the same page after an error", function()
-            search_results[2] = {nil, "request timed out"}
+            search_results[2] = { nil, "request timed out" }
             loadMore()
             assert.are.equal("Error: request timed out", helper.lastNotification())
 
-            search_results[2] = {{book("Children of Dune")}}
+            search_results[2] = { { book("Children of Dune") } }
             loadMore()
-            assert.are.same({"dune", 2}, searches[3])
+            assert.are.same({ "dune", 2 }, searches[3])
         end)
 
         it("says when there are no more books", function()
-            search_results[2] = {{}}
+            search_results[2] = { {} }
             loadMore()
 
             assert.are.equal("No more books found", helper.lastNotification())
@@ -546,7 +552,7 @@ describe("KindleFetch", function()
         local plugin
 
         before_each(function()
-            search_results[1] = {{book("Dune"), book("AC/DC", "pdf")}}
+            search_results[1] = { { book("Dune"), book("AC/DC", "pdf") } }
             plugin = openUI()
             search(plugin, "dune")
         end)
@@ -576,7 +582,7 @@ describe("KindleFetch", function()
 
             read_now.callback()
             assert.is_true(helper.wasClosed(dialog))
-            assert.are.same({"openFile", "/mnt/us/books/Dune.epub"}, opened)
+            assert.are.same({ "openFile", "/mnt/us/books/Dune.epub" }, opened)
             -- closing the search box too, which would otherwise show again once the book is closed
             assert.is_true(helper.wasClosed(menus[1]))
             assert.is_true(helper.wasClosed(plugin.search_box))
@@ -600,7 +606,7 @@ describe("KindleFetch", function()
             helper.tick()
             helper.lastShown().buttons[1][2].callback()
 
-            assert.are.same({"switchDocument", "/mnt/us/books/Dune.epub"}, opened)
+            assert.are.same({ "switchDocument", "/mnt/us/books/Dune.epub" }, opened)
         end)
 
         it("says why a download failed", function()

@@ -13,9 +13,9 @@ function HttpUtil.requestBody(request_url, proxy_url)
         proxy = proxy_url,
         sink = ltn12.sink.table(response_body),
         headers = {
-            ["User-Agent"] = "Mozilla/5.0"
+            ["User-Agent"] = "Mozilla/5.0",
         },
-        redirect = true
+        redirect = true,
     }
 
     -- status is the HTTP status code, or what went wrong if there wasn't a response

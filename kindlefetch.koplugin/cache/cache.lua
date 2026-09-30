@@ -12,7 +12,7 @@ function KindleFetchCache:new(opts)
         makeKey = opts.makeKey or function(key)
             return key
         end,
-        cache = nil
+        cache = nil,
     }
 
     setmetatable(obj, self)
@@ -117,7 +117,7 @@ function KindleFetchCache:set(value, ...)
 
     self.cache[key] = {
         timestamp = os.time(),
-        value = value
+        value = value,
     }
 
     LogUtil.debug("stored cache entry:", key, "with", value)
@@ -135,18 +135,18 @@ function KindleFetchCache:deleteValueFromKey(value, ...)
     self:load()
     local key = self.makeKey(...)
     local entry = self.cache[key]
-    
+
     if not entry then
         LogUtil.debug("cache key not found:", key)
         return
     end
-    
+
     local values = entry.value
     if type(values) ~= "table" then
         LogUtil.debug("cached value is not a table for key:", key)
         return
     end
-    
+
     -- build a new list rather than removing in place, as callers may still be looping over the old one
     local remaining = {}
     for _, v in ipairs(values) do
@@ -162,7 +162,7 @@ function KindleFetchCache:deleteValueFromKey(value, ...)
     if #remaining == 0 then
         self:delete(key)
     end
-    
+
     self:save()
 end
 

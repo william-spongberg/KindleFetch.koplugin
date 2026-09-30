@@ -20,7 +20,7 @@ describe("DownloadPrompt", function()
         local rows = {}
         for _, row in ipairs(prompt.details_group) do
             if row[1] and row[3] then
-                table.insert(rows, {row[1].text, row[3].text})
+                table.insert(rows, { row[1].text, row[3].text })
             end
         end
         return rows
@@ -48,7 +48,7 @@ describe("DownloadPrompt", function()
             language = "English [en]",
             book_type = "Book (fiction)",
             file_type = "epub",
-            file_size = "1.2MB"
+            file_size = "1.2MB",
         }
         downloads = {}
         DownloadPrompt = require("ui.downloadprompt")
@@ -62,8 +62,12 @@ describe("DownloadPrompt", function()
         assert.are.equal("Dune", prompt.title.text)
         assert.are.equal("Frank Herbert", prompt.author.text)
         assert.are.equal("/mnt/us/documents/Dune.epub", prompt.path_widget.text)
-        assert.are.same({{"Format", "EPUB · 1.2MB"}, {"Language", "English [en]"}, {"Year", "1990"},
-                         {"Type", "Book (fiction)"}}, details(prompt))
+        assert.are.same({
+            { "Format", "EPUB · 1.2MB" },
+            { "Language", "English [en]" },
+            { "Year", "1990" },
+            { "Type", "Book (fiction)" },
+        }, details(prompt))
     end)
 
     -- in greys dark enough to read on e-ink (#3)
@@ -79,8 +83,10 @@ describe("DownloadPrompt", function()
         book.year = nil
         book.file_size = nil
         local prompt = newPrompt()
-        assert.are.same({{"Format", "EPUB"}, {"Language", "English [en]"}, {"Type", "Book (fiction)"}},
-            details(prompt))
+        assert.are.same(
+            { { "Format", "EPUB" }, { "Language", "English [en]" }, { "Type", "Book (fiction)" } },
+            details(prompt)
+        )
     end)
 
     it("shows and closes", function()
@@ -97,7 +103,7 @@ describe("DownloadPrompt", function()
         prompt:show()
         tapButton(prompt, "download")
 
-        assert.are.same({"/mnt/us/documents/Dune.epub"}, downloads)
+        assert.are.same({ "/mnt/us/documents/Dune.epub" }, downloads)
         assert.is_true(helper.wasClosed(prompt.outer_container))
     end)
 
@@ -119,7 +125,7 @@ describe("DownloadPrompt", function()
         assert.are.equal("/mnt/us/books/Dune.epub", prompt.path_widget.text)
 
         tapButton(prompt, "download")
-        assert.are.same({"/mnt/us/books/Dune.epub"}, downloads)
+        assert.are.same({ "/mnt/us/books/Dune.epub" }, downloads)
     end)
 
     it("lets the download folder be changed more than once", function()
@@ -136,12 +142,12 @@ describe("DownloadPrompt", function()
         local prompt = newPrompt()
         prompt:show()
 
-        local inside = helper.stubs.geometry:new{outside = false}
-        assert.is_false(prompt.outer_container:onTapOutside(nil, {pos = inside}))
+        local inside = helper.stubs.geometry:new { outside = false }
+        assert.is_false(prompt.outer_container:onTapOutside(nil, { pos = inside }))
         assert.is_false(helper.wasClosed(prompt.outer_container))
 
-        local outside = helper.stubs.geometry:new{outside = true}
-        assert.is_true(prompt.outer_container:onTapOutside(nil, {pos = outside}))
+        local outside = helper.stubs.geometry:new { outside = true }
+        assert.is_true(prompt.outer_container:onTapOutside(nil, { pos = outside }))
         assert.is_true(helper.wasClosed(prompt.outer_container))
     end)
 
@@ -181,7 +187,7 @@ describe("DownloadPrompt", function()
             require("util.curlutil").downloadMultiple = function()
                 return nil, nil, nil, "unable to launch curl"
             end
-            require("cache.covercache"):downloadMultiple({book}, 1)
+            require("cache.covercache"):downloadMultiple({ book }, 1)
 
             prompt.outer_container:onKindleFetchCoversDownloaded()
             assert.is_nil(prompt.cover)
@@ -238,7 +244,7 @@ describe("DownloadPrompt", function()
                     local run = {
                         urls = urls,
                         paths = paths,
-                        exit_file = CurlUtil.createExitFile()
+                        exit_file = CurlUtil.createExitFile(),
                     }
                     table.insert(runs, run)
                     return 4000, run.exit_file, data_dir .. "/curl_config.txt"
@@ -255,7 +261,7 @@ describe("DownloadPrompt", function()
                 assert.are.equal(0, #runs)
 
                 prompt.cover_container:onTapCover()
-                assert.are.same({"https://libgen.example/fictioncovers/1000/dune.jpg"}, runs[1].urls)
+                assert.are.same({ "https://libgen.example/fictioncovers/1000/dune.jpg" }, runs[1].urls)
                 assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
                 -- saying so until it arrives, as the thumbnail shows until then
                 local notice = loadingNotices()[1]

@@ -10,14 +10,14 @@ describe("VersionUtil", function()
 
     describe("parseVersion", function()
         it("parses full, partial and single number versions", function()
-            assert.are.same({major = 7, minor = 68, patch = 0, str = "7.68.0"}, VersionUtil.parseVersion("7.68.0"))
-            assert.are.same({major = 0, minor = 2, patch = 0, str = "0.2"}, VersionUtil.parseVersion("0.2"))
-            assert.are.same({major = 1, minor = 0, patch = 0, str = "1"}, VersionUtil.parseVersion("1"))
+            assert.are.same({ major = 7, minor = 68, patch = 0, str = "7.68.0" }, VersionUtil.parseVersion("7.68.0"))
+            assert.are.same({ major = 0, minor = 2, patch = 0, str = "0.2" }, VersionUtil.parseVersion("0.2"))
+            assert.are.same({ major = 1, minor = 0, patch = 0, str = "1" }, VersionUtil.parseVersion("1"))
         end)
 
         it("ignores anything after the version number", function()
             local version = VersionUtil.parseVersion("8.17.0-DEV")
-            assert.are.same({8, 17, 0}, {version.major, version.minor, version.patch})
+            assert.are.same({ 8, 17, 0 }, { version.major, version.minor, version.patch })
         end)
 
         it("rejects strings that do not start with a number", function()

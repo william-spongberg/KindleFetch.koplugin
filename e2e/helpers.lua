@@ -76,7 +76,7 @@ local SKIP_FIELDS = {
     ui = true,
     document = true,
     view = true,
-    show_parent = true
+    show_parent = true,
 }
 
 -- the first widget on screen (or inside root) that predicate accepts, searching the top window first
@@ -125,13 +125,13 @@ function H.tap(widget)
     assert(dimen and dimen.x, "can't tap a widget that hasn't been drawn")
     UIManager:sendEvent(Event:new("Gesture", {
         ges = "tap",
-        pos = Geom:new{
+        pos = Geom:new {
             x = dimen.x + math.floor(dimen.w / 2),
             y = dimen.y + math.floor(dimen.h / 2),
             w = 0,
-            h = 0
+            h = 0,
         },
-        time = time.now()
+        time = time.now(),
     }))
     H.pump()
 end
@@ -202,7 +202,7 @@ end
 
 -- search Library Genesis from KindleFetch's search dialog, returning the results menu
 function H.search(query)
-    H.openMainMenu({"Kindle Fetch", "Search Library Genesis"})
+    H.openMainMenu({ "Kindle Fetch", "Search Library Genesis" })
     local plugin = H.plugin()
     local dialog = H.waitFor("the search dialog", 10, function()
         return plugin.search_box and H.isShown(plugin.search_box) and plugin.search_box
@@ -272,9 +272,12 @@ function H.tapMenuEntry(menu, predicate)
     end
     H.pump()
 
-    H.tap(assert(H.find(function(widget)
-        return widget.entry == menu.item_table[index] and widget.onTapSelect
-    end, menu), "the entry isn't showing"))
+    H.tap(assert(
+        H.find(function(widget)
+            return widget.entry == menu.item_table[index] and widget.onTapSelect
+        end, menu),
+        "the entry isn't showing"
+    ))
 end
 
 function H.tapBook(menu, book)
@@ -311,8 +314,8 @@ end
 -- returns them
 function H.breakMirrors()
     local mirrors = assert(require("api.urlapi"):getLibgenUrls(), "couldn't look up the mirrors on Wikipedia")
-    local broken = {"https://libgen.invalid", "https://example.com"}
-    require("cache.urlcache"):set({broken[1], broken[2], unpack(mirrors)}, "libgen")
+    local broken = { "https://libgen.invalid", "https://example.com" }
+    require("cache.urlcache"):set({ broken[1], broken[2], unpack(mirrors) }, "libgen")
     return broken
 end
 
@@ -361,13 +364,21 @@ function H.asDevice(fn)
         isKindle = Device.isKindle,
         isKobo = Device.isKobo,
         isAndroid = Device.isAndroid,
-        isSDL = Device.isSDL
+        isSDL = Device.isSDL,
     }
     local profile = H.profile
-    Device.isKindle = function() return profile.kindle == true end
-    Device.isKobo = function() return profile.kobo == true end
-    Device.isAndroid = function() return profile.android == true end
-    Device.isSDL = function() return false end
+    Device.isKindle = function()
+        return profile.kindle == true
+    end
+    Device.isKobo = function()
+        return profile.kobo == true
+    end
+    Device.isAndroid = function()
+        return profile.android == true
+    end
+    Device.isSDL = function()
+        return false
+    end
 
     local ok, err = pcall(fn)
     for name, original in pairs(originals) do
@@ -385,7 +396,7 @@ function H.sizeInBytes(size)
         b = 1,
         kb = 1024,
         mb = 1024 * 1024,
-        gb = 1024 * 1024 * 1024
+        gb = 1024 * 1024 * 1024,
     }
     return (tonumber(number) or math.huge) * (units[(unit or ""):lower()] or 1)
 end

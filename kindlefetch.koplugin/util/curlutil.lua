@@ -33,7 +33,7 @@ local CURL_ERRORS = {
     [60] = "TLS certificate verification failed",
     [61] = "unsupported TLS/SSL feature",
     [67] = "authentication failed",
-    [78] = "requested resource was not found"
+    [78] = "requested resource was not found",
 }
 
 local function ensureTmpDir()
@@ -135,8 +135,12 @@ function CurlUtil.getRemoteFileSize(url)
         for status in headers:gmatch("(HTTP[/%d%.]+ %d+)") do
             table.insert(statuses, status)
         end
-        LogUtil.warn("no file size from", LogUtil.site(url), "responses:",
-            #statuses > 0 and table.concat(statuses, ", ") or "none")
+        LogUtil.warn(
+            "no file size from",
+            LogUtil.site(url),
+            "responses:",
+            #statuses > 0 and table.concat(statuses, ", ") or "none"
+        )
     end
     return file_size
 end
@@ -151,7 +155,7 @@ end
 function CurlUtil.getExitCode(exit_file)
     local exit_code_str = FileUtil.readFile(exit_file)
     if not exit_code_str then
-        return nil  -- file doesn't exist yet, process still running
+        return nil -- file doesn't exist yet, process still running
     end
     FileUtil.removeFile(exit_file)
     return tonumber(exit_code_str)
@@ -276,7 +280,6 @@ end
 
 -- max_time optionally limits how long each attempt (and retrying) can take, in seconds
 function CurlUtil.download(download_url, filepath, use_proxy, background, max_time)
-
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, download_url)
@@ -312,7 +315,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
         if file_size and file_size > 0 then
             LogUtil.debug("download completed successfully", {
                 filepath = filepath,
-                file_size = file_size
+                file_size = file_size,
             })
             return true
         else
@@ -321,19 +324,34 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
             return false, "download produced empty file"
         end
     else
-        LogUtil.warn("download from", LogUtil.site(download_url), "to", filepath, "failed: curl exit code",
-            exit_code, "(" .. CurlUtil.getErrorMeaning(exit_code) .. ")")
+        LogUtil.warn(
+            "download from",
+            LogUtil.site(download_url),
+            "to",
+            filepath,
+            "failed: curl exit code",
+            exit_code,
+            "(" .. CurlUtil.getErrorMeaning(exit_code) .. ")"
+        )
         FileUtil.removeFile(filepath)
         return false, CurlUtil.getErrorMeaning(exit_code)
     end
 end
 
-function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, background, num_parallel_jobs, enable_retry, timeout)
+function CurlUtil.downloadMultiple(
+    download_urls,
+    filepaths,
+    use_proxy,
+    background,
+    num_parallel_jobs,
+    enable_retry,
+    timeout
+)
     ensureTmpDir()
 
     local config_file = tmpFile("curl_download_config", ".txt")
     local f = io.open(config_file, "w")
-    
+
     for i, download_url in ipairs(download_urls) do
         f:write(string.format('url = "%s"\n', download_url:gsub('"', '\\"')))
         f:write(string.format('output = "%s"\n', filepaths[i]:gsub('"', '\\"')))
@@ -356,8 +374,12 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
         cmd = CurlUtil.applyProxy(cmd)
     end
     -- write each file's result, as some may download when others fail
-    cmd = string.format("%s -w %s > %s", cmd, CurlUtil.shellQuote("%{exitcode} %{filename_effective}\\n"),
-        CurlUtil.shellQuote(results_file))
+    cmd = string.format(
+        "%s -w %s > %s",
+        cmd,
+        CurlUtil.shellQuote("%{exitcode} %{filename_effective}\\n"),
+        CurlUtil.shellQuote(results_file)
+    )
 
     local exit_file = CurlUtil.createExitFile()
     cmd = CurlUtil.saveExitCode(cmd, exit_file)
@@ -366,7 +388,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
 
     if background then
         cmd = CurlUtil.echoPid(cmd)
-        
+
         local pid, err = CurlUtil.spawnCurlPid(cmd)
         if not pid then
             FileUtil.removeFile(config_file)
@@ -375,8 +397,10 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
         end
 
         LogUtil.debug("spawned parallel download", {
-            pid = pid, exit_file = exit_file, config_file = config_file,
-            file_count = #download_urls
+            pid = pid,
+            exit_file = exit_file,
+            config_file = config_file,
+            file_count = #download_urls,
         })
         return pid, exit_file, config_file
     end
@@ -388,7 +412,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
         local reason = CurlUtil.getErrorMeaning(exit_code)
         LogUtil.warn("parallel download command failed", {
             exit_code = exit_code,
-            reason = reason
+            reason = reason,
         })
         NotifyUtil.info("Download failed:" .. reason)
     end
@@ -407,14 +431,13 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
 
     FileUtil.removeFile(config_file)
     FileUtil.removeFile(results_file)
-    
+
     LogUtil.debug("parallel download completed", {
         total_requested = #download_urls,
-        successful = successful_count
+        successful = successful_count,
     })
 
     return successful_count
 end
-
 
 return CurlUtil

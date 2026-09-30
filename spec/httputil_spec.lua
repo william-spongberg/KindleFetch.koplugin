@@ -5,7 +5,7 @@ describe("HttpUtil", function()
 
     -- queue up luasocket responses: {body, ok, status}
     local function respond(...)
-        responses = {...}
+        responses = { ... }
     end
 
     before_each(function()
@@ -15,7 +15,7 @@ describe("HttpUtil", function()
         http = helper.stubs.http
         http.request = function(request)
             table.insert(requests, request)
-            local response = table.remove(responses, 1) or {"", nil, "connection refused"}
+            local response = table.remove(responses, 1) or { "", nil, "connection refused" }
             if response[1] ~= "" then
                 request.sink(response[1])
             end
@@ -25,7 +25,7 @@ describe("HttpUtil", function()
     end)
 
     it("fetches a page with a browser user agent, following redirects", function()
-        respond({"<html>results</html>", 1, 200})
+        respond({ "<html>results</html>", 1, 200 })
 
         assert.are.equal("<html>results</html>", HttpUtil.getBody("https://libgen.example/index.php?req=dune"))
         assert.are.equal("https://libgen.example/index.php?req=dune", requests[1].url)
@@ -36,7 +36,7 @@ describe("HttpUtil", function()
     end)
 
     it("returns the HTTP status, e.g. of an error page", function()
-        respond({"<html>Forbidden</html>", 1, 403})
+        respond({ "<html>Forbidden</html>", 1, 403 })
 
         local body, err, status = HttpUtil.getBody("https://libgen.example")
         assert.are.equal("<html>Forbidden</html>", body)
@@ -45,22 +45,25 @@ describe("HttpUtil", function()
     end)
 
     it("returns the error when the request fails, and logs it", function()
-        respond({"", nil, "timeout"})
+        respond({ "", nil, "timeout" })
 
         local body, err = HttpUtil.getBody("https://libgen.example")
         assert.is_nil(body)
         assert.are.equal("timeout", err)
-        assert.are.equal("could not fetch https://libgen.example error: timeout", helper.logged("warn", "^could not fetch"))
+        assert.are.equal(
+            "could not fetch https://libgen.example error: timeout",
+            helper.logged("warn", "^could not fetch")
+        )
     end)
 
     it("treats an empty page as a failure", function()
-        respond({"", 1, 200})
+        respond({ "", 1, 200 })
         assert.is_nil(HttpUtil.getBody("https://libgen.example"))
     end)
 
     it("retries through PROXY_URL when the direct request fails", function()
         helper.state.env.PROXY_URL = "http://proxy.example:8080"
-        respond({"", nil, "connection refused"}, {"<html>via proxy</html>", 1, 200})
+        respond({ "", nil, "connection refused" }, { "<html>via proxy</html>", 1, 200 })
 
         assert.are.equal("<html>via proxy</html>", HttpUtil.getBody("https://libgen.example"))
         assert.are.equal("http://proxy.example:8080", requests[2].proxy)
@@ -68,7 +71,7 @@ describe("HttpUtil", function()
 
     it("returns the proxy error when both requests fail, without logging the proxy's address", function()
         helper.state.env.PROXY_URL = "http://user:secret@proxy.example:8080"
-        respond({"", nil, "connection refused"}, {"", nil, "proxy unreachable"})
+        respond({ "", nil, "connection refused" }, { "", nil, "proxy unreachable" })
 
         local body, err = HttpUtil.getBody("https://libgen.example")
         assert.is_nil(body)
@@ -82,7 +85,7 @@ describe("HttpUtil", function()
 
     it("does not use a proxy when PROXY_URL is not set", function()
         helper.state.env.PROXY_URL = false
-        respond({"", nil, "connection refused"})
+        respond({ "", nil, "connection refused" })
 
         assert.is_nil(HttpUtil.getBody("https://libgen.example"))
         assert.are.equal(1, #requests)

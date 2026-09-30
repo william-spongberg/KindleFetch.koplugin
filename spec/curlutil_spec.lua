@@ -31,8 +31,10 @@ describe("CurlUtil", function()
     end)
 
     it("sends the site as the referer", function()
-        assert.are.equal("curl -e 'https://libgen.example/'",
-            CurlUtil.setReferer("curl", "https://libgen.example/fictioncovers/1/abc_small.jpg"))
+        assert.are.equal(
+            "curl -e 'https://libgen.example/'",
+            CurlUtil.setReferer("curl", "https://libgen.example/fictioncovers/1/abc_small.jpg")
+        )
         assert.are.equal("curl", CurlUtil.setReferer("curl", "not a url"))
     end)
 
@@ -93,9 +95,11 @@ describe("CurlUtil", function()
 
     describe("getRemoteFileSize", function()
         it("uses the content length of the final response after redirects", function()
-            helper.stubCommand("curl -sL -I 'https://libgen.example/get.php?md5=abc'",
-                "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/book\r\nContent-Length: 0\r\n\r\n" ..
-                    "HTTP/2 200\r\ncontent-length: 1048576\r\n\r\n")
+            helper.stubCommand(
+                "curl -sL -I 'https://libgen.example/get.php?md5=abc'",
+                "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/book\r\nContent-Length: 0\r\n\r\n"
+                    .. "HTTP/2 200\r\ncontent-length: 1048576\r\n\r\n"
+            )
             assert.are.equal(1048576, CurlUtil.getRemoteFileSize("https://libgen.example/get.php?md5=abc"))
 
             -- asks like a browser, or Library Genesis sends a small page instead of the file
@@ -150,8 +154,11 @@ describe("CurlUtil", function()
         helper.state.env.PROXY_URL = "http://proxy.example:8080"
         local cmd = CurlUtil.getCMD("https://libgen.example/get.php", "Dune.epub", "exit", true)
 
-        assert.are.equal("(curl -sL -f -o 'Dune.epub' 'https://libgen.example/get.php' --retry 2 --retry-delay 2 " ..
-                             "--connect-timeout 15 -x 'http://proxy.example:8080'; echo $? > 'exit') >/dev/null 2>&1", cmd)
+        assert.are.equal(
+            "(curl -sL -f -o 'Dune.epub' 'https://libgen.example/get.php' --retry 2 --retry-delay 2 "
+                .. "--connect-timeout 15 -x 'http://proxy.example:8080'; echo $? > 'exit') >/dev/null 2>&1",
+            cmd
+        )
     end)
 
     describe("download", function()
@@ -254,12 +261,12 @@ describe("CurlUtil", function()
         end
 
         before_each(function()
-            urls = {"https://covers.example/a.jpg", "https://covers.example/b.jpg", "https://covers.example/c.jpg"}
-            paths = {data_dir .. "/a.jpg", data_dir .. "/b.jpg", data_dir .. "/c.jpg"}
+            urls = { "https://covers.example/a.jpg", "https://covers.example/b.jpg", "https://covers.example/c.jpg" }
+            paths = { data_dir .. "/a.jpg", data_dir .. "/b.jpg", data_dir .. "/c.jpg" }
         end)
 
         it("downloads files in parallel and counts the successful ones", function()
-            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({"a", "", "c"}))
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "", "c" }))
 
             assert.are.equal(2, CurlUtil.downloadMultiple(urls, paths, false, false, 4, true, 15))
             assert.is_true(helper.exists(paths[1]))
@@ -279,7 +286,7 @@ describe("CurlUtil", function()
             local config_file
             helper.stubExecute("curl -sL -f --config", function(cmd)
                 config_file = cmd:match('%-%-config "([^"]+)"')
-                fakeParallelCurl({"a", "b", "c"})(cmd)
+                fakeParallelCurl({ "a", "b", "c" })(cmd)
             end)
 
             CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15)
@@ -287,7 +294,7 @@ describe("CurlUtil", function()
         end)
 
         it("keeps the files that downloaded when others fail", function()
-            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({"a", "partial", "c"}, 28, {0, 28, 0}))
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "partial", "c" }, 28, { 0, 28, 0 }))
 
             assert.are.equal(2, CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15))
             assert.is_true(helper.exists(paths[1]))
@@ -296,7 +303,7 @@ describe("CurlUtil", function()
         end)
 
         it("discards everything and notifies when curl fails", function()
-            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({"a", "b", "c"}, 28))
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }, 28))
 
             assert.are.equal(0, CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15))
             assert.is_false(helper.exists(paths[1]))
@@ -317,8 +324,15 @@ describe("CurlUtil", function()
             helper.state.time = 1000
 
             local _, first_exit, first_config = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
-            local _, second_exit, second_config = CurlUtil.downloadMultiple({urls[1]}, {paths[1]}, false, true, 4,
-                false, 15)
+            local _, second_exit, second_config = CurlUtil.downloadMultiple(
+                { urls[1] },
+                { paths[1] },
+                false,
+                true,
+                4,
+                false,
+                15
+            )
             assert.are_not.equal(first_exit, second_exit)
             assert.are_not.equal(first_config, second_config)
             assert.are_not.equal(CurlUtil.getResultsFile(first_config), CurlUtil.getResultsFile(second_config))

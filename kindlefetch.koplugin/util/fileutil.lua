@@ -19,13 +19,13 @@ function FileUtil.getSize(path)
     return size or 0
 end
 
-function FileUtil.createFile(path, data)    
+function FileUtil.createFile(path, data)
     local file = io.open(path, "wb")
     if not file then
         LogUtil.warn("could not write to file")
         return nil
     end
-    
+
     file:write(data)
     file:close()
 end
@@ -45,13 +45,12 @@ function FileUtil.readFile(path)
     return content and StringUtil.trim(content) or nil
 end
 
-
 -- writes data to a small text file, or false if the data is null
 function FileUtil.writeFile(path, content)
     if not StringUtil.assertValidString(path) then
         return false
     end
-    
+
     if content == nil then
         return false
     end
@@ -60,10 +59,10 @@ function FileUtil.writeFile(path, content)
     if not f then
         return false
     end
-    
+
     local success = f:write(content)
     f:close()
-    
+
     return success and true or false
 end
 

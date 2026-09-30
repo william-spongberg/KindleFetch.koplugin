@@ -16,8 +16,17 @@ describe("StringUtil", function()
     end)
 
     -- every helper returns an empty string for invalid input rather than erroring
-    for _, name in ipairs({"trim", "collapseWhitespace", "collapseDots", "collapseDashes", "convertHtmlToText",
-                           "removeParentheses", "truncate", "cleanFileName", "replaceCarriageReturns"}) do
+    for _, name in ipairs({
+        "trim",
+        "collapseWhitespace",
+        "collapseDots",
+        "collapseDashes",
+        "convertHtmlToText",
+        "removeParentheses",
+        "truncate",
+        "cleanFileName",
+        "replaceCarriageReturns",
+    }) do
         it(name .. " returns an empty string for invalid input", function()
             assert.are.equal("", StringUtil[name](nil))
             assert.are.equal("", StringUtil[name](""))
