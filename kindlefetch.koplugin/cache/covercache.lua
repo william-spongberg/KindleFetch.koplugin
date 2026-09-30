@@ -2,6 +2,7 @@ local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
 local FileUtil = require("util.fileutil")
 local UIManager = require("ui/uimanager")
+local Event = require("ui/event")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
 local LogUtil = require("util.logutil")
@@ -12,6 +13,8 @@ local CoverCache = {}
 -- constants
 local CACHE_DIR = DataStorage:getSettingsDir() .. "/kindlefetch_covers/"
 local POLL_INTERVAL = 0.5
+-- the cover is fetched before the download prompt shows, so don't wait long for it
+local COVER_MAX_TIME = 10
 
 -- md5s of covers being downloaded, so they aren't downloaded twice at once
 local downloading = {}
@@ -63,10 +66,10 @@ function CoverCache:download(md5, url)
     ensureCacheDir()
     local path = self:getPath(md5)
     
-    local success = CurlUtil.download(url, path, false, false)
+    local success = CurlUtil.download(url, path, false, false, COVER_MAX_TIME)
     if not success and hasProxy() then
         LogUtil.debug("retrying cover download through proxy", md5)
-        success = CurlUtil.download(url, path, true, false)
+        success = CurlUtil.download(url, path, true, false, COVER_MAX_TIME)
     end
     if success then
         persistent_cache:set(path, md5)
@@ -80,26 +83,33 @@ end
 -- the paths that downloaded
 local function pollDownloads(pid, exit_file, config_file, filepaths, on_done)
     local exit_code = CurlUtil.getExitCode(exit_file)
-    if not exit_code and CurlUtil.isPidRunning(pid) then
-        UIManager:scheduleIn(POLL_INTERVAL, function()
-            pollDownloads(pid, exit_file, config_file, filepaths, on_done)
-        end)
-        return
+    if not exit_code then
+        if CurlUtil.isPidRunning(pid) then
+            UIManager:scheduleIn(POLL_INTERVAL, function()
+                pollDownloads(pid, exit_file, config_file, filepaths, on_done)
+            end)
+            return
+        end
+        -- curl may have finished between checking for its exit code and whether it was running
+        exit_code = CurlUtil.getExitCode(exit_file)
     end
 
+    local results_file = CurlUtil.getResultsFile(config_file)
+    local results = CurlUtil.getTransferResults(results_file)
     FileUtil.removeFile(config_file)
+    FileUtil.removeFile(results_file)
 
-    -- a failed transfer may have left partial files, so only keep covers when every download succeeded
+    -- keep the covers that downloaded, removing any partial files left by ones that failed
     local downloaded = {}
     for _, path in ipairs(filepaths) do
-        if exit_code == 0 and FileUtil.getSize(path) > 0 then
+        if CurlUtil.isTransferComplete(results, path, exit_code) then
             table.insert(downloaded, path)
         else
             FileUtil.removeFile(path)
         end
     end
     if exit_code ~= 0 then
-        LogUtil.warn("cover downloads failed", CurlUtil.getErrorMeaning(exit_code))
+        LogUtil.warn("some cover downloads failed", CurlUtil.getErrorMeaning(exit_code))
     end
 
     on_done(downloaded)
@@ -119,8 +129,9 @@ local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs
     end)
 end
 
--- download missing covers in the background, calling on_done with the number downloaded once finished.
--- returns false when there was nothing to download.
+-- download missing covers in the background, calling on_done with the number downloaded once finished, and
+-- letting open search results know with a KindleFetchCoversDownloaded event. returns false when there was
+-- nothing to download.
 function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     ensureCacheDir()
     on_done = on_done or function() end
@@ -159,6 +170,9 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
             end
         end
 
+        if count > 0 then
+            UIManager:broadcastEvent(Event:new("KindleFetchCoversDownloaded"))
+        end
         on_done(count)
     end
 

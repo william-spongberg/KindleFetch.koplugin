@@ -302,6 +302,9 @@ local function createStubs(state)
         scheduleIn = function(_, _, fn)
             table.insert(state.scheduled, fn)
         end,
+        broadcastEvent = function(_, event)
+            table.insert(state.broadcasts, event.name)
+        end,
         nextTick = function(_, fn)
             table.insert(state.scheduled, fn)
         end
@@ -375,6 +378,15 @@ local function createStubs(state)
             end
             self.prompted = "turn wifi on"
             self.when_connected = callback
+        end
+    }
+
+    stubs.event = {
+        new = function(_, name, ...)
+            return {
+                name = name,
+                args = {...}
+            }
         end
     }
 
@@ -452,6 +464,7 @@ local MODULE_STUBS = {
     ["util"] = "util",
     ["ui/network/manager"] = "network",
     ["dispatcher"] = "dispatcher",
+    ["ui/event"] = "event",
     ["ui/widget/container/widgetcontainer"] = "widgetcontainer",
     ["socket.http"] = "http",
     ["ltn12"] = "ltn12",
@@ -511,6 +524,7 @@ function helper.reset()
         shown = {},
         closed = {},
         scheduled = {},
+        broadcasts = {},
         notifications = {},
         dir_choosers = {},
         actions = {},

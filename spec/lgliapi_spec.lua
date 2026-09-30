@@ -348,6 +348,18 @@ describe("LlgiAPI", function()
             assert.are.same({{ok = false, err = "download produced empty file"}}, results)
         end)
 
+        -- curl can finish just after its exit code was checked, before checking whether it's running
+        it("finishes when curl exits between checks", function()
+            download()
+            CurlUtil.isPidRunning = function()
+                curlWrote(MB, 0)
+                return false
+            end
+            helper.runScheduled()
+
+            assert.are.same({{ok = true}}, results)
+        end)
+
         it("fails when curl stops without reporting back", function()
             download()
 

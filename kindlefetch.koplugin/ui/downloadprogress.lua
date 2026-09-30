@@ -27,13 +27,22 @@ local CONTENT_WIDTH = Screen:scaleBySize(280)
 function DownloadProgress.new(title, on_cancel)
     local self = setmetatable({}, DownloadProgress)
 
+    self.title = title
     self.cancelled = false
     self.on_cancel = on_cancel
     self.is_visible = true
+    self.percentage = 0
+    self.status_text = ""
+    self:build()
 
+    return self
+end
+
+-- create the widgets, again whenever shown after being hidden, as KOReader frees widgets once they're closed
+function DownloadProgress:build()
     -- title
     self.text_widget = TextBoxWidget:new{
-        text = title,
+        text = self.title,
         face = Font:getFace("cfont", 18),
         width = CONTENT_WIDTH,
         alignment = "center"
@@ -41,7 +50,7 @@ function DownloadProgress.new(title, on_cancel)
 
     -- download percentage
     self.status_widget = TextWidget:new{
-        text = "",
+        text = self.status_text,
         face = Font:getFace("cfont", 16),
         width = CONTENT_WIDTH,
         alignment = "center"
@@ -58,7 +67,7 @@ function DownloadProgress.new(title, on_cancel)
     self.bar_widget = ProgressWidget:new{
         width = CONTENT_WIDTH,
         height = Screen:scaleBySize(16),
-        percentage = 0
+        percentage = self.percentage
     }
 
     -- cancel button
@@ -120,8 +129,6 @@ function DownloadProgress.new(title, on_cancel)
         },
         self.frame
     }
-
-    return self
 end
 
 function DownloadProgress:show()
@@ -136,10 +143,9 @@ end
 function DownloadProgress:toggleVisibility()
     self.is_visible = not self.is_visible
     if self.is_visible then
-        self.hide_button:setText("Hide")
+        self:build()
         UIManager:show(self.container)
     else
-        self.hide_button:setText("Show")
         UIManager:close(self.container)
     end
     UIManager:setDirty(self.container, "ui")
@@ -147,9 +153,19 @@ end
 
 -- update percentage text and force repaint
 function DownloadProgress:update(percentage, status_text)
-    if self.cancelled or not self.is_visible then
+    if self.cancelled then
         return
     end
+
+    -- keep track of progress while hidden, for when it's shown again
+    self.percentage = percentage
+    if status_text then
+        self.status_text = status_text
+    end
+    if not self.is_visible then
+        return
+    end
+
     self.bar_widget.percentage = percentage
     if status_text then
         self.status_widget:setText(status_text)

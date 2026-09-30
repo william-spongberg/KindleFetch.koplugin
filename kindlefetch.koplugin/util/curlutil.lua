@@ -149,6 +149,15 @@ function CurlUtil.pretendBrowser(curl_cmd)
     return curl_cmd .. " -A 'Mozilla/5.0'"
 end
 
+-- send the site as the referer, like a browser, as Library Genesis sends empty covers without one
+function CurlUtil.setReferer(curl_cmd, url)
+    local site = tostring(url):match("^(https?://[^/]+)")
+    if not site then
+        return curl_cmd
+    end
+    return string.format("%s -e %s", curl_cmd, CurlUtil.shellQuote(site .. "/"))
+end
+
 function CurlUtil.enableRetry(curl_cmd, count, delay)
     return string.format("%s --retry %d --retry-delay %d", curl_cmd, count, delay)
 end
@@ -163,6 +172,36 @@ end
 
 function CurlUtil.applyProxy(curl_cmd)
     return string.format("%s %s", curl_cmd, CurlUtil.getProxyFlag(true))
+end
+
+-- file downloadMultiple has curl write each transfer's result to
+function CurlUtil.getResultsFile(config_file)
+    return config_file .. ".results"
+end
+
+-- exit code of each file downloaded by downloadMultiple, by path
+function CurlUtil.getTransferResults(results_file)
+    local results = {}
+    local f = io.open(results_file, "r")
+    if not f then
+        return results
+    end
+    for line in f:lines() do
+        local exit_code, path = line:match("^(%d+) (.+)$")
+        if exit_code then
+            results[path] = tonumber(exit_code)
+        end
+    end
+    f:close()
+    return results
+end
+
+-- whether a file from downloadMultiple downloaded, going by curl's exit code when it didn't say for each file
+function CurlUtil.isTransferComplete(results, filepath, exit_code)
+    if next(results) then
+        return results[filepath] == 0 and FileUtil.getSize(filepath) > 0
+    end
+    return exit_code == 0 and FileUtil.getSize(filepath) > 0
 end
 
 function CurlUtil.saveExitCode(cmd, exit_file)
@@ -188,12 +227,17 @@ function CurlUtil.getCMD(download_url, filepath, exit_file, use_proxy)
     return cmd
 end
 
-function CurlUtil.download(download_url, filepath, use_proxy, background)
+-- max_time optionally limits how long each attempt (and retrying) can take, in seconds
+function CurlUtil.download(download_url, filepath, use_proxy, background, max_time)
 
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
     cmd = CurlUtil.pretendBrowser(cmd)
+    cmd = CurlUtil.setReferer(cmd, download_url)
     cmd = CurlUtil.enableRetry(cmd, 2, 2)
     cmd = CurlUtil.setTimeout(cmd, 15)
+    if max_time then
+        cmd = string.format("%s --max-time %d --retry-max-time %d", cmd, max_time, max_time)
+    end
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)
     end
@@ -251,16 +295,24 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
     end
     f:close()
 
+    local results_file = CurlUtil.getResultsFile(config_file)
     local cmd = string.format('curl -sL -f --config "%s"', config_file)
     cmd = CurlUtil.pretendBrowser(cmd)
+    -- covers for a page of search results all come from the same site
+    cmd = CurlUtil.setReferer(cmd, download_urls[1])
     if enable_retry then
         cmd = CurlUtil.enableRetry(cmd, 2, 2)
     end
     cmd = CurlUtil.setTimeout(cmd, timeout)
+    -- give up on files that stall, so they don't hold up the rest
+    cmd = string.format("%s --max-time %d", cmd, timeout * 2)
     cmd = CurlUtil.enableParallel(cmd, num_parallel_jobs)
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)
     end
+    -- write each file's result, as some may download when others fail
+    cmd = string.format("%s -w %s > %s", cmd, CurlUtil.shellQuote("%{exitcode} %{filename_effective}\\n"),
+        CurlUtil.shellQuote(results_file))
 
     local exit_file = CurlUtil.createExitFile()
     cmd = CurlUtil.saveExitCode(cmd, exit_file)
@@ -296,27 +348,20 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, backgrou
         NotifyUtil.info("Download failed:" .. reason)
     end
 
+    local results = CurlUtil.getTransferResults(results_file)
     local successful_count = 0
     for _, filepath in ipairs(filepaths) do
-        if exit_code == 0 and FileUtil.isValidFile(filepath) then
-            local file_size = FileUtil.getSize(filepath)
-            if file_size and file_size > 0 then
-                successful_count = successful_count + 1
-                LogUtil.debug("file downloaded successfully", {
-                    filepath = filepath,
-                    file_size = file_size
-                })
-            else
-                LogUtil.warn("download produced empty file")
-                FileUtil.removeFile(filepath)
-            end
+        if CurlUtil.isTransferComplete(results, filepath, exit_code) then
+            successful_count = successful_count + 1
+            LogUtil.debug("file downloaded successfully", filepath)
         else
-            LogUtil.warn("file download failed")
+            LogUtil.warn("file download failed", filepath)
             FileUtil.removeFile(filepath)
         end
     end
 
     FileUtil.removeFile(config_file)
+    FileUtil.removeFile(results_file)
     
     LogUtil.debug("parallel download completed", {
         total_requested = #download_urls,

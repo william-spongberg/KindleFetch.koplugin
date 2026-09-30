@@ -4,3 +4,4 @@ kindlefetch.koplugin.zip
 luacov.*.out
 .dev-home/
 crash.log
+e2e/.tmp/

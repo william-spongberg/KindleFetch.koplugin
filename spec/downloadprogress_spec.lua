@@ -35,12 +35,12 @@ describe("DownloadProgress", function()
 
     it("can be hidden while the download continues, and shown again", function()
         widget:show()
-        widget.hide_button.callback()
+        local hidden_container = widget.container
+        widget:toggleVisibility()
         assert.is_false(widget.is_visible)
-        assert.are.equal("Show", widget.hide_button.text)
-        assert.is_true(helper.wasClosed(widget.container))
+        assert.is_true(helper.wasClosed(hidden_container))
 
-        -- no updates or duplicate closes while hidden
+        -- not redrawn or closed again while hidden
         widget:update(0.5, "50%")
         assert.are.equal(0, widget.bar_widget.percentage)
         local closes = #helper.state.closed
@@ -49,10 +49,32 @@ describe("DownloadProgress", function()
         widget:show()
         assert.are.equal(1, #helper.state.shown)
 
-        widget.hide_button.callback()
+        widget:toggleVisibility()
         assert.is_true(widget.is_visible)
-        assert.are.equal("Hide", widget.hide_button.text)
         assert.are.equal(widget.container, helper.lastShown())
+    end)
+
+    -- KOReader frees widgets once closed, so showing the same ones again would crash
+    it("makes new widgets when shown again, with the progress made while hidden", function()
+        widget:show()
+        local old = {
+            container = widget.container,
+            text = widget.text_widget,
+            status = widget.status_widget,
+            bar = widget.bar_widget
+        }
+        widget:toggleVisibility()
+        widget:update(0.5, "50% · 1.0 / 2.0 MB")
+        widget:toggleVisibility()
+
+        assert.are_not.equal(old.container, widget.container)
+        assert.are_not.equal(old.text, widget.text_widget)
+        assert.are_not.equal(old.status, widget.status_widget)
+        assert.are_not.equal(old.bar, widget.bar_widget)
+        assert.are.equal("Dune", widget.text_widget.text)
+        assert.are.equal("50% · 1.0 / 2.0 MB", widget.status_widget.text)
+        assert.are.equal(0.5, widget.bar_widget.percentage)
+        assert.are.equal("Hide", widget.hide_button.text)
     end)
 
     it("cancels once and stops updating", function()

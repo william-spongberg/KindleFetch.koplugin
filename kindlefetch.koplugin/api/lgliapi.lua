@@ -46,8 +46,11 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         total_size = total_size
     })
 
-    -- check exit code
+    -- check exit code, again if curl has stopped, as it may have finished between the two checks
     local exit_code = CurlUtil.getExitCode(exit_file)
+    if not exit_code and not CurlUtil.isPidRunning(pid) then
+        exit_code = CurlUtil.getExitCode(exit_file)
+    end
     if exit_code then
         local final_size = FileUtil.getSize(filepath)
 

@@ -31,8 +31,10 @@ describe("CoverCache", function()
 
     describe("download", function()
         it("downloads and remembers a cover", function()
-            CurlUtil.download = function(url, path)
+            CurlUtil.download = function(url, path, use_proxy, background, max_time)
                 assert.are.equal("https://covers.example/abc.jpg", url)
+                -- the download prompt waits for the cover, so a stalled one mustn't hold it up
+                assert.are.equal(10, max_time)
                 helper.writeFile(path, "jpeg")
                 return true
             end
@@ -165,6 +167,8 @@ describe("CoverCache", function()
             helper.tick()
             assert.are.same({1}, results)
             assert.are.equal(covers_dir .. "new.jpg", CoverCache:get("new"))
+            -- so every open search result can show them
+            assert.are.same({"KindleFetchCoversDownloaded"}, helper.state.broadcasts)
         end)
 
         it("does not download covers that are already downloading", function()
@@ -188,6 +192,34 @@ describe("CoverCache", function()
             assert.are.same({0}, results)
             assert.is_false(helper.exists(covers_dir .. "a.jpg"))
             assert.is_false(CoverCache:cacheExists("a"))
+            assert.are.same({}, helper.state.broadcasts)
+        end)
+
+        it("keeps the covers that downloaded when others fail", function()
+            CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg"), book("b", "https://covers.example/b.jpg")},
+                6, onDone)
+            -- curl writes each cover's result next to its config file
+            helper.writeFile(data_dir .. "/settings/curl_config.txt.results",
+                "0 " .. covers_dir .. "a.jpg\n28 " .. covers_dir .. "b.jpg\n")
+            finishRun(runs[1], {true, true}, 28)
+            helper.runScheduled()
+
+            assert.are.same({1}, results)
+            assert.is_true(CoverCache:cacheExists("a"))
+            assert.is_false(CoverCache:cacheExists("b"))
+            assert.is_false(helper.exists(covers_dir .. "b.jpg"))
+        end)
+
+        -- curl can finish just after its exit code was checked, before checking whether it's running
+        it("reads the exit code again once curl has stopped", function()
+            CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg")}, 6, onDone)
+            CurlUtil.isPidRunning = function()
+                finishRun(runs[1], {true})
+                return false
+            end
+            helper.runScheduled()
+
+            assert.are.same({1}, results)
         end)
 
         it("stops when curl stops without reporting back", function()
