@@ -41,6 +41,20 @@ Device.input.dummy = true
 
 local H = require("helpers")
 
+-- KOReader loads every copy of a plugin it finds, so leave out any copy of KindleFetch installed in KOReader
+-- itself (e.g. rsynced into the Flatpak to try it out), and test only the one linked into KO_HOME
+local PluginLoader = require("pluginloader")
+local discover = PluginLoader._discover
+function PluginLoader:_discover()
+    local plugins = {}
+    for _, plugin in ipairs(discover(self)) do
+        if plugin.name ~= "kindlefetch" or plugin.path:find(os.getenv("KO_HOME"), 1, true) == 1 then
+            table.insert(plugins, plugin)
+        end
+    end
+    return plugins
+end
+
 -- opening the file manager loads the plugins, adding KindleFetch's modules to package.path
 require("apps/filemanager/filemanager"):showFiles(H.books_dir)
 H.fileManager()

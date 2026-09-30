@@ -16,8 +16,18 @@ describe("KindleFetch", function()
 
     it("is loaded from KOReader's data folder", function()
         assert(H.plugin(), "KindleFetch isn't loaded")
+        local expected = os.getenv("KO_HOME") .. "/plugins/kindlefetch.koplugin"
         local plugin_path = require("util.pathutil").getPluginPath():gsub("//+", "/")
-        H.eq(os.getenv("KO_HOME") .. "/plugins/kindlefetch.koplugin", plugin_path, "plugin path")
+        H.eq(expected, plugin_path, "plugin path")
+        -- and only from there, rather than also from another copy installed in KOReader
+        H.eq(expected, (H.plugin().path:gsub("//+", "/")), "path of the plugin being run")
+        local copies = 0
+        for _, plugin in ipairs(require("pluginloader").enabled_plugins) do
+            if plugin.name == "kindlefetch" then
+                copies = copies + 1
+            end
+        end
+        H.eq(1, copies, "copies of KindleFetch loaded")
     end)
 
     it("opens search from the Search menu", function()
