@@ -7,6 +7,32 @@ on:
   workflow_call:
 
 jobs:
+  lint:
+    # branches in this repo are already checked on push, so only check pull requests from forks
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # the same version as in DEVELOPMENT.md, as formatting can change between versions
+      - name: Check formatting
+        uses: JohnnyMorganz/stylua-action@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: 2.5.2
+          args: --check .
+
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "luajit-2.1"
+
+      - uses: leafo/gh-actions-luarocks@v6
+
+      - name: Lint
+        run: |
+          luarocks install luacheck
+          luacheck .
+
   busted:
     # branches in this repo are already tested on push, so only test pull requests from forks
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
