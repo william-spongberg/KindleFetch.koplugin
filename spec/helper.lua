@@ -262,6 +262,20 @@ local function createStubs(state)
             end
             return mode and {mode = mode} or nil
         end,
+        -- the names in a directory, like lfs.dir
+        dir = function(path)
+            local names = {".", ".."}
+            local pipe = real_popen("ls -A " .. quote(path) .. " 2>/dev/null")
+            for name in pipe:lines() do
+                table.insert(names, name)
+            end
+            pipe:close()
+            local i = 0
+            return function()
+                i = i + 1
+                return names[i]
+            end
+        end,
         mkdir = function(path)
             if succeeded("mkdir " .. quote(path) .. " 2>/dev/null") then
                 return true

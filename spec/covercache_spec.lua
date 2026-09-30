@@ -24,6 +24,18 @@ describe("CoverCache", function()
 
     after_each(helper.cleanup)
 
+    it("can be cleared, removing the covers' files", function()
+        fixtures.cacheCover(helper, "abc")
+        local path = CoverCache:get("abc")
+        assert.is_true(helper.exists(path))
+
+        CoverCache:clear()
+        assert.is_nil(CoverCache:get("abc"))
+        assert.is_false(helper.exists(path))
+        -- and can be cleared again, empty
+        CoverCache:clear()
+    end)
+
     it("stores covers by md5", function()
         assert.are.equal(covers_dir .. "abc.jpg", CoverCache:getPath("abc"))
         assert.is_true(helper.isDir(covers_dir))

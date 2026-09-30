@@ -75,6 +75,20 @@ function CoverCache:downloadFullSize(book)
     return cover ~= nil and self:downloadMultiple({cover}, 1)
 end
 
+-- forget every cover, removing their files, e.g. so each end-to-end test starts afresh
+function CoverCache:clear()
+    persistent_cache:clear()
+    downloading = {}
+    unavailable = {}
+    if lfs.attributes(CACHE_DIR, "mode") == "directory" then
+        for file in lfs.dir(CACHE_DIR) do
+            if file ~= "." and file ~= ".." then
+                FileUtil.removeFile(CACHE_DIR .. file)
+            end
+        end
+    end
+end
+
 -- whether the book's full-size cover is still on its way, once asked for
 function CoverCache:isFullSizeComing(book)
     local cover = fullSizeCover(book)

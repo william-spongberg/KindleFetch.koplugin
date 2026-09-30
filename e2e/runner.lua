@@ -137,6 +137,7 @@ local function runTest(node)
 
     local started = os.time()
     local ok, err = xpcall(function()
+        H.clearCaches()
         for _, b in ipairs(chain) do
             for _, fn in ipairs(b.before_each) do
                 fn()

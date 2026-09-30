@@ -300,6 +300,22 @@ function H.closeAll()
     H.pump()
 end
 
+-- empty KindleFetch's caches, so each test finds everything afresh rather than relying on what earlier tests found
+function H.clearCaches()
+    require("cache.searchcache"):clear()
+    require("cache.urlcache"):clear()
+    require("cache.covercache"):clear()
+end
+
+-- put mirrors that don't work before the real ones: one that doesn't exist, and one that answers without any books.
+-- returns them
+function H.breakMirrors()
+    local mirrors = assert(require("api.urlapi"):getLibgenUrls(), "couldn't look up the mirrors on Wikipedia")
+    local broken = {"https://libgen.invalid", "https://example.com"}
+    require("cache.urlcache"):set({broken[1], broken[2], unpack(mirrors)}, "libgen")
+    return broken
+end
+
 function H.fileManager()
     return H.waitFor("the file manager", 10, function()
         return require("apps/filemanager/filemanager").instance
