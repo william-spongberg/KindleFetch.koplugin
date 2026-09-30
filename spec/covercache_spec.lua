@@ -41,6 +41,34 @@ describe("CoverCache", function()
             assert.are.equal(covers_dir .. "abc.jpg", CoverCache:get("abc"))
         end)
 
+        it("retries through PROXY_URL when the direct download fails", function()
+            helper.state.env.PROXY_URL = "http://proxy.example:8080"
+            local attempts = {}
+            CurlUtil.download = function(_, path, use_proxy)
+                table.insert(attempts, use_proxy)
+                if use_proxy then
+                    helper.writeFile(path, "jpeg")
+                    return true
+                end
+                return false, "TLS/SSL connection failed"
+            end
+
+            assert.are.equal(covers_dir .. "abc.jpg", CoverCache:download("abc", "https://covers.example/abc.jpg"))
+            assert.are.same({false, true}, attempts)
+        end)
+
+        it("does not retry without PROXY_URL", function()
+            helper.state.env.PROXY_URL = false
+            local attempts = 0
+            CurlUtil.download = function()
+                attempts = attempts + 1
+                return false, "TLS/SSL connection failed"
+            end
+
+            assert.is_nil(CoverCache:download("abc", "https://covers.example/abc.jpg"))
+            assert.are.equal(1, attempts)
+        end)
+
         it("returns nil when the download fails", function()
             CurlUtil.download = function()
                 return false, "HTTP error response"
@@ -108,6 +136,48 @@ describe("CoverCache", function()
             }, requested)
             assert.are.equal(covers_dir .. "new.jpg", CoverCache:get("new"))
             assert.are.equal("Getting book covers...", helper.lastNotification())
+        end)
+
+        it("retries the covers that failed through PROXY_URL", function()
+            helper.state.env.PROXY_URL = "http://proxy.example:8080"
+            local attempts = {}
+            CurlUtil.downloadMultiple = function(urls, paths, use_proxy)
+                table.insert(attempts, {
+                    urls = urls,
+                    use_proxy = use_proxy
+                })
+                -- only the first cover gets through directly
+                for i, path in ipairs(paths) do
+                    if use_proxy or i == 1 then
+                        helper.writeFile(path, "jpeg")
+                    end
+                end
+                return use_proxy and #paths or 1
+            end
+
+            local books = {book("a", "https://covers.example/a.jpg"), book("b", "https://covers.example/b.jpg"),
+                           book("c", "https://covers.example/c.jpg")}
+            assert.are.equal(3, CoverCache:downloadMultiple(books, 6))
+            assert.are.same({{
+                urls = {"https://covers.example/a.jpg", "https://covers.example/b.jpg", "https://covers.example/c.jpg"},
+                use_proxy = false
+            }, {
+                urls = {"https://covers.example/b.jpg", "https://covers.example/c.jpg"},
+                use_proxy = true
+            }}, attempts)
+            assert.is_true(CoverCache:cacheExists("c"))
+        end)
+
+        it("does not retry covers without PROXY_URL", function()
+            helper.state.env.PROXY_URL = false
+            local attempts = 0
+            CurlUtil.downloadMultiple = function()
+                attempts = attempts + 1
+                return 0
+            end
+
+            assert.are.equal(0, CoverCache:downloadMultiple({book("a", "https://covers.example/a.jpg")}, 6))
+            assert.are.equal(1, attempts)
         end)
 
         it("does nothing when every cover is cached", function()
