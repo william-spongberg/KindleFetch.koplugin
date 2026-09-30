@@ -81,20 +81,20 @@ Downloaded books are saved to your configured download location.
 
 <img width="400" alt="Choosing the download folder" src="docs/screenshots/13-settings-download-folder.png" />
 
-- **Preferred Languages**: Choose which languages to prioritise in search results
+- **Preferred Languages**: Choose which languages to prioritise in search results (default: English)
 
 <img width="400" alt="Preferred languages" src="docs/screenshots/14-settings-languages.png" />
 
-- **Preferred File Types**: Select desired formats across five categories:
-  - Ebooks: EPUB, MOBI, AZW, AZW3, KFX, FB2, LIT, PRC, LRF, SNB, UPDB
+- **Preferred File Types**: Select desired formats across five categories, from those KOReader can open (default: all of them):
+  - Ebooks: EPUB, MOBI, AZW, FB2, PRC
   - Comics: CBR, CBZ
   - Documents: PDF, TXT, RTF, DOC, DOCX, ODT, DJVU
   - Images: JPG, TIF, PDB
-  - Web: CHM, HTM, HTML, HTMLZ, MHT
+  - Web: CHM, HTM, HTML, HTMLZ
 
 <img width="400" alt="Preferred file types" src="docs/screenshots/15-settings-file-types.png" />
 
-- **Preferred Book Types**: Filter by fiction, non-fiction, comics, magazines, scientific articles, or standards
+- **Preferred Book Types**: Filter by fiction, non-fiction, comics, magazines, scientific articles, or standards (default: all of them)
 
 <img width="400" alt="Preferred book types" src="docs/screenshots/16-settings-book-types.png" />
 

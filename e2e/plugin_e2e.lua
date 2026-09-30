@@ -31,7 +31,7 @@ describe("KindleFetch", function()
     end)
 
     it("opens search from the Search menu", function()
-        H.openMainMenu({"Kindle Fetch", "Search Library Genesis"})
+        H.openMainMenu({ "Kindle Fetch", "Search Library Genesis" })
         local plugin = H.plugin()
         H.waitFor("the search dialog", 10, function()
             return plugin.search_box and H.isShown(plugin.search_box)
@@ -57,7 +57,7 @@ describe("KindleFetch", function()
 
     it("changes settings", function()
         local Settings = require("settings.settings")
-        H.openMainMenu({"Kindle Fetch", "Settings"})
+        H.openMainMenu({ "Kindle Fetch", "Settings" })
         H.waitFor("the settings", 10, function()
             return H.find(function(widget)
                 return widget.text == "Show Book Covers: ☑"
@@ -86,7 +86,7 @@ describe("KindleFetch", function()
     it("checks for updates when asked", function()
         local since = #H.notifications
         H.asDevice(function()
-            H.openMainMenu({"Kindle Fetch", "Check for updates"})
+            H.openMainMenu({ "Kindle Fetch", "Check for updates" })
             H.waitForNotification("Checking for updates", 10, since)
         end)
 

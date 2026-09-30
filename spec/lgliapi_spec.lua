@@ -22,12 +22,12 @@ describe("LlgiAPI", function()
 
     local saved_filepath
 
-    local function onResult(ok, err, filepath)
+    local function onResult(ok, err, path)
         table.insert(results, {
             ok = ok,
-            err = err
+            err = err,
         })
-        saved_filepath = filepath
+        saved_filepath = path
     end
 
     -- ask to download the book, then confirm the download prompt
@@ -62,7 +62,7 @@ describe("LlgiAPI", function()
             title = "Dune",
             display_title = "Dune",
             image_url = fixtures.DUNE.image_url,
-            file_type = "epub"
+            file_type = "epub",
         }
 
         prompts, spawned, running, killed, results = {}, {}, {}, {}, {}
@@ -81,7 +81,7 @@ describe("LlgiAPI", function()
                 path = path,
                 use_proxy = use_proxy,
                 pid = 1000 + #spawned,
-                exit_file = exit_file
+                exit_file = exit_file,
             })
             return spawned[#spawned].pid, exit_file
         end
@@ -109,9 +109,9 @@ describe("LlgiAPI", function()
                     on_download = on_download,
                     show = function(self)
                         table.insert(prompts, self)
-                    end
+                    end,
                 }
-            end
+            end,
         })
 
         UrlApi = require("api.urlapi")
@@ -132,7 +132,7 @@ describe("LlgiAPI", function()
 
             assert.are.equal(1, #prompts)
             assert.are.equal(filepath, prompts[1].filepath)
-            assert.are.same({{book.image_url}}, cover_downloads)
+            assert.are.same({ { book.image_url } }, cover_downloads)
             assert.are.equal(0, #spawned)
         end)
 
@@ -176,7 +176,7 @@ describe("LlgiAPI", function()
 
             curlWrote(MB, 0)
             helper.runScheduled()
-            assert.are.same({{ok = true}}, results)
+            assert.are.same({ { ok = true } }, results)
             assert.are.equal(data_dir .. "/Books/Dune.epub", saved_filepath)
         end)
 
@@ -213,7 +213,7 @@ describe("LlgiAPI", function()
                 path = filepath,
                 use_proxy = false,
                 pid = 1000,
-                exit_file = spawned[1].exit_file
+                exit_file = spawned[1].exit_file,
             }, spawned[1])
         end)
 
@@ -265,7 +265,7 @@ describe("LlgiAPI", function()
             curlWrote(MB, 0)
             helper.runScheduled()
 
-            assert.are.same({{ok = true}}, results)
+            assert.are.same({ { ok = true } }, results)
             assert.are.equal(1, widget.bar_widget.percentage)
             assert.is_true(helper.wasClosed(widget.container))
             assert.are.same({}, LlgiAPI:getActiveDownloads())
@@ -281,7 +281,7 @@ describe("LlgiAPI", function()
 
             curlWrote(MB, 0)
             helper.runScheduled()
-            assert.are.same({{ok = true}}, results)
+            assert.are.same({ { ok = true } }, results)
         end)
 
         it("tries the next mirror and forgets ones that fail", function()
@@ -323,7 +323,7 @@ describe("LlgiAPI", function()
 
             curlWrote(MB, 0)
             helper.runScheduled()
-            assert.are.same({{ok = true}}, results)
+            assert.are.same({ { ok = true } }, results)
         end)
 
         it("fails when no mirror has the book", function()
@@ -332,16 +332,44 @@ describe("LlgiAPI", function()
             end
 
             download()
-            assert.are.same({{ok = false, err = "no Library Genesis download link found"}}, results)
+            assert.are.same({ { ok = false, err = "no Library Genesis download link found" } }, results)
             assert.are.same({}, LlgiAPI:getActiveDownloads())
+            -- the mirrors answered, so they aren't looked up again
+            assert.are.equal(1, web.scrapes)
         end)
 
-        it("fails when the mirrors cannot be scraped", function()
+        it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()
             web.wikipedia_down = true
 
             download()
-            assert.are.same({{ok = false, err = "no Library Genesis urls available"}}, results)
+            assert.are.same({ { ok = false, err = "no internet connection" } }, results)
             assert.is_true(helper.wasClosed(helper.lastShown()))
+        end)
+
+        -- rather than forgetting every mirror while offline
+        it("keeps the mirrors when nothing answers", function()
+            UrlApi:getLibgenUrls()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[adsUrl(mirror)] = nil
+            end
+            web.wikipedia_down = true
+
+            download()
+            assert.are.same({ { ok = false, err = "no internet connection" } }, results)
+            assert.are.same(mirrors, UrlApi:getLibgenUrls())
+        end)
+
+        it("turns on wifi first when offline, then downloads once connected", function()
+            hasBook(mirrors[1])
+            helper.stubs.network.connected = false
+
+            download()
+            assert.are.equal("turn wifi on", helper.stubs.network.prompted)
+            assert.are.same({}, spawned)
+
+            helper.stubs.network.connected = true
+            helper.stubs.network.when_connected()
+            assert.are.equal(getUrl(mirrors[1]), spawned[1].url)
         end)
 
         it("fails when curl cannot be started", function()
@@ -353,7 +381,7 @@ describe("LlgiAPI", function()
             end
 
             download()
-            assert.are.same({{ok = false, err = "unable to launch curl"}}, results)
+            assert.are.same({ { ok = false, err = "unable to launch curl" } }, results)
             assert.are.same({}, LlgiAPI:getActiveDownloads())
         end)
 
@@ -362,11 +390,16 @@ describe("LlgiAPI", function()
 
             curlWrote(MB / 2, 22)
             helper.runScheduled()
-            assert.are.same({{ok = false, err = "HTTP error response"}}, results)
+            assert.are.same({ { ok = false, err = "HTTP error response" } }, results)
             assert.is_false(helper.exists(filepath))
             -- with what's needed to work out why from crash.log
-            assert.matches('download of "Dune" from [%w%.]+ failed after %d+s: curl exit code 22 %(HTTP error ' ..
-                               'response%), ' .. MB / 2 .. " of %d+ bytes", helper.logged("warn", "failed after"))
+            assert.matches(
+                'download of "Dune" from [%w%.]+ failed after %d+s: curl exit code 22 %(HTTP error '
+                    .. "response%), "
+                    .. MB / 2
+                    .. " of %d+ bytes",
+                helper.logged("warn", "failed after")
+            )
         end)
 
         it("fails when the downloaded file is empty", function()
@@ -374,7 +407,7 @@ describe("LlgiAPI", function()
 
             curlWrote(0, 0)
             helper.runScheduled()
-            assert.are.same({{ok = false, err = "download produced empty file"}}, results)
+            assert.are.same({ { ok = false, err = "download produced empty file" } }, results)
         end)
 
         -- curl can finish just after its exit code was checked, before checking whether it's running
@@ -386,7 +419,7 @@ describe("LlgiAPI", function()
             end
             helper.runScheduled()
 
-            assert.are.same({{ok = true}}, results)
+            assert.are.same({ { ok = true } }, results)
         end)
 
         it("fails when curl stops without reporting back", function()
@@ -394,7 +427,7 @@ describe("LlgiAPI", function()
 
             running[spawned[1].pid] = false
             helper.runScheduled()
-            assert.are.same({{ok = false, err = "download process ended unexpectedly"}}, results)
+            assert.are.same({ { ok = false, err = "download process ended unexpectedly" } }, results)
         end)
 
         it("retries through PROXY_URL when the download fails", function()
@@ -408,7 +441,7 @@ describe("LlgiAPI", function()
 
             curlWrote(MB, 0)
             helper.runScheduled()
-            assert.are.same({{ok = true}}, results)
+            assert.are.same({ { ok = true } }, results)
         end)
 
         it("fails when the proxy retry fails too", function()
@@ -419,7 +452,7 @@ describe("LlgiAPI", function()
             helper.tick()
             curlWrote(0, 7)
             helper.runScheduled()
-            assert.are.same({{ok = false, err = "failed to connect to server"}}, results)
+            assert.are.same({ { ok = false, err = "failed to connect to server" } }, results)
             assert.are.equal(2, #spawned)
         end)
 
@@ -432,7 +465,7 @@ describe("LlgiAPI", function()
 
             curlWrote(0, 7)
             helper.runScheduled()
-            assert.are.same({{ok = false, err = "unable to launch curl"}}, results)
+            assert.are.same({ { ok = false, err = "unable to launch curl" } }, results)
         end)
 
         it("can be cancelled from the progress widget", function()
@@ -442,8 +475,8 @@ describe("LlgiAPI", function()
             progress().cancel_button.callback()
             helper.runScheduled()
 
-            assert.are.same({spawned[1].pid, spawned[1].pid}, killed)
-            assert.are.same({{ok = false, err = "cancelled"}}, results)
+            assert.are.same({ spawned[1].pid, spawned[1].pid }, killed)
+            assert.are.same({ { ok = false, err = "cancelled" } }, results)
             assert.is_false(helper.exists(filepath))
         end)
     end)
@@ -467,13 +500,13 @@ describe("LlgiAPI", function()
 
             LlgiAPI:cancelAllDownloads()
             assert.is_true(widget.cancelled)
-            assert.are.same({spawned[1].pid}, killed)
+            assert.are.same({ spawned[1].pid }, killed)
             assert.is_true(helper.wasClosed(widget.container))
             assert.is_false(helper.exists(filepath))
             assert.are.same({}, LlgiAPI:getActiveDownloads())
 
             helper.runScheduled()
-            assert.are.same({{ok = false, err = "cancelled"}}, results)
+            assert.are.same({ { ok = false, err = "cancelled" } }, results)
         end)
     end)
 end)

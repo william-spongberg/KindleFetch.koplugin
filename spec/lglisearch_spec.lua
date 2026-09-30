@@ -5,8 +5,11 @@ local fixtures = require("fixtures")
 describe("LlgiSearch", function()
     local web, mirrors, LlgiSearch
 
+    -- with the default book types
     local function searchUrl(mirror, page, query)
-        return mirror .. "/index.php?" .. LlgiSearch.buildParams(query or "dune", page or 1, {"fiction", "comics"})
+        return mirror
+            .. "/index.php?"
+            .. LlgiSearch.buildParams(query or "dune", page or 1, require("settings.settings"):getPreferredBookTypes())
     end
 
     local function results(mirror, books, page)
@@ -40,23 +43,30 @@ describe("LlgiSearch", function()
         it("searches the preferred book types", function()
             LlgiSearch:search("dune messiah", 2)
 
-            assert.are.equal(mirrors[1] .. "/index.php?req=dune%20messiah&res=100&columns%5B%5D=t&columns%5B%5D=a" ..
-                                 "&columns%5B%5D=s&objects%5B%5D=f&topics%5B%5D=f&topics%5B%5D=c&covers=on" ..
-                                 "&filesuns=all&page=2", searches()[1])
+            assert.are.equal(
+                mirrors[1]
+                    .. "/index.php?req=dune%20messiah&res=100&columns%5B%5D=t&columns%5B%5D=a"
+                    .. "&columns%5B%5D=s&objects%5B%5D=f&topics%5B%5D=f&topics%5B%5D=l&topics%5B%5D=c"
+                    .. "&topics%5B%5D=m&topics%5B%5D=a&topics%5B%5D=s&covers=on&filesuns=all&page=2",
+                searches()[1]
+            )
         end)
 
         it("maps every book type to a Library Genesis topic", function()
-            local params = LlgiSearch.buildParams("dune", 1, {"fiction", "nonfiction", "comics",
-                                                                "magazines", "articles", "standards", "unknown"})
+            local params = LlgiSearch.buildParams(
+                "dune",
+                1,
+                { "fiction", "nonfiction", "comics", "magazines", "articles", "standards", "unknown" }
+            )
             local topics = {}
             for topic in params:gmatch("topics%%5B%%5D=(%a)") do
                 table.insert(topics, topic)
             end
-            assert.are.same({"f", "l", "c", "m", "a", "s"}, topics)
+            assert.are.same({ "f", "l", "c", "m", "a", "s" }, topics)
         end)
 
         it("reads each book from the results table", function()
-            results(mirrors[1], {fixtures.DUNE, fixtures.MESSIAH})
+            results(mirrors[1], { fixtures.DUNE, fixtures.MESSIAH })
             local books = LlgiSearch:search("dune", 1)
 
             assert.are.equal(2, #books)
@@ -74,23 +84,59 @@ describe("LlgiSearch", function()
                 language = "English",
                 book_type = "Book",
                 file_type = "epub",
-                file_size = "1 MB"
+                file_size = "1 MB",
             }, books[1])
             assert.are.equal("Dune Messiah", books[2].title)
         end)
 
+        -- as most comic issues are, which were all skipped before
+        it("finds a comic issue's title in its tooltip when the page leaves it out", function()
+            results(mirrors[1], {
+                {
+                    md5 = "4dc14e7148d7150c77634508303d76d8",
+                    series = "Dune Comics",
+                    issue = "",
+                    title = "Dune - House Atreides(Boom 2020)",
+                    title_in_tooltip_only = true,
+                    book_type = "Comics issue",
+                    language = "English",
+                    file_type = "cbr",
+                },
+            })
+            local book = LlgiSearch:search("dune", 1)[1]
+
+            -- without what's in brackets, like every title
+            assert.are.equal("Dune - House Atreides", book.title)
+            assert.are.equal("Comics issue", book.book_type)
+        end)
+
+        it("names a comic issue after its series when there's no title at all", function()
+            results(mirrors[1], {
+                {
+                    md5 = "4dc14e7148d7150c77634508303d76d8",
+                    series = "Dune Comics",
+                    issue = "",
+                    language = "English",
+                    file_type = "cbr",
+                },
+            })
+            assert.are.equal("Dune Comics", LlgiSearch:search("dune", 1)[1].title)
+        end)
+
         it("finds the title after a comic's series and issue number", function()
-            results(mirrors[1], {{
-                md5 = "e0d1e178d828288622b7ee6b8dc4dfbe",
-                series = "Dune",
-                issue = "1984-jan",
-                title = "Dune - The official Marvel Comics adaptation",
-                isbn = "0425076326",
-                book_type = "Comics issue",
-                authors = "Macchio, Ralph (sc.);Sienkiewicz, Bill (des.);",
-                language = "English",
-                file_type = "cbz"
-            }})
+            results(mirrors[1], {
+                {
+                    md5 = "e0d1e178d828288622b7ee6b8dc4dfbe",
+                    series = "Dune",
+                    issue = "1984-jan",
+                    title = "Dune - The official Marvel Comics adaptation",
+                    isbn = "0425076326",
+                    book_type = "Comics issue",
+                    authors = "Macchio, Ralph (sc.);Sienkiewicz, Bill (des.);",
+                    language = "English",
+                    file_type = "cbz",
+                },
+            })
             local book = LlgiSearch:search("dune", 1)[1]
 
             assert.are.equal("Dune - The official Marvel Comics adaptation", book.title)
@@ -99,22 +145,26 @@ describe("LlgiSearch", function()
         end)
 
         it("keeps covers that link to another site", function()
-            results(mirrors[1], {{
-                md5 = "abc",
-                cover = "https://covers.example/abc.jpg",
-                title = "Dune",
-                file_type = "epub"
-            }})
+            results(mirrors[1], {
+                {
+                    md5 = "abc",
+                    cover = "https://covers.example/abc.jpg",
+                    title = "Dune",
+                    file_type = "epub",
+                },
+            })
             assert.are.equal("https://covers.example/abc.jpg", LlgiSearch:search("dune", 1)[1].image_url)
         end)
 
         it("fills in missing details", function()
-            results(mirrors[1], {{
-                md5 = "ABC",
-                title = "Anonymous",
-                year = "0",
-                file_type = "EPUB"
-            }})
+            results(mirrors[1], {
+                {
+                    md5 = "ABC",
+                    title = "Anonymous",
+                    year = "0",
+                    file_type = "EPUB",
+                },
+            })
             local book = LlgiSearch:search("dune", 1)[1]
 
             assert.are.equal("abc", book.md5)
@@ -127,12 +177,14 @@ describe("LlgiSearch", function()
         end)
 
         it("shortens long titles and author lists for display", function()
-            results(mirrors[1], {{
-                md5 = "abc",
-                title = string.rep("Long title ", 10),
-                authors = string.rep("Author, ", 10),
-                file_type = "epub"
-            }})
+            results(mirrors[1], {
+                {
+                    md5 = "abc",
+                    title = string.rep("Long title ", 10),
+                    authors = string.rep("Author, ", 10),
+                    file_type = "epub",
+                },
+            })
             local book = LlgiSearch:search("dune", 1)[1]
 
             assert.are.equal(string.rep("Long title ", 10):sub(1, 50) .. "…", book.display_title)
@@ -140,72 +192,88 @@ describe("LlgiSearch", function()
         end)
 
         it("decodes html entities", function()
-            results(mirrors[1], {{
-                md5 = "abc",
-                title = "Pride &amp; Prejudice",
-                file_type = "epub"
-            }})
+            results(mirrors[1], {
+                {
+                    md5 = "abc",
+                    title = "Pride &amp; Prejudice",
+                    file_type = "epub",
+                },
+            })
             assert.are.equal("Pride & Prejudice", LlgiSearch:search("dune", 1)[1].title)
         end)
 
         it("shows each book once, though Library Genesis may list it more than once", function()
-            results(mirrors[1], {fixtures.DUNE, fixtures.MESSIAH, fixtures.DUNE})
+            results(mirrors[1], { fixtures.DUNE, fixtures.MESSIAH, fixtures.DUNE })
             local books = LlgiSearch:search("dune", 1)
 
-            assert.are.same({"Dune", "Dune Messiah"}, {books[1].title, books[2].title})
+            assert.are.same({ "Dune", "Dune Messiah" }, { books[1].title, books[2].title })
             assert.are.equal(2, #books)
         end)
 
         it("keeps the dots in titles", function()
-            results(mirrors[1], {{
-                md5 = "abc",
-                title = "Mr. Mercedes",
-                file_type = "epub"
-            }})
+            results(mirrors[1], {
+                {
+                    md5 = "abc",
+                    title = "Mr. Mercedes",
+                    file_type = "epub",
+                },
+            })
             assert.are.equal("Mr. Mercedes", LlgiSearch:search("dune", 1)[1].title)
         end)
 
         it("skips rows that are not usable books", function()
-            results(mirrors[1], {{
-                title = "No md5",
-                file_type = "epub"
-            }, {
-                md5 = "abc",
-                title = "No file type"
-            }, {
-                md5 = "def",
-                file_type = "epub"
-            }, {
-                md5 = "ghi",
-                title = "Too few cells",
-                file_type = "epub",
-                cells = 9
-            }, fixtures.DUNE})
+            results(mirrors[1], {
+                {
+                    title = "No md5",
+                    file_type = "epub",
+                },
+                {
+                    md5 = "abc",
+                    title = "No file type",
+                },
+                {
+                    md5 = "def",
+                    file_type = "epub",
+                },
+                {
+                    md5 = "ghi",
+                    title = "Too few cells",
+                    file_type = "epub",
+                    cells = 9,
+                },
+                fixtures.DUNE,
+            })
             local books = LlgiSearch:search("dune", 1)
 
             assert.are.equal(1, #books)
             assert.are.equal("Dune", books[1].title)
         end)
 
+        -- so books KOReader can't open are never found
         it("only keeps the preferred file types and languages", function()
-            results(mirrors[1], {fixtures.DUNE, {
-                md5 = "abc",
-                title = "Dune mobi",
-                language = "English",
-                file_type = "mobi"
-            }, {
-                md5 = "def",
-                title = "Дюна",
-                language = "Russian",
-                file_type = "epub"
-            }, {
-                md5 = "fed",
-                title = "Dune unknown language",
-                file_type = "epub"
-            }})
+            results(mirrors[1], {
+                fixtures.DUNE,
+                {
+                    md5 = "abc",
+                    title = "Dune azw3",
+                    language = "English",
+                    file_type = "azw3",
+                },
+                {
+                    md5 = "def",
+                    title = "Дюна",
+                    language = "Russian",
+                    file_type = "epub",
+                },
+                {
+                    md5 = "fed",
+                    title = "Dune unknown language",
+                    file_type = "epub",
+                },
+            })
             local books = LlgiSearch:search("dune", 1)
 
-            assert.are.same({"Dune", "Dune unknown language"}, {books[1].title, books[2].title})
+            assert.are.same({ "Dune", "Dune unknown language" }, { books[1].title, books[2].title })
             assert.are.equal(2, #books)
         end)
 
@@ -218,7 +286,7 @@ describe("LlgiSearch", function()
                         md5 = string.format("%030x%02x", page, i),
                         title = string.format("Book %d.%d", page, i),
                         language = i <= wanted and "English" or "Spanish",
-                        file_type = "epub"
+                        file_type = "epub",
                     })
                 end
                 return books
@@ -247,10 +315,10 @@ describe("LlgiSearch", function()
 
             it("stops at the last page of results", function()
                 results(mirrors[1], fullPage(1, 2), 1)
-                results(mirrors[1], {fixtures.DUNE}, 2)
+                results(mirrors[1], { fixtures.DUNE }, 2)
 
                 local books, _, next_page = LlgiSearch:search("dune", 1)
-                assert.are.same({"Book 1.1", "Book 1.2", "Dune"}, titles(books))
+                assert.are.same({ "Book 1.1", "Book 1.2", "Dune" }, titles(books))
                 assert.is_nil(next_page)
             end)
 
@@ -266,10 +334,10 @@ describe("LlgiSearch", function()
             end)
 
             it("carries on from the given page", function()
-                results(mirrors[1], {fixtures.DUNE}, 3)
+                results(mirrors[1], { fixtures.DUNE }, 3)
 
                 local books = LlgiSearch:search("dune", 3)
-                assert.are.same({"Dune"}, titles(books))
+                assert.are.same({ "Dune" }, titles(books))
                 assert.are.equal(searchUrl(mirrors[1], 3), searches()[1])
             end)
 
@@ -297,35 +365,52 @@ describe("LlgiSearch", function()
         end)
 
         it("ignores searches cached by older versions", function()
-            require("cache.searchcache"):set({{
-                title = "Old"
-            }}, "dune", 1, {"en"}, {"epub", "pdf", "cbr", "cbz"}, {"fiction", "comics"})
-            results(mirrors[1], {fixtures.DUNE})
+            require("cache.searchcache"):set(
+                { {
+                    title = "Old",
+                } },
+                "dune",
+                1,
+                { "en" },
+                { "epub", "pdf", "cbr", "cbz" },
+                { "fiction", "comics" }
+            )
+            results(mirrors[1], { fixtures.DUNE })
 
             assert.are.equal("Dune", LlgiSearch:search("dune", 1)[1].title)
         end)
 
         it("caches results", function()
-            results(mirrors[1], {fixtures.DUNE})
+            results(mirrors[1], { fixtures.DUNE })
             LlgiSearch:search("dune", 1)
             LlgiSearch:search("dune", 1)
 
             assert.are.equal(1, #searches())
         end)
 
+        it("says whether a search's results are saved, e.g. to show them offline", function()
+            results(mirrors[1], { fixtures.DUNE })
+            assert.is_false(LlgiSearch:isCached("dune", 1))
+
+            LlgiSearch:search("dune", 1)
+            assert.is_true(LlgiSearch:isCached("dune", 1))
+            assert.is_false(LlgiSearch:isCached("dune", 2))
+            assert.is_false(LlgiSearch:isCached("dune messiah", 1))
+        end)
+
         it("does not cache searches that found nothing", function()
             results(mirrors[1], {})
             assert.are.same({}, LlgiSearch:search("dune", 1))
 
-            results(mirrors[1], {fixtures.DUNE})
+            results(mirrors[1], { fixtures.DUNE })
             assert.are.equal(1, #LlgiSearch:search("dune", 1))
         end)
 
         it("tries the next mirror and forgets ones that fail", function()
-            results(mirrors[2], {fixtures.DUNE})
+            results(mirrors[2], { fixtures.DUNE })
 
             assert.are.equal(1, #LlgiSearch:search("dune", 1))
-            assert.are.same({searchUrl(mirrors[1]), searchUrl(mirrors[2])}, searches())
+            assert.are.same({ searchUrl(mirrors[1]), searchUrl(mirrors[2]) }, searches())
 
             local remaining = {}
             for i = 2, #mirrors do
@@ -336,7 +421,7 @@ describe("LlgiSearch", function()
 
         it("treats unexpected pages as failures", function()
             web.pages[searchUrl(mirrors[1])] = "<html><body>Under maintenance</body></html>"
-            results(mirrors[2], {fixtures.DUNE})
+            results(mirrors[2], { fixtures.DUNE })
 
             assert.are.equal(1, #LlgiSearch:search("dune", 1))
             -- saying what the page was, for crash.log
@@ -347,7 +432,7 @@ describe("LlgiSearch", function()
             -- every mirror is down until they have been scraped again
             web.pages[searchUrl(mirrors[1])] = function()
                 if web.scrapes > 1 then
-                    return fixtures.libgenResults({fixtures.DUNE})
+                    return fixtures.libgenResults({ fixtures.DUNE })
                 end
             end
 
@@ -380,12 +465,24 @@ describe("LlgiSearch", function()
             assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
         end)
 
-        it("fails when the mirrors cannot be scraped", function()
+        it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()
             web.wikipedia_down = true
 
             local books, err = LlgiSearch:search("dune", 1)
             assert.is_nil(books)
-            assert.are.equal("no Library Genesis urls available", err)
+            assert.are.equal("no internet connection", err)
+        end)
+
+        -- rather than forgetting every mirror while offline
+        it("keeps the mirrors when nothing answers", function()
+            local UrlApi = require("api.urlapi")
+            UrlApi:getLibgenUrls()
+            web.wikipedia_down = true
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal("no internet connection", err)
+            assert.are.same(mirrors, UrlApi:getLibgenUrls())
         end)
 
         -- catches Library Genesis changing its results page, like Anna's Archive blocking searches did (#24)
@@ -399,7 +496,11 @@ describe("LlgiSearch", function()
                 assert.matches("^%x+$", book.md5)
                 assert.are.equal(32, #book.md5)
                 assert.is_true(#book.title > 0)
-                assert.is_truthy(({epub = true, pdf = true, cbr = true, cbz = true})[book.file_type])
+                local preferred = {}
+                for _, file_type in ipairs(require("settings.settings"):getPreferredFileTypes()) do
+                    preferred[file_type] = true
+                end
+                assert.is_truthy(preferred[book.file_type])
             end
         end)
     end)

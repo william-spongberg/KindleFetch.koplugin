@@ -5,12 +5,13 @@
 local helper = {}
 
 -- keep the unpatched functions somewhere that survives this file being loaded again
-local originals = io.kindlefetch_spec_originals or {
-    execute = os.execute,
-    popen = io.popen,
-    getenv = os.getenv,
-    time = os.time
-}
+local originals = io.kindlefetch_spec_originals
+    or {
+        execute = os.execute,
+        popen = io.popen,
+        getenv = os.getenv,
+        time = os.time,
+    }
 io.kindlefetch_spec_originals = originals
 local real_execute = originals.execute
 local real_popen = originals.popen
@@ -138,7 +139,7 @@ end
 
 -- modules loaded before any spec runs are kept across resets
 local baseline = {
-    helper = true
+    helper = true,
 }
 for name in pairs(package.loaded) do
     baseline[name] = true
@@ -172,7 +173,7 @@ local function widgetClass()
     function Widget:getSize()
         return {
             w = self.width or #(self.text or "") * 10,
-            h = self.height or 20
+            h = self.height or 20,
         }
     end
 
@@ -196,16 +197,24 @@ local function createStubs(state)
     local stubs = {}
 
     stubs.logger = {
-        warn = function(...) table.insert(state.logs, {"warn", ...}) end,
-        dbg = function(...) table.insert(state.logs, {"dbg", ...}) end,
-        info = function(...) table.insert(state.logs, {"info", ...}) end,
-        err = function(...) table.insert(state.logs, {"err", ...}) end
+        warn = function(...)
+            table.insert(state.logs, { "warn", ... })
+        end,
+        dbg = function(...)
+            table.insert(state.logs, { "dbg", ... })
+        end,
+        info = function(...)
+            table.insert(state.logs, { "info", ... })
+        end,
+        err = function(...)
+            table.insert(state.logs, { "err", ... })
+        end,
     }
 
     stubs.gettext = setmetatable({}, {
         __call = function(_, text)
             return text
-        end
+        end,
     })
 
     stubs.device = {
@@ -224,8 +233,8 @@ local function createStubs(state)
                 return 800
             end,
             getSize = function()
-                return {w = 600, h = 800}
-            end
+                return { w = 600, h = 800 }
+            end,
         },
         isKindle = function(self)
             return self.kindle
@@ -235,7 +244,7 @@ local function createStubs(state)
         end,
         isAndroid = function(self)
             return self.android
-        end
+        end,
     }
 
     stubs.datastorage = {
@@ -244,7 +253,7 @@ local function createStubs(state)
         end,
         getSettingsDir = function(self)
             return self:getDataDir() .. "/settings"
-        end
+        end,
     }
 
     stubs.lfs = {
@@ -260,7 +269,21 @@ local function createStubs(state)
             if request == "mode" then
                 return mode
             end
-            return mode and {mode = mode} or nil
+            return mode and { mode = mode } or nil
+        end,
+        -- the names in a directory, like lfs.dir
+        dir = function(path)
+            local names = { ".", ".." }
+            local pipe = real_popen("ls -A " .. quote(path) .. " 2>/dev/null")
+            for name in pipe:lines() do
+                table.insert(names, name)
+            end
+            pipe:close()
+            local i = 0
+            return function()
+                i = i + 1
+                return names[i]
+            end
         end,
         mkdir = function(path)
             if succeeded("mkdir " .. quote(path) .. " 2>/dev/null") then
@@ -270,14 +293,14 @@ local function createStubs(state)
         end,
         currentdir = function()
             return helper.ROOT
-        end
+        end,
     }
 
     -- settings files live in state.settings_files, and like LuaSettings only change on flush
     stubs.luasettings = {
         open = function(_, path)
             local file = {
-                data = deepCopy(state.settings_files[path]) or {}
+                data = deepCopy(state.settings_files[path]) or {},
             }
             function file:readSetting(key)
                 return self.data[key]
@@ -289,7 +312,7 @@ local function createStubs(state)
                 state.settings_files[path] = deepCopy(self.data)
             end
             return file
-        end
+        end,
     }
 
     stubs.uimanager = {
@@ -301,7 +324,7 @@ local function createStubs(state)
         end,
         setDirty = function(_, _, refresh)
             if type(refresh) == "function" then
-                state.refresh = {refresh()}
+                state.refresh = { refresh() }
             end
         end,
         forceRePaint = function() end,
@@ -315,7 +338,7 @@ local function createStubs(state)
         end,
         nextTick = function(_, fn)
             table.insert(state.scheduled, fn)
-        end
+        end,
     }
 
     stubs.inputdialog = {
@@ -328,14 +351,19 @@ local function createStubs(state)
                 self.keyboard_closed = true
             end
             return o
-        end
+        end,
     }
 
     stubs.notification = {
         SOURCE_ALWAYS_SHOW = 1,
         notify = function(_, text)
             table.insert(state.notifications, text)
-        end
+        end,
+        -- a notification shown and closed by the plugin itself
+        new = function(_, notification)
+            notification.is_notification = true
+            return notification
+        end,
     }
 
     -- the parts of KOReader's util the plugin uses (the real one needs KOReader's ffi modules)
@@ -359,7 +387,7 @@ local function createStubs(state)
         end,
         getSafeFilename = function(name)
             return (name:gsub("/", "_"))
-        end
+        end,
     }
 
     stubs.network = {
@@ -386,22 +414,22 @@ local function createStubs(state)
             end
             self.prompted = "turn wifi on"
             self.when_connected = callback
-        end
+        end,
     }
 
     stubs.event = {
         new = function(_, name, ...)
             return {
                 name = name,
-                args = {...}
+                args = { ... },
             }
-        end
+        end,
     }
 
     stubs.dispatcher = {
         registerAction = function(_, name, action)
             state.actions[name] = action
-        end
+        end,
     }
 
     stubs.widgetcontainer = widgetClass()
@@ -410,7 +438,7 @@ local function createStubs(state)
     stubs.http = {
         request = function()
             error("unstubbed http request", 2)
-        end
+        end,
     }
     stubs.ltn12 = {
         sink = {
@@ -421,8 +449,8 @@ local function createStubs(state)
                     end
                     return 1
                 end
-            end
-        }
+            end,
+        },
     }
 
     -- widgets
@@ -436,7 +464,7 @@ local function createStubs(state)
         new = function(_, o)
             o = o or {}
             function o:copy()
-                return stubs.geometry:new{x = self.x, y = self.y, w = self.w, h = self.h}
+                return stubs.geometry:new { x = self.x, y = self.y, w = self.w, h = self.h }
             end
             function o:combine()
                 return self
@@ -445,7 +473,7 @@ local function createStubs(state)
                 return self.outside
             end
             return o
-        end
+        end,
     }
     stubs.downloadmgr = {
         new = function(_, o)
@@ -453,7 +481,7 @@ local function createStubs(state)
                 table.insert(state.dir_choosers, self)
             end
             return o
-        end
+        end,
     }
 
     return stubs
@@ -479,28 +507,40 @@ local MODULE_STUBS = {
     ["ui/widget/menu"] = "Menu",
     ["ui/widget/container/inputcontainer"] = "InputContainer",
     ["ui/geometry"] = "geometry",
-    ["ui/downloadmgr"] = "downloadmgr"
+    ["ui/downloadmgr"] = "downloadmgr",
 }
 
 -- widgets the plugin only builds and lays out
-local WIDGET_MODULES = {"ui/gesturerange", "ui/widget/container/centercontainer",
-                        "ui/widget/container/framecontainer", "ui/widget/container/leftcontainer",
-                        "ui/widget/verticalgroup", "ui/widget/horizontalgroup", "ui/widget/verticalspan",
-                        "ui/widget/horizontalspan", "ui/widget/textboxwidget", "ui/widget/textwidget",
-                        "ui/widget/imagewidget", "ui/widget/button", "ui/widget/progresswidget",
-                        "ui/widget/confirmbox", "ui/widget/buttondialog", "ui/widget/iconwidget",
-                        "ui/widget/buttontable"}
+local WIDGET_MODULES = {
+    "ui/gesturerange",
+    "ui/widget/container/centercontainer",
+    "ui/widget/container/framecontainer",
+    "ui/widget/container/leftcontainer",
+    "ui/widget/verticalgroup",
+    "ui/widget/horizontalgroup",
+    "ui/widget/verticalspan",
+    "ui/widget/horizontalspan",
+    "ui/widget/textboxwidget",
+    "ui/widget/textwidget",
+    "ui/widget/imagewidget",
+    "ui/widget/button",
+    "ui/widget/progresswidget",
+    "ui/widget/confirmbox",
+    "ui/widget/buttondialog",
+    "ui/widget/iconwidget",
+    "ui/widget/buttontable",
+}
 
 local CONSTANT_MODULES = {
     ["ui/font"] = {
         getFace = function(_, name, size)
-            return {name = name, size = size}
-        end
+            return { name = name, size = size }
+        end,
     },
     ["ui/size"] = {
-        padding = {small = 2, default = 5, large = 10},
-        border = {thin = 1, default = 1, window = 2},
-        radius = {button = 7, window = 7}
+        padding = { small = 2, default = 5, large = 10 },
+        border = { thin = 1, default = 1, window = 2 },
+        radius = { button = 7, window = 7 },
     },
     ["ffi/blitbuffer"] = {
         COLOR_WHITE = "white",
@@ -509,8 +549,8 @@ local CONSTANT_MODULES = {
         COLOR_GRAY = "gray",
         COLOR_DARK_GRAY = "dark gray",
         COLOR_GRAY_4 = "gray 4",
-        COLOR_GRAY_6 = "gray 6"
-    }
+        COLOR_GRAY_6 = "gray 6",
+    },
 }
 
 -- unload plugin modules and install fresh stubs
@@ -541,7 +581,7 @@ function helper.reset()
         notifications = {},
         dir_choosers = {},
         actions = {},
-        logs = {}
+        logs = {},
     }
     helper.stubs = createStubs(helper.state)
 
@@ -563,7 +603,7 @@ function helper.reset()
     G_reader_settings = {
         isFalse = function(_, key)
             return helper.state.reader_settings[key] == false
-        end
+        end,
     }
 end
 
@@ -579,7 +619,7 @@ local live_responses = {}
 -- support needs luasec, which needs OpenSSL headers to build), so specs can scrape live pages
 function helper.useLiveHttp()
     local http = {
-        requests = {}
+        requests = {},
     }
     function http.request(request)
         table.insert(http.requests, request.url)
@@ -588,8 +628,13 @@ function helper.useLiveHttp()
             -- like luasocket, TIMEOUT limits each wait for data rather than the whole transfer
             local timeout = http.TIMEOUT or 60
             local cmd = string.format(
-                "curl -sL --connect-timeout %d --speed-time %d --speed-limit 1 --max-time 120 -A %s -w '\\n%%{http_code} %%{exitcode}' %s",
-                timeout, timeout, quote(request.headers and request.headers["User-Agent"] or "curl"), quote(request.url))
+                "curl -sL --connect-timeout %d --speed-time %d --speed-limit 1 --max-time 120 -A %s "
+                    .. "-w '\\n%%{http_code} %%{exitcode}' %s",
+                timeout,
+                timeout,
+                quote(request.headers and request.headers["User-Agent"] or "curl"),
+                quote(request.url)
+            )
             if request.proxy then
                 cmd = cmd .. " -x " .. quote(request.proxy)
             end
@@ -602,7 +647,7 @@ function helper.useLiveHttp()
             if not code or code == 0 or exit_code ~= "0" then
                 return nil, "could not fetch " .. request.url .. " (curl exit code " .. tostring(exit_code) .. ")"
             end
-            response = {body, code}
+            response = { body, code }
             live_responses[request.url] = response
         end
         request.sink(response[1])
@@ -616,7 +661,7 @@ end
 function helper.stubCommand(pattern, output)
     table.insert(helper.state.commands, {
         pattern = pattern,
-        output = output
+        output = output,
     })
 end
 
@@ -624,7 +669,7 @@ end
 function helper.stubExecute(pattern, handler)
     table.insert(helper.state.execute_stubs, {
         pattern = pattern,
-        handler = handler
+        handler = handler,
     })
 end
 

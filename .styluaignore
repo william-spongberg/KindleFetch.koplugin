@@ -1,0 +1,6 @@
+koreader/
+spec/.tmp/
+e2e/.tmp/
+.dev-home/
+.lua/
+.luarocks/

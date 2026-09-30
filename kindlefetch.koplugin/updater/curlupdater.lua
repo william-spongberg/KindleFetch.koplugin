@@ -14,7 +14,6 @@ local CURL_REPO_URL = "https://github.com/moparisthebest/static-curl"
 
 local CurlUpdater = {}
 
-
 -- remount root as read-only, returning false if it could not be
 local function remountReadOnly()
     LogUtil.debug("remounting rootfs as read-only")
@@ -27,7 +26,8 @@ local function remountReadOnly()
 end
 
 -- update curl using static release from moparisthebest/static-curl
--- basically adds safe guards around the sh script given here https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
+-- basically adds safe guards around the sh script given here:
+-- https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
 local function updateCurl()
     LogUtil.info("installing static curl " .. MIN_VERSION)
     NotifyUtil.info("Updating curl...")
@@ -69,8 +69,15 @@ local function updateCurl()
     -- backup original curl if not already backed up
     if os.execute(string.format("test -f %s", CurlUtil.shellQuote(backup_curl))) ~= 0 then
         LogUtil.debug("backing up system curl")
-        if os.execute(string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(system_curl),
-            CurlUtil.shellQuote(backup_curl))) ~= 0 then
+        if
+            os.execute(
+                string.format(
+                    "cp %s %s 2>/dev/null",
+                    CurlUtil.shellQuote(system_curl),
+                    CurlUtil.shellQuote(backup_curl)
+                )
+            ) ~= 0
+        then
             LogUtil.warn("could not back up", system_curl, "to", backup_curl)
             NotifyUtil.info("Failed to create curl backup")
             remountReadOnly()
@@ -80,8 +87,11 @@ local function updateCurl()
 
     -- install new curl
     LogUtil.debug("installing static curl to " .. system_curl)
-    if os.execute(
-        string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(system_curl))) ~= 0 then
+    if
+        os.execute(
+            string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(system_curl))
+        ) ~= 0
+    then
         LogUtil.warn("could not copy", curl_path, "to", system_curl)
         NotifyUtil.info("Failed to install new curl update")
         remountReadOnly()
@@ -104,28 +114,36 @@ end
 
 -- prompt for curl update
 local function promptCurlUpdate(current_version, min_version)
-    local message = string.format("curl v%s is installed.\nMinimum required: v%s\n\nUpdate curl now? This will avoid potential TLS issues.", current_version,
-        min_version)
+    local message = string.format(
+        "curl v%s is installed.\nMinimum required: v%s\n\nUpdate curl now? This will avoid potential TLS issues.",
+        current_version,
+        min_version
+    )
 
     local confirm_dialog
-    confirm_dialog = InputDialog:new{
+    confirm_dialog = InputDialog:new {
         title = _("Update curl?"),
         input_type = "text",
         input = message,
         readonly = true,
-        buttons = {{{
-            text = _("Cancel"),
-            callback = function()
-                UIManager:close(confirm_dialog)
-                LogUtil.info("curl update declined")
-            end
-        }, {
-            text = _("Update"),
-            callback = function()
-                UIManager:close(confirm_dialog)
-                updateCurl()
-            end
-        }}}
+        buttons = {
+            {
+                {
+                    text = _("Cancel"),
+                    callback = function()
+                        UIManager:close(confirm_dialog)
+                        LogUtil.info("curl update declined")
+                    end,
+                },
+                {
+                    text = _("Update"),
+                    callback = function()
+                        UIManager:close(confirm_dialog)
+                        updateCurl()
+                    end,
+                },
+            },
+        },
     }
 
     UIManager:show(confirm_dialog)
@@ -153,7 +171,7 @@ function CurlUpdater.checkVersion()
     if not current_version or not min_version_parsed then
         LogUtil.warn("could not parse curl versions", {
             current = current_version_str,
-            minimum = MIN_VERSION
+            minimum = MIN_VERSION,
         })
         return false
     end

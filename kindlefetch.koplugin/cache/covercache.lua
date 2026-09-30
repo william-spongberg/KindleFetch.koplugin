@@ -20,13 +20,13 @@ local downloading = {}
 -- md5s of covers that couldn't be downloaded this session, so they aren't shown as coming
 local unavailable = {}
 
-local persistent_cache = KindleFetchCache:new{
+local persistent_cache = KindleFetchCache:new {
     filename = "kindlefetch_covercache.lua",
     expiry = nil, -- no expiry
     max_entries = 500, -- each cover image around 40KB, so around 20MB
     makeKey = function(md5)
         return md5
-    end
+    end,
 }
 
 local function ensureCacheDir()
@@ -58,7 +58,7 @@ local function fullSizeCover(book)
     end
     return {
         md5 = book.md5 .. "_full",
-        image_url = url
+        image_url = url,
     }
 end
 
@@ -72,7 +72,27 @@ end
 -- false when there's nothing to download
 function CoverCache:downloadFullSize(book)
     local cover = fullSizeCover(book)
-    return cover ~= nil and self:downloadMultiple({cover}, 1)
+    return cover ~= nil and self:downloadMultiple({ cover }, 1)
+end
+
+-- forget every cover, removing their files, e.g. so each end-to-end test starts afresh
+function CoverCache:clear()
+    persistent_cache:clear()
+    downloading = {}
+    unavailable = {}
+    if lfs.attributes(CACHE_DIR, "mode") == "directory" then
+        for file in lfs.dir(CACHE_DIR) do
+            if file ~= "." and file ~= ".." then
+                FileUtil.removeFile(CACHE_DIR .. file)
+            end
+        end
+    end
+end
+
+-- whether the book's full-size cover is still on its way, once asked for
+function CoverCache:isFullSizeComing(book)
+    local cover = fullSizeCover(book)
+    return cover ~= nil and self:isComing(cover)
 end
 
 -- whether a cover for the book is on its way, so worth showing a placeholder for
@@ -97,7 +117,7 @@ end
 function CoverCache:download(md5, url)
     ensureCacheDir()
     local path = self:getPath(md5)
-    
+
     local success = CurlUtil.download(url, path, false, false, COVER_MAX_TIME)
     if not success and hasProxy() then
         LogUtil.debug("retrying cover download through proxy", md5)
@@ -107,7 +127,7 @@ function CoverCache:download(md5, url)
         persistent_cache:set(path, md5)
         return path
     end
-    
+
     return nil
 end
 
@@ -141,16 +161,23 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_done)
         end
     end
     if #downloaded < #filepaths then
-        LogUtil.warn(string.format("%d of %d covers didn't download: curl exit code %s (%s)",
-            #filepaths - #downloaded, #filepaths, tostring(exit_code), CurlUtil.getErrorMeaning(exit_code)))
+        LogUtil.warn(
+            string.format(
+                "%d of %d covers didn't download: curl exit code %s (%s)",
+                #filepaths - #downloaded,
+                #filepaths,
+                tostring(exit_code),
+                CurlUtil.getErrorMeaning(exit_code)
+            )
+        )
     end
 
     on_done(downloaded)
 end
 
 local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs, on_done)
-    local pid, exit_file, config_file, err = CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, true,
-        parallel_jobs, false, 15)
+    local pid, exit_file, config_file, err =
+        CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, true, parallel_jobs, false, 15)
     if not pid then
         LogUtil.warn("could not start curl to download", #download_urls, "covers:", err)
         on_done({})

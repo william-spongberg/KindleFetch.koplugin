@@ -22,7 +22,7 @@ local TOPICS = {
     comics = "c",
     magazines = "m",
     articles = "a",
-    standards = "s"
+    standards = "s",
 }
 local BLOCKED_ERROR = "Library Genesis is blocking automated searches right now, try again later"
 
@@ -37,6 +37,21 @@ local function parseTitle(cell)
         if text ~= "" then
             return text
         end
+    end
+
+    -- comic issues can leave the link without text, with the title only in its tooltip (after when it was added and
+    -- its ID), e.g. "Hello, I'm Johnny Cash(Spire 1976)"
+    for tooltip in cell:gmatch('title="([^"]*)"%s+href="edition%.php%?id=%d+"') do
+        local text = stripTags(tooltip:match(".*<br>(.*)$") or "")
+        if text ~= "" then
+            return text
+        end
+    end
+
+    -- or failing that, the series it's an issue of
+    local series = stripTags(cell:match('href="series%.php%?id=%d+"%s*>(.-)</a>') or "")
+    if series ~= "" then
+        return series
     end
 end
 
@@ -150,8 +165,14 @@ function LlgiSearch.parseResults(html, base_url, languages, file_types)
 end
 
 function LlgiSearch.buildParams(query, page, book_types)
-    local params = {"req=" .. util.urlEncode(query), "res=" .. RESULTS_PER_PAGE, "columns%5B%5D=t",
-                    "columns%5B%5D=a", "columns%5B%5D=s", "objects%5B%5D=f"}
+    local params = {
+        "req=" .. util.urlEncode(query),
+        "res=" .. RESULTS_PER_PAGE,
+        "columns%5B%5D=t",
+        "columns%5B%5D=a",
+        "columns%5B%5D=s",
+        "objects%5B%5D=f",
+    }
     for _, book_type in ipairs(book_types) do
         if TOPICS[book_type] then
             table.insert(params, "topics%5B%5D=" .. TOPICS[book_type])
@@ -168,38 +189,69 @@ local function isBlocked(html)
 end
 
 -- fetch a page of results from the first mirror that works, returning its html and the mirror
-local function fetchResults(params, retrying)
-    local base_urls = UrlApi:getLibgenUrls()
+local function fetchResults(params, refresh)
+    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(refresh)
     if not base_urls then
-        return nil, "no Library Genesis urls available"
+        return nil,
+            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or "no Library Genesis urls available"
     end
 
     local last_err
+    -- mirrors that didn't answer at all, which may be down, or the device may be offline
+    local unanswered = {}
+    local answered = false
     for _, url in ipairs(base_urls) do
         local html, err, status = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
+        answered = answered or html ~= nil or status ~= nil
 
         if html and html:find('id="tablelibgen"', 1, true) then
+            for _, unanswered_url in ipairs(unanswered) do
+                UrlApi:deleteLibgenUrl(unanswered_url)
+            end
             return html, nil, url
         end
 
         if html and isBlocked(html) then
-            LogUtil.warn("searching", LogUtil.site(url), "was blocked by its DDoS protection (HTTP", status, #html,
-                "bytes)")
+            LogUtil.warn(
+                "searching",
+                LogUtil.site(url),
+                "was blocked by its DDoS protection (HTTP",
+                status,
+                #html,
+                "bytes)"
+            )
             last_err = BLOCKED_ERROR
-        else
+        elseif html or status then
+            -- it answered, but not with results: e.g. an error page, or a page Library Genesis has changed the
+            -- layout of
             if html then
-                -- e.g. an error page, or a page Library Genesis has changed the layout of
-                LogUtil.warn("unexpected search page from", LogUtil.site(url) .. ": HTTP", status, #html, "bytes:",
-                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200))
+                LogUtil.warn(
+                    "unexpected search page from",
+                    LogUtil.site(url) .. ": HTTP",
+                    status,
+                    #html,
+                    "bytes:",
+                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                )
             end
             last_err = err or "unexpected response from Library Genesis"
-            -- delete from url cache
+            UrlApi:deleteLibgenUrl(url)
+        else
+            table.insert(unanswered, url)
+            last_err = err
+        end
+    end
+
+    -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
+    -- are down. otherwise the device may be offline, so keep them
+    if answered or refresh then
+        for _, url in ipairs(unanswered) do
             UrlApi:deleteLibgenUrl(url)
         end
     end
 
-    -- scrape new urls since all current have failed, and search again
-    if not retrying and last_err ~= BLOCKED_ERROR then
+    -- look the mirrors up again, in case they've moved, and search again
+    if not refresh and last_err ~= BLOCKED_ERROR then
         LogUtil.info("every mirror failed, looking them up again")
         return fetchResults(params, true)
     end
@@ -209,14 +261,34 @@ end
 
 -- search from the given page of Library Genesis' results, returning the books found and the page to carry on
 -- from, or nil once there are no more results
+-- whether there are results saved from an earlier search, which can be shown without an internet connection
+function LlgiSearch:isCached(query, page)
+    local cached = SearchCache:get(
+        query,
+        page,
+        KindleFetchSettings:getPreferredLanguages(),
+        KindleFetchSettings:getPreferredFileTypes(),
+        KindleFetchSettings:getPreferredBookTypes()
+    )
+    return cached ~= nil and cached.books ~= nil
+end
+
 function LlgiSearch:search(query, page)
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
     local book_types = KindleFetchSettings:getPreferredBookTypes()
 
     -- check cache first (ignoring results cached by older versions, which were just a list of books)
-    LogUtil.info(string.format("searching for %q from page %d, in %s, as %s, from %s", query, page,
-        table.concat(languages, "/"), table.concat(file_types, "/"), table.concat(book_types, "/")))
+    LogUtil.info(
+        string.format(
+            "searching for %q from page %d, in %s, as %s, from %s",
+            query,
+            page,
+            table.concat(languages, "/"),
+            table.concat(file_types, "/"),
+            table.concat(book_types, "/")
+        )
+    )
     local cached = SearchCache:get(query, page, languages, file_types, book_types)
     if cached and cached.books then
         LogUtil.info("showing", #cached.books, "books saved from an earlier search")
@@ -238,8 +310,15 @@ function LlgiSearch:search(query, page)
         end
 
         local page_books, results = LlgiSearch.parseResults(html, url, languages, file_types)
-        LogUtil.info(string.format("page %d from %s: kept %d of its %d results", next_page, LogUtil.site(url),
-            #page_books, results))
+        LogUtil.info(
+            string.format(
+                "page %d from %s: kept %d of its %d results",
+                next_page,
+                LogUtil.site(url),
+                #page_books,
+                results
+            )
+        )
         for _, book in ipairs(page_books) do
             if not seen[book.md5] then
                 seen[book.md5] = true
@@ -257,17 +336,22 @@ function LlgiSearch:search(query, page)
         end
     end
 
-    LogUtil.info(string.format("found %d books for %q%s", #books, query,
-        next_page and ", and more from page " .. next_page or ""))
+    LogUtil.info(
+        string.format(
+            "found %d books for %q%s",
+            #books,
+            query,
+            next_page and ", and more from page " .. next_page or ""
+        )
+    )
     -- add new query result to cache before returning, unless empty as the page may have been an error
     if #books > 0 then
         SearchCache:set({
             books = books,
-            next_page = next_page
+            next_page = next_page,
         }, query, page, languages, file_types, book_types)
     end
     return books, nil, next_page
 end
-
 
 return LlgiSearch

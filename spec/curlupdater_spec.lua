@@ -4,9 +4,14 @@ describe("CurlUpdater", function()
     local data_dir, CurlUtil, CurlUpdater
 
     local function installedCurl(version)
-        helper.stubCommand("curl --version",
-            string.format("curl %s (arm-kindle-linux-gnueabi) libcurl/%s OpenSSL/1.0.2\nRelease-Date: 2020-01-08\n",
-                version, version))
+        helper.stubCommand(
+            "curl --version",
+            string.format(
+                "curl %s (arm-kindle-linux-gnueabi) libcurl/%s OpenSSL/1.0.2\nRelease-Date: 2020-01-08\n",
+                version,
+                version
+            )
+        )
     end
 
     before_each(function()
@@ -76,7 +81,7 @@ describe("CurlUpdater", function()
                 find_backup = "test -f '/usr/bin/curl.system.bak'",
                 backup = "cp '/usr/bin/curl' '/usr/bin/curl.system.bak'",
                 install = "/curl-armhf' '/usr/bin/curl'",
-                permissions = "chmod 755 '/usr/bin/curl'"
+                permissions = "chmod 755 '/usr/bin/curl'",
             }
             for step, pattern in pairs(steps) do
                 helper.stubExecute(pattern, function()
@@ -100,11 +105,13 @@ describe("CurlUpdater", function()
         end)
 
         it("backs up the system curl, then installs the static build", function()
-            stubInstall({find_backup = true})
+            stubInstall({ find_backup = true })
             acceptUpdate()
 
-            assert.are.same({"chmod", "remount_rw", "find_backup", "backup", "install", "permissions", "remount_ro"},
-                commands)
+            assert.are.same(
+                { "chmod", "remount_rw", "find_backup", "backup", "install", "permissions", "remount_ro" },
+                commands
+            )
             assert.are.equal("Updated curl to v8.17.0", helper.lastNotification())
         end)
 
@@ -112,7 +119,7 @@ describe("CurlUpdater", function()
             stubInstall()
             acceptUpdate()
 
-            assert.are.same({"chmod", "remount_rw", "find_backup", "install", "permissions", "remount_ro"}, commands)
+            assert.are.same({ "chmod", "remount_rw", "find_backup", "install", "permissions", "remount_ro" }, commands)
         end)
 
         it("does nothing when the user cancels", function()
@@ -127,50 +134,50 @@ describe("CurlUpdater", function()
         end)
 
         it("removes the download when it cannot be made executable", function()
-            stubInstall({chmod = true})
+            stubInstall({ chmod = true })
             acceptUpdate()
 
-            assert.are.same({"chmod"}, commands)
+            assert.are.same({ "chmod" }, commands)
             assert.is_false(helper.exists(data_dir .. "/cache/kindlefetch/curl-armhf"))
             assert.are.equal("Failed to set file permissions", helper.lastNotification())
         end)
 
         it("stops when the root filesystem cannot be made writable", function()
-            stubInstall({remount_rw = true})
+            stubInstall({ remount_rw = true })
             acceptUpdate()
 
-            assert.are.same({"chmod", "remount_rw"}, commands)
+            assert.are.same({ "chmod", "remount_rw" }, commands)
             assert.are.equal("Failed to remount root as read-write", helper.lastNotification())
         end)
 
         it("makes the root filesystem read-only again when the backup fails", function()
-            stubInstall({find_backup = true, backup = true})
+            stubInstall({ find_backup = true, backup = true })
             acceptUpdate()
 
-            assert.are.same({"chmod", "remount_rw", "find_backup", "backup", "remount_ro"}, commands)
+            assert.are.same({ "chmod", "remount_rw", "find_backup", "backup", "remount_ro" }, commands)
             assert.are.equal("Failed to create curl backup", helper.lastNotification())
         end)
 
         it("makes the root filesystem read-only again when installing fails", function()
-            stubInstall({install = true})
+            stubInstall({ install = true })
             acceptUpdate()
 
-            assert.are.same({"chmod", "remount_rw", "find_backup", "install", "remount_ro"}, commands)
+            assert.are.same({ "chmod", "remount_rw", "find_backup", "install", "remount_ro" }, commands)
             assert.are.equal("Failed to install new curl update", helper.lastNotification())
         end)
 
         it("reports when the root filesystem cannot be made read-only again", function()
-            stubInstall({install = true, remount_ro = true})
+            stubInstall({ install = true, remount_ro = true })
             acceptUpdate()
             assert.are.equal("Failed to remount root as read-only", helper.lastNotification())
 
-            stubInstall({remount_ro = true})
+            stubInstall({ remount_ro = true })
             acceptUpdate()
             assert.are.equal("Failed to remount root as read-only", helper.lastNotification())
         end)
 
         it("carries on when the installed curl's permissions cannot be set", function()
-            stubInstall({permissions = true})
+            stubInstall({ permissions = true })
             acceptUpdate()
             assert.are.equal("Updated curl to v8.17.0", helper.lastNotification())
         end)
@@ -182,7 +189,7 @@ describe("CurlUpdater", function()
             CurlUtil.download = function(url, filepath)
                 download = {
                     url = url,
-                    filepath = filepath
+                    filepath = filepath,
                 }
                 return false, "could not resolve host"
             end
@@ -193,7 +200,7 @@ describe("CurlUpdater", function()
 
             assert.are.same({
                 url = "https://github.com/moparisthebest/static-curl/releases/download/v8.17.0/curl-armhf",
-                filepath = data_dir .. "/cache/kindlefetch/curl-armhf"
+                filepath = data_dir .. "/cache/kindlefetch/curl-armhf",
             }, download)
             assert.are.equal("Failed to download curl update", helper.lastNotification())
         end)

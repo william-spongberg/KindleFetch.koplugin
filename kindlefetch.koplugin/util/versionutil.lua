@@ -15,7 +15,7 @@ function VersionUtil.parseVersion(version_str)
         major = tonumber(major),
         minor = tonumber(minor) or 0,
         patch = tonumber(patch) or 0,
-        str = version_str
+        str = version_str,
     }
 end
 

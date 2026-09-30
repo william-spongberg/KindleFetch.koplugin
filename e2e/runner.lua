@@ -8,7 +8,7 @@
 -- Lines starting with E2E| are results, everything else is KOReader's log.
 
 local ffi = require("ffi")
-ffi.cdef[[int setenv(const char *name, const char *value, int overwrite);]]
+ffi.cdef [[int setenv(const char *name, const char *value, int overwrite);]]
 
 local repo = assert(os.getenv("E2E_REPO"), "run the end-to-end tests with e2e/run.sh")
 package.path = repo .. "/e2e/?.lua;" .. package.path
@@ -68,7 +68,7 @@ require("settings.settings"):setDownloadDir(H.books_dir)
 local root = {
     children = {},
     before_each = {},
-    after_each = {}
+    after_each = {},
 }
 local current = root
 
@@ -78,7 +78,7 @@ function describe(name, fn)
         parent = current,
         children = {},
         before_each = {},
-        after_each = {}
+        after_each = {},
     }
     table.insert(current.children, block)
     local previous = current
@@ -91,7 +91,7 @@ function it(name, fn)
     table.insert(current.children, {
         name = name,
         parent = current,
-        test = fn
+        test = fn,
     })
 end
 
@@ -137,6 +137,7 @@ local function runTest(node)
 
     local started = os.time()
     local ok, err = xpcall(function()
+        H.clearCaches()
         for _, b in ipairs(chain) do
             for _, fn in ipairs(b.before_each) do
                 fn()

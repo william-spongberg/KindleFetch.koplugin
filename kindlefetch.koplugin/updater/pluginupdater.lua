@@ -35,8 +35,10 @@ local function getUpdateInfo()
     local tag = output:match('"tag_name"%s*:%s*"([^"]+)"')
     if not tag then
         -- e.g. GitHub's rate limit, or no connection
-        LogUtil.warn("could not read the latest release from GitHub:",
-            output == "" and "no response" or output:gsub("%s+", " "):sub(1, 300))
+        LogUtil.warn(
+            "could not read the latest release from GitHub:",
+            output == "" and "no response" or output:gsub("%s+", " "):sub(1, 300)
+        )
         return nil
     end
     tag = tag:gsub("^v", "")
@@ -55,7 +57,7 @@ local function getUpdateInfo()
 
     return {
         version = version,
-        notes = body
+        notes = body,
     }
 end
 
@@ -90,7 +92,14 @@ local function downloadPluginRelease(version_str)
     end
 
     if not FileUtil.isValidFile(zip_path) then
-        LogUtil.warn("downloaded KindleFetch", version_str, "is not a valid file:", zip_path, FileUtil.getSize(zip_path), "bytes")
+        LogUtil.warn(
+            "downloaded KindleFetch",
+            version_str,
+            "is not a valid file:",
+            zip_path,
+            FileUtil.getSize(zip_path),
+            "bytes"
+        )
         return nil, "downloaded plugin file is invalid"
     end
 
@@ -104,8 +113,8 @@ local function installPluginRelease(plugin_path, zip_path, version_str)
 
     -- extract zip to temp directory (use -d rather than cd, as paths may be relative to the koreader dir)
     local tmp_path = PathUtil.getTmpPath()
-    local extract_cmd = string.format("unzip -q -o %s -d %s", CurlUtil.shellQuote(zip_path),
-        CurlUtil.shellQuote(tmp_path))
+    local extract_cmd =
+        string.format("unzip -q -o %s -d %s", CurlUtil.shellQuote(zip_path), CurlUtil.shellQuote(tmp_path))
     if os.execute(extract_cmd .. " 2>/dev/null") ~= 0 then
         LogUtil.warn("could not unzip", zip_path)
         return false
@@ -122,8 +131,11 @@ local function installPluginRelease(plugin_path, zip_path, version_str)
     local backup_dir = plugin_path .. ".backup"
     if FileUtil.isValidDirectory(plugin_path) then
         LogUtil.debug("backing up current plugin to", backup_dir)
-        if os.execute(string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(plugin_path),
-            CurlUtil.shellQuote(backup_dir))) ~= 0 then
+        if
+            os.execute(
+                string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(plugin_path), CurlUtil.shellQuote(backup_dir))
+            ) ~= 0
+        then
             LogUtil.warn("could not back up the installed plugin to", backup_dir)
             return false
         end
@@ -131,13 +143,17 @@ local function installPluginRelease(plugin_path, zip_path, version_str)
 
     -- move extracted plugin to plugin directory
     LogUtil.debug("installing new plugin to", plugin_path)
-    if os.execute(string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(extracted_dir),
-        CurlUtil.shellQuote(plugin_path))) ~= 0 then
+    if
+        os.execute(
+            string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(extracted_dir), CurlUtil.shellQuote(plugin_path))
+        ) ~= 0
+    then
         LogUtil.warn("could not move", extracted_dir, "to", plugin_path)
         -- restore backup
         if FileUtil.isValidDirectory(backup_dir) then
-            os.execute(string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(backup_dir),
-                CurlUtil.shellQuote(plugin_path)))
+            os.execute(
+                string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(backup_dir), CurlUtil.shellQuote(plugin_path))
+            )
         end
         return false
     end
@@ -188,30 +204,39 @@ local function updatePlugin(plugin_path, version_str)
 end
 
 local function promptPluginUpdate(plugin_path, installed_version, available_update)
-    local message = string.format("KindleFetch v%s is installed.\nNew version available: v%s\n\n%s\n\nUpdate plugin now?",
-        installed_version, available_update.version.str, StringUtil.replaceCarriageReturns(available_update.notes))
+    local message = string.format(
+        "KindleFetch v%s is installed.\nNew version available: v%s\n\n%s\n\nUpdate plugin now?",
+        installed_version,
+        available_update.version.str,
+        StringUtil.replaceCarriageReturns(available_update.notes)
+    )
 
     LogUtil.debug("showing update message:", message)
 
     local confirm_dialog
-    confirm_dialog = InputDialog:new{
+    confirm_dialog = InputDialog:new {
         title = _("Update KindleFetch?"),
         input_type = "text",
         input = message,
         readonly = true,
-        buttons = {{{
-            text = _("Cancel"),
-            callback = function()
-                UIManager:close(confirm_dialog)
-                LogUtil.info("KindleFetch update declined")
-            end
-        }, {
-            text = _("Update"),
-            callback = function()
-                UIManager:close(confirm_dialog)
-                updatePlugin(plugin_path, available_update.version.str)
-            end
-        }}}
+        buttons = {
+            {
+                {
+                    text = _("Cancel"),
+                    callback = function()
+                        UIManager:close(confirm_dialog)
+                        LogUtil.info("KindleFetch update declined")
+                    end,
+                },
+                {
+                    text = _("Update"),
+                    callback = function()
+                        UIManager:close(confirm_dialog)
+                        updatePlugin(plugin_path, available_update.version.str)
+                    end,
+                },
+            },
+        },
     }
 
     UIManager:show(confirm_dialog)
@@ -243,7 +268,12 @@ function PluginUpdater.checkForUpdates(user_requested)
         return false
     end
 
-    LogUtil.info("KindleFetch", installed_version.str, "is installed, and the latest release is", repo_update.version.str)
+    LogUtil.info(
+        "KindleFetch",
+        installed_version.str,
+        "is installed, and the latest release is",
+        repo_update.version.str
+    )
 
     local cmp = VersionUtil.compareVersions(installed_version, repo_update.version)
     if cmp >= 0 then

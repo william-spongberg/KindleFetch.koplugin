@@ -50,8 +50,8 @@ function StringUtil.removeParentheses(text)
         return ""
     end
     -- remove anything in brackets, (...) or [...]
-    text = text:gsub("%s*%([^)]*%)", "")  -- remove (...)
-    text = text:gsub("%s*%[[^%]]*%]", "")  -- remove [...]
+    text = text:gsub("%s*%([^)]*%)", "") -- remove (...)
+    text = text:gsub("%s*%[[^%]]*%]", "") -- remove [...]
     return text
 end
 
@@ -64,7 +64,7 @@ function StringUtil.truncate(text)
     if #text > limit then
         return text:sub(1, limit) .. "…"
     end
-    
+
     return text
 end
 
@@ -74,9 +74,9 @@ function StringUtil.cleanFileName(text)
     end
 
     text = StringUtil.removeParentheses(text)
-    text = text:gsub('[<>:"/\\|?*]', "-")  -- replace invalid chars with dash
-    text = text:gsub("^[%s%.]+", "")  -- remove leading spaces/dots
-    text = text:gsub("[%s%.]+$", "")  -- remove trailing spaces/dots
+    text = text:gsub('[<>:"/\\|?*]', "-") -- replace invalid chars with dash
+    text = text:gsub("^[%s%.]+", "") -- remove leading spaces/dots
+    text = text:gsub("[%s%.]+$", "") -- remove trailing spaces/dots
     text = StringUtil.collapseWhitespace(StringUtil.collapseDashes(StringUtil.collapseDots(text)))
 
     return text
@@ -87,7 +87,7 @@ function StringUtil.replaceCarriageReturns(text)
         return ""
     end
 
-    return text:gsub("\\r\\n", "\n")    
+    return text:gsub("\\r\\n", "\n")
 end
 
 return StringUtil

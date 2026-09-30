@@ -20,7 +20,7 @@ describe("DownloadPrompt", function()
         local rows = {}
         for _, row in ipairs(prompt.details_group) do
             if row[1] and row[3] then
-                table.insert(rows, {row[1].text, row[3].text})
+                table.insert(rows, { row[1].text, row[3].text })
             end
         end
         return rows
@@ -48,7 +48,7 @@ describe("DownloadPrompt", function()
             language = "English [en]",
             book_type = "Book (fiction)",
             file_type = "epub",
-            file_size = "1.2MB"
+            file_size = "1.2MB",
         }
         downloads = {}
         DownloadPrompt = require("ui.downloadprompt")
@@ -62,8 +62,12 @@ describe("DownloadPrompt", function()
         assert.are.equal("Dune", prompt.title.text)
         assert.are.equal("Frank Herbert", prompt.author.text)
         assert.are.equal("/mnt/us/documents/Dune.epub", prompt.path_widget.text)
-        assert.are.same({{"Format", "EPUB · 1.2MB"}, {"Language", "English [en]"}, {"Year", "1990"},
-                         {"Type", "Book (fiction)"}}, details(prompt))
+        assert.are.same({
+            { "Format", "EPUB · 1.2MB" },
+            { "Language", "English [en]" },
+            { "Year", "1990" },
+            { "Type", "Book (fiction)" },
+        }, details(prompt))
     end)
 
     -- in greys dark enough to read on e-ink (#3)
@@ -79,8 +83,10 @@ describe("DownloadPrompt", function()
         book.year = nil
         book.file_size = nil
         local prompt = newPrompt()
-        assert.are.same({{"Format", "EPUB"}, {"Language", "English [en]"}, {"Type", "Book (fiction)"}},
-            details(prompt))
+        assert.are.same(
+            { { "Format", "EPUB" }, { "Language", "English [en]" }, { "Type", "Book (fiction)" } },
+            details(prompt)
+        )
     end)
 
     it("shows and closes", function()
@@ -97,7 +103,7 @@ describe("DownloadPrompt", function()
         prompt:show()
         tapButton(prompt, "download")
 
-        assert.are.same({"/mnt/us/documents/Dune.epub"}, downloads)
+        assert.are.same({ "/mnt/us/documents/Dune.epub" }, downloads)
         assert.is_true(helper.wasClosed(prompt.outer_container))
     end)
 
@@ -119,7 +125,7 @@ describe("DownloadPrompt", function()
         assert.are.equal("/mnt/us/books/Dune.epub", prompt.path_widget.text)
 
         tapButton(prompt, "download")
-        assert.are.same({"/mnt/us/books/Dune.epub"}, downloads)
+        assert.are.same({ "/mnt/us/books/Dune.epub" }, downloads)
     end)
 
     it("lets the download folder be changed more than once", function()
@@ -136,12 +142,12 @@ describe("DownloadPrompt", function()
         local prompt = newPrompt()
         prompt:show()
 
-        local inside = helper.stubs.geometry:new{outside = false}
-        assert.is_false(prompt.outer_container:onTapOutside(nil, {pos = inside}))
+        local inside = helper.stubs.geometry:new { outside = false }
+        assert.is_false(prompt.outer_container:onTapOutside(nil, { pos = inside }))
         assert.is_false(helper.wasClosed(prompt.outer_container))
 
-        local outside = helper.stubs.geometry:new{outside = true}
-        assert.is_true(prompt.outer_container:onTapOutside(nil, {pos = outside}))
+        local outside = helper.stubs.geometry:new { outside = true }
+        assert.is_true(prompt.outer_container:onTapOutside(nil, { pos = outside }))
         assert.is_true(helper.wasClosed(prompt.outer_container))
     end)
 
@@ -181,7 +187,7 @@ describe("DownloadPrompt", function()
             require("util.curlutil").downloadMultiple = function()
                 return nil, nil, nil, "unable to launch curl"
             end
-            require("cache.covercache"):downloadMultiple({book}, 1)
+            require("cache.covercache"):downloadMultiple({ book }, 1)
 
             prompt.outer_container:onKindleFetchCoversDownloaded()
             assert.is_nil(prompt.cover)
@@ -219,16 +225,29 @@ describe("DownloadPrompt", function()
         describe("full-size", function()
             local CoverCache, runs
 
+            -- the notices saying the full-size cover is loading that have been shown
+            local function loadingNotices()
+                local notices = {}
+                for _, widget in ipairs(helper.state.shown) do
+                    if widget.is_notification and widget.text == "Loading full-size cover..." then
+                        table.insert(notices, widget)
+                    end
+                end
+                return notices
+            end
+
             before_each(function()
                 CoverCache = require("cache.covercache")
                 runs = {}
                 local CurlUtil = require("util.curlutil")
                 CurlUtil.downloadMultiple = function(urls, paths)
-                    table.insert(runs, {
+                    local run = {
                         urls = urls,
-                        paths = paths
-                    })
-                    return 4000, CurlUtil.createExitFile(), data_dir .. "/curl_config.txt"
+                        paths = paths,
+                        exit_file = CurlUtil.createExitFile(),
+                    }
+                    table.insert(runs, run)
+                    return 4000, run.exit_file, data_dir .. "/curl_config.txt"
                 end
                 CurlUtil.isPidRunning = function()
                     return true
@@ -242,10 +261,12 @@ describe("DownloadPrompt", function()
                 assert.are.equal(0, #runs)
 
                 prompt.cover_container:onTapCover()
-                assert.are.same({"https://libgen.example/fictioncovers/1000/dune.jpg"}, runs[1].urls)
+                assert.are.same({ "https://libgen.example/fictioncovers/1000/dune.jpg" }, runs[1].urls)
                 assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
-                -- saying so, as the thumbnail shows until then
-                assert.are.same({"Loading full-size cover..."}, helper.state.notifications)
+                -- saying so until it arrives, as the thumbnail shows until then
+                local notice = loadingNotices()[1]
+                assert.is_false(notice.timeout)
+                assert.is_false(helper.wasClosed(notice))
             end)
 
             it("replaces the thumbnail once it arrives", function()
@@ -261,15 +282,16 @@ describe("DownloadPrompt", function()
                 assert.are.equal(CoverCache:getFullSize(book), prompt.fullscreen_file)
                 assert.are.equal(CoverCache:getFullSize(book), prompt.cover_container[1][1].file)
                 assert.are.equal(1, #runs)
-                assert.are.equal(1, #helper.state.notifications)
+                -- no longer saying it's loading
+                assert.is_true(helper.wasClosed(loadingNotices()[1]))
 
                 -- and says nothing once it's there
                 prompt:closeFullscreenCover()
                 prompt.cover_container:onTapCover()
-                assert.are.equal(1, #helper.state.notifications)
+                assert.are.equal(1, #loadingNotices())
             end)
 
-            it("leaves the thumbnail showing when it couldn't be downloaded", function()
+            it("keeps saying it's loading while other covers download", function()
                 local prompt = newPrompt()
                 prompt.cover_container:onTapCover()
                 local thumbnail = prompt.fullscreen_container
@@ -277,6 +299,26 @@ describe("DownloadPrompt", function()
                 prompt.outer_container:onKindleFetchCoversDownloaded()
                 assert.is_false(helper.wasClosed(thumbnail))
                 assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
+                assert.is_false(helper.wasClosed(loadingNotices()[1]))
+            end)
+
+            it("leaves the thumbnail showing when it couldn't be downloaded, no longer saying it's loading", function()
+                local prompt = newPrompt()
+                prompt.cover_container:onTapCover()
+
+                helper.writeFile(runs[1].exit_file, "22")
+                helper.tick()
+                prompt.outer_container:onKindleFetchCoversDownloaded()
+                assert.is_true(prompt.fullscreen_cover_shown)
+                assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
+                assert.is_true(helper.wasClosed(loadingNotices()[1]))
+            end)
+
+            it("stops saying it's loading when the cover is closed", function()
+                local prompt = newPrompt()
+                prompt.cover_container:onTapCover()
+                prompt:closeFullscreenCover()
+                assert.is_true(helper.wasClosed(loadingNotices()[1]))
             end)
         end)
 

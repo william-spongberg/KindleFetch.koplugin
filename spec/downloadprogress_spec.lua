@@ -61,7 +61,7 @@ describe("DownloadProgress", function()
             container = widget.container,
             text = widget.text_widget,
             status = widget.status_widget,
-            bar = widget.bar_widget
+            bar = widget.bar_widget,
         }
         widget:toggleVisibility()
         widget:update(0.5, "50% · 1.0 / 2.0 MB")

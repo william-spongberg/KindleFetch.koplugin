@@ -38,7 +38,7 @@ describe("UrlApi", function()
         -- as it takes a while, especially on the first search
         it("say when they're being looked up on Wikipedia, but not when they're cached", function()
             UrlApi:getLibgenUrls()
-            assert.are.same({"Looking up Library Genesis mirrors..."}, helper.state.notifications)
+            assert.are.same({ "Looking up Library Genesis mirrors..." }, helper.state.notifications)
 
             UrlApi:getLibgenUrls()
             assert.are.equal(1, #helper.state.notifications)
@@ -59,7 +59,7 @@ describe("UrlApi", function()
             for i = 1, #urls - 1 do
                 UrlApi:deleteLibgenUrl(urls[i])
             end
-            assert.are.same({urls[#urls]}, UrlApi:getLibgenUrls())
+            assert.are.same({ urls[#urls] }, UrlApi:getLibgenUrls())
             assert.are.equal(1, #http.requests)
 
             UrlApi:deleteLibgenUrl(urls[#urls])

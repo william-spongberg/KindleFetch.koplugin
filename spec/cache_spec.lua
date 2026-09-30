@@ -25,15 +25,15 @@ describe("KindleFetchCache", function()
 
     it("stores and returns values", function()
         local cache = newCache()
-        cache:set({"https://libgen.example"}, "libgen")
+        cache:set({ "https://libgen.example" }, "libgen")
 
-        assert.are.same({"https://libgen.example"}, cache:get("libgen"))
+        assert.are.same({ "https://libgen.example" }, cache:get("libgen"))
         assert.is_nil(cache:get("missing"))
     end)
 
     it("saves entries to its settings file", function()
         newCache():set("value", "key")
-        assert.are.same({key = {timestamp = 1000000, value = "value"}}, cacheFile())
+        assert.are.same({ key = { timestamp = 1000000, value = "value" } }, cacheFile())
     end)
 
     it("loads entries saved by an earlier session", function()
@@ -42,10 +42,10 @@ describe("KindleFetchCache", function()
     end)
 
     it("builds keys with makeKey", function()
-        local cache = newCache{
+        local cache = newCache {
             makeKey = function(query, page)
                 return query .. "#" .. page
-            end
+            end,
         }
         cache:set("results", "dune", 2)
 
@@ -54,7 +54,7 @@ describe("KindleFetchCache", function()
     end)
 
     it("expires entries older than the expiry", function()
-        local cache = newCache{expiry = 60}
+        local cache = newCache { expiry = 60 }
         cache:set("value", "key")
 
         helper.state.time = 1000060
@@ -67,10 +67,10 @@ describe("KindleFetchCache", function()
 
     it("can work out the expiry when checking an entry", function()
         local expiry = 60
-        local cache = newCache{
+        local cache = newCache {
             expiry = function()
                 return expiry
-            end
+            end,
         }
         cache:set("value", "key")
 
@@ -89,7 +89,7 @@ describe("KindleFetchCache", function()
     end)
 
     it("removes the oldest entries once over the limit", function()
-        local cache = newCache{max_entries = 2}
+        local cache = newCache { max_entries = 2 }
         cache:set("first", "a")
         helper.state.time = 1000001
         cache:set("second", "b")
@@ -118,25 +118,25 @@ describe("KindleFetchCache", function()
     describe("deleteValueFromKey", function()
         it("removes one value from a cached list", function()
             local cache = newCache()
-            cache:set({"https://a.example", "https://b.example"}, "mirrors")
+            cache:set({ "https://a.example", "https://b.example" }, "mirrors")
 
             cache:deleteValueFromKey("https://a.example", "mirrors")
-            assert.are.same({"https://b.example"}, cache:get("mirrors"))
-            assert.are.same({"https://b.example"}, cacheFile().mirrors.value)
+            assert.are.same({ "https://b.example" }, cache:get("mirrors"))
+            assert.are.same({ "https://b.example" }, cacheFile().mirrors.value)
         end)
 
         it("does not change lists already returned by get", function()
             local cache = newCache()
-            cache:set({"https://a.example", "https://b.example"}, "mirrors")
+            cache:set({ "https://a.example", "https://b.example" }, "mirrors")
             local mirrors = cache:get("mirrors")
 
             cache:deleteValueFromKey("https://a.example", "mirrors")
-            assert.are.same({"https://a.example", "https://b.example"}, mirrors)
+            assert.are.same({ "https://a.example", "https://b.example" }, mirrors)
         end)
 
         it("removes the entry once the list is empty", function()
             local cache = newCache()
-            cache:set({"https://a.example"}, "mirrors")
+            cache:set({ "https://a.example" }, "mirrors")
 
             cache:deleteValueFromKey("https://a.example", "mirrors")
             assert.is_nil(cache:get("mirrors"))
@@ -166,27 +166,27 @@ describe("SearchCache", function()
     after_each(helper.cleanup)
 
     it("keys results by query, page and filters", function()
-        SearchCache:set({"book"}, "dune", 1, {"en"}, {"epub"}, {"fiction"})
+        SearchCache:set({ "book" }, "dune", 1, { "en" }, { "epub" }, { "fiction" })
 
-        assert.are.same({"book"}, SearchCache:get("dune", 1, {"en"}, {"epub"}, {"fiction"}))
-        assert.is_nil(SearchCache:get("dune", 2, {"en"}, {"epub"}, {"fiction"}))
-        assert.is_nil(SearchCache:get("dune", 1, {"en", "fr"}, {"epub"}, {"fiction"}))
-        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"pdf"}, {"fiction"}))
-        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"epub"}, {"comics"}))
+        assert.are.same({ "book" }, SearchCache:get("dune", 1, { "en" }, { "epub" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("dune", 2, { "en" }, { "epub" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("dune", 1, { "en", "fr" }, { "epub" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("dune", 1, { "en" }, { "pdf" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("dune", 1, { "en" }, { "epub" }, { "comics" }))
     end)
 
     it("expires results after two weeks", function()
-        SearchCache:set({"book"}, "dune", 1, {"en"}, {"epub"}, {"fiction"})
+        SearchCache:set({ "book" }, "dune", 1, { "en" }, { "epub" }, { "fiction" })
         helper.state.time = 1000000 + 14 * 24 * 60 * 60 + 1
-        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"epub"}, {"fiction"}))
+        assert.is_nil(SearchCache:get("dune", 1, { "en" }, { "epub" }, { "fiction" }))
     end)
 
     it("keeps searches for as long as set in the settings", function()
         require("settings.settings"):setSearchCacheExpiryDays(1)
-        SearchCache:set({"book"}, "dune", 1, {"en"}, {"epub"}, {"fiction"})
+        SearchCache:set({ "book" }, "dune", 1, { "en" }, { "epub" }, { "fiction" })
 
         helper.state.time = 1000000 + 24 * 60 * 60 + 1
-        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"epub"}, {"fiction"}))
+        assert.is_nil(SearchCache:get("dune", 1, { "en" }, { "epub" }, { "fiction" }))
     end)
 
     it("keeps at most 1000 searches", function()
@@ -207,20 +207,20 @@ describe("UrlCache", function()
     after_each(helper.cleanup)
 
     it("expires mirrors after a week", function()
-        UrlCache:set({"https://libgen.example"}, "libgen")
+        UrlCache:set({ "https://libgen.example" }, "libgen")
 
         helper.state.time = 1000000 + 7 * 24 * 60 * 60
-        assert.are.same({"https://libgen.example"}, UrlCache:get("libgen"))
+        assert.are.same({ "https://libgen.example" }, UrlCache:get("libgen"))
 
         helper.state.time = 1000000 + 7 * 24 * 60 * 60 + 1
         assert.is_nil(UrlCache:get("libgen"))
     end)
 
     it("keeps mirrors for as long as set in the settings", function()
-        UrlCache:set({"https://libgen.example"}, "libgen")
+        UrlCache:set({ "https://libgen.example" }, "libgen")
         helper.state.time = 1000000 + 7 * 24 * 60 * 60 + 1
         require("settings.settings"):setMirrorCacheExpiryDays(30)
 
-        assert.are.same({"https://libgen.example"}, UrlCache:get("libgen"))
+        assert.are.same({ "https://libgen.example" }, UrlCache:get("libgen"))
     end)
 end)

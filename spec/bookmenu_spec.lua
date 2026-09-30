@@ -14,7 +14,7 @@ describe("BookMenu", function()
             book_type = "Book (fiction)",
             file_type = "epub",
             file_size = "1.2MB",
-            image_url = "https://covers.example/" .. n .. ".jpg"
+            image_url = "https://covers.example/" .. n .. ".jpg",
         }
         for k, v in pairs(overrides or {}) do
             b[k] = v
@@ -31,31 +31,31 @@ describe("BookMenu", function()
                 book = book(n),
                 callback = function()
                     table.insert(selected, n)
-                end
+                end,
             })
         end
         table.insert(items, {
             text = "Load more",
             callback = function()
                 table.insert(selected, "more")
-            end
+            end,
         })
 
-        local menu = BookMenu:new{
+        local menu = BookMenu:new {
             item_table = items,
             available_height = 500, -- room for 4 books of 125px
             page = 1,
-            dimen = helper.stubs.geometry:new{w = 600, h = 800},
-            inner_dimen = helper.stubs.geometry:new{w = 580, h = 780},
-            item_group = Widget:new{},
-            page_info = Widget:new{},
-            return_button = Widget:new{},
-            content_group = Widget:new{},
+            dimen = helper.stubs.geometry:new { w = 600, h = 800 },
+            inner_dimen = helper.stubs.geometry:new { w = 580, h = 780 },
+            item_group = Widget:new {},
+            page_info = Widget:new {},
+            return_button = Widget:new {},
+            content_group = Widget:new {},
             _recalculateDimen = function() end,
             mergeTitleBarIntoLayout = function() end,
             updatePageInfo = function(self, select_number)
                 self.select_number = select_number
-            end
+            end,
         }
         menu:setupItemHeights()
         return menu
@@ -80,7 +80,7 @@ describe("BookMenu", function()
         it("fit as many books as the screen allows, plus one", function()
             local menu = newMenu(11)
             assert.are.equal(4, menu:getNumberBooksPerPage())
-            assert.are.same({{1, 2, 3, 4, 5}, {6, 7, 8, 9, 10}, {11, 12}}, menu.page_items)
+            assert.are.same({ { 1, 2, 3, 4, 5 }, { 6, 7, 8, 9, 10 }, { 11, 12 } }, menu.page_items)
         end)
 
         it("give every item the height of a cover", function()
@@ -94,7 +94,7 @@ describe("BookMenu", function()
             local menu = newMenu(0)
             menu.item_table = {}
             menu:setupItemHeights()
-            assert.are.same({{}}, menu.page_items)
+            assert.are.same({ {} }, menu.page_items)
         end)
 
         it("load covers when turned to", function()
@@ -106,7 +106,7 @@ describe("BookMenu", function()
 
             assert.is_true(menu:onGotoPage(2))
             assert.are.equal(2, menu.page)
-            assert.are.same({2}, pages)
+            assert.are.same({ 2 }, pages)
         end)
 
         it("can be turned without a page change callback", function()
@@ -126,7 +126,7 @@ describe("BookMenu", function()
             assert.are.equal("Load more", menu.item_group[2].entry.text)
             assert.are.equal(2, #menu.layout)
             assert.are.equal("ui", helper.state.refresh[1])
-            assert.are.same({600, 800}, {helper.state.refresh[2].w, helper.state.refresh[2].h})
+            assert.are.same({ 600, 800 }, { helper.state.refresh[2].w, helper.state.refresh[2].h })
         end)
 
         it("selects the current item", function()
@@ -172,7 +172,7 @@ describe("BookMenu", function()
 
         it("leave out missing details", function()
             local menu = newMenu(1)
-            local b = book(1, {year = ""})
+            local b = book(1, { year = "" })
             b.file_size = nil
             local _, _, info = details(menu:createBookItemWidget(b))
             assert.are.equal("English [en] · Book (fiction) · epub", info)
@@ -208,7 +208,7 @@ describe("BookMenu", function()
             require("util.curlutil").downloadMultiple = function()
                 return nil, nil, nil, "unable to launch curl"
             end
-            CoverCache:downloadMultiple({book(1)}, 6)
+            CoverCache:downloadMultiple({ book(1) }, 6)
 
             assert.are.equal(2, #menu:createBookItemWidget(book(1))[1])
         end)
@@ -234,25 +234,25 @@ describe("BookMenu", function()
             local menu = newMenu(2)
             menu:onMenuSelect(menu.item_table[2])
             menu:onMenuSelect(menu.item_table[3])
-            assert.are.same({2, "more"}, selected)
+            assert.are.same({ 2, "more" }, selected)
         end)
 
         it("ignores items without a callback", function()
-            assert.is_true(newMenu(0):onMenuSelect({text = "nothing"}))
+            assert.is_true(newMenu(0):onMenuSelect({ text = "nothing" }))
         end)
 
         it("happens when an item is tapped", function()
             local menu = newMenu(1)
             menu:updateItems()
             local item = menu.item_group[1]
-            item[1].dimen = helper.stubs.geometry:new{x = 0, y = 0, w = 580, h = 100}
+            item[1].dimen = helper.stubs.geometry:new { x = 0, y = 0, w = 580, h = 100 }
 
             assert.is_true(item:onTapSelect())
-            assert.are.same({1}, selected)
+            assert.are.same({ 1 }, selected)
 
             helper.state.reader_settings.flash_ui = false
             item:onTapSelect()
-            assert.are.same({1, 1}, selected)
+            assert.are.same({ 1, 1 }, selected)
         end)
 
         it("ignores taps before the item has been drawn", function()
@@ -271,7 +271,7 @@ describe("BookMenu", function()
             CoverCache.downloadMultiple = function(_, books, parallel_jobs, on_done)
                 requested = {
                     parallel_jobs = parallel_jobs,
-                    on_done = on_done
+                    on_done = on_done,
                 }
                 for _, b in ipairs(books) do
                     table.insert(requested, b.md5)
@@ -287,7 +287,7 @@ describe("BookMenu", function()
 
             menu.page = 2
             menu:loadCoversForPage(2)
-            assert.are.same({"md5-6", "md5-9", "md5-10"}, {requested[1], requested[2], requested[3]})
+            assert.are.same({ "md5-6", "md5-9", "md5-10" }, { requested[1], requested[2], requested[3] })
             assert.are.equal(3, #requested)
             assert.are.equal(5, requested.parallel_jobs)
             -- the menu isn't redrawn until they have downloaded

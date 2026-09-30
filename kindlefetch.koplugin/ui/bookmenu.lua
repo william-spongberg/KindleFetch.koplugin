@@ -11,10 +11,8 @@ local HorizontalGroup = require("ui/widget/horizontalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local TextBoxWidget = require("ui/widget/textboxwidget")
-local TextWidget = require("ui/widget/textwidget")
 local ImageWidget = require("ui/widget/imagewidget")
 local Blitbuffer = require("ffi/blitbuffer")
-local LeftContainer = require("ui/widget/container/leftcontainer")
 local UIManager = require("ui/uimanager")
 local StringUtil = require("util.stringutil")
 local Screen = require("device").screen
@@ -45,14 +43,14 @@ local function formatBookDetails(book)
     return table.concat(details, " · ")
 end
 
-local BookMenuItem = InputContainer:extend{}
+local BookMenuItem = InputContainer:extend {}
 
 function BookMenuItem:init()
     self.ges_events = {
-        TapSelect = {GestureRange:new{
+        TapSelect = { GestureRange:new {
             ges = "tap",
-            range = self.dimen
-        }}
+            range = self.dimen,
+        } },
     }
 end
 
@@ -80,7 +78,7 @@ function BookMenuItem:onTapSelect(arg, ges)
     return true
 end
 
-local BookMenu = Menu:extend{}
+local BookMenu = Menu:extend {}
 
 function BookMenu:onMenuSelect(entry)
     if entry and entry.callback then
@@ -94,72 +92,85 @@ function BookMenu:createBookItemWidget(book)
     local cover_widget
     local show_covers = KindleFetchSettings:getShowBookCovers()
     if show_covers and CoverCache:cacheExists(book.md5) then
-        cover_widget = ImageWidget:new{
+        cover_widget = ImageWidget:new {
             file = CoverCache:get(book.md5),
             width = COVER_SIZE,
             height = COVER_SIZE,
             scale_factor = 0,
-            alpha = true
+            alpha = true,
         }
     elseif show_covers and CoverCache:isComing(book) then
         cover_widget = CoverPlaceholder.new(math.floor(COVER_SIZE * 2 / 3), COVER_SIZE)
     end
 
     -- title
-    local title_widget = TextBoxWidget:new{
+    local title_widget = TextBoxWidget:new {
         width = self.dimen.w,
         face = Font:getFace("cfont", 18),
         text = book.display_title or "",
-        bold = true
+        bold = true,
     }
 
     -- authors
-    local author_widget = TextBoxWidget:new{
+    local author_widget = TextBoxWidget:new {
         width = self.dimen.w,
         face = Font:getFace("cfont", 15),
         text = book.authors or "",
-        fgcolor = Blitbuffer.COLOR_BLACK
+        fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
     -- book details (year, language, type, format, size)
-    local details_widget = TextBoxWidget:new{
+    local details_widget = TextBoxWidget:new {
         width = self.dimen.w,
         face = Font:getFace("cfont", 14),
         text = formatBookDetails(book),
-        fgcolor = Blitbuffer.COLOR_BLACK
+        fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
     -- main content group
-    local content_group = VerticalGroup:new{title_widget, VerticalSpan:new{
-        width = Size.padding.small
-    }, author_widget, VerticalSpan:new{
-        width = Size.padding.small
-    }, details_widget}
+    local content_group = VerticalGroup:new {
+        title_widget,
+        VerticalSpan:new {
+            width = Size.padding.small,
+        },
+        author_widget,
+        VerticalSpan:new {
+            width = Size.padding.small,
+        },
+        details_widget,
+    }
 
     -- combine cover and content horizontally
     local book_item
     if cover_widget then
-        book_item = HorizontalGroup:new{CenterContainer:new{
-            dimen = Geom:new{
-                w = COVER_SIZE * 2 / 3,
-                h = COVER_SIZE
+        book_item = HorizontalGroup:new {
+            CenterContainer:new {
+                dimen = Geom:new {
+                    w = COVER_SIZE * 2 / 3,
+                    h = COVER_SIZE,
+                },
+                cover_widget,
             },
-            cover_widget
-        }, HorizontalSpan:new{
-            width = Size.padding.large
-        }, content_group}
+            HorizontalSpan:new {
+                width = Size.padding.large,
+            },
+            content_group,
+        }
     else
-        book_item = HorizontalGroup:new{HorizontalSpan:new{
-            width = Size.padding.large
-        }, content_group}
+        book_item = HorizontalGroup:new {
+            HorizontalSpan:new {
+                width = Size.padding.large,
+            },
+            content_group,
+        }
     end
 
     -- wrap in frame
-    local framed_item = FrameContainer:new{
+    local framed_item = FrameContainer:new {
         background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = Size.padding.default,
-        book_item
+        book_item,
     }
 
     return framed_item
@@ -183,7 +194,7 @@ end
 
 function BookMenu:setupItemHeights()
     if #self.item_table == 0 then
-        self.page_items = {{}}
+        self.page_items = { {} }
         return
     end
 
@@ -200,7 +211,6 @@ function BookMenu:setupItemHeights()
         if #items > items_per_page then
             table.insert(self.page_items, items)
             items = {}
-            current_y = 0
         end
     end
 
@@ -242,37 +252,37 @@ function BookMenu:updateItems(select_number, no_recalculate_dimen)
         if item.book then
             item_widget = self:createBookItemWidget(item.book)
         elseif item.text then
-            local text_widget = TextWidget:new{
+            local text_widget = TextWidget:new {
                 text = item.text,
                 face = Font:getFace("cfont", 20),
-                bold = true
+                bold = true,
             }
 
-            item_widget = FrameContainer:new{
+            item_widget = FrameContainer:new {
                 background = Blitbuffer.COLOR_WHITE,
                 bordersize = 0,
-                CenterContainer:new{
-                    dimen = Geom:new{
+                CenterContainer:new {
+                    dimen = Geom:new {
                         w = self.dimen.w,
-                        h = item.height - 2 * Size.padding.default
+                        h = item.height - 2 * Size.padding.default,
                     },
-                    text_widget
-                }
+                    text_widget,
+                },
             }
         end
 
         if item_widget then
-            local menu_item = BookMenuItem:new{
+            local menu_item = BookMenuItem:new {
                 menu = self,
                 entry = item,
-                dimen = Geom:new{
+                dimen = Geom:new {
                     w = self.inner_dimen.w,
-                    h = item.height
+                    h = item.height,
                 },
-                item_widget
+                item_widget,
             }
             table.insert(self.item_group, menu_item)
-            table.insert(self.layout, {menu_item})
+            table.insert(self.layout, { menu_item })
         end
     end
 

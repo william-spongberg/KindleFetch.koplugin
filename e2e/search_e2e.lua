@@ -3,6 +3,18 @@ local H = require("helpers")
 describe("Searching", function()
     after_each(H.closeAll)
 
+    it("falls back to other mirrors when some fail, and forgets the ones that failed", function()
+        local broken = H.breakMirrors()
+
+        local menu = H.search(H.SEARCH_QUERY)
+        assert(#H.books(menu) > 0, "no books found")
+        for _, mirror in ipairs(require("api.urlapi"):getLibgenUrls()) do
+            for _, url in ipairs(broken) do
+                assert(mirror ~= url, url .. " is still one of the mirrors")
+            end
+        end
+    end)
+
     it("finds books on Library Genesis", function()
         local menu = H.search(H.SEARCH_QUERY)
         H.shot("search-results")
@@ -10,12 +22,10 @@ describe("Searching", function()
         -- enough to fill the page, even though most of Library Genesis' first results are in other languages
         local books = H.books(menu)
         assert(#books >= 10, "only found " .. #books .. " books")
-        local preferred = {
-            epub = true,
-            pdf = true,
-            cbr = true,
-            cbz = true
-        }
+        local preferred = {}
+        for _, file_type in ipairs(require("settings.settings"):getPreferredFileTypes()) do
+            preferred[file_type] = true
+        end
         for _, book in ipairs(books) do
             assert(book.md5:match("^%x+$") and #book.md5 == 32, "bad md5 " .. tostring(book.md5))
             assert(book.title ~= "", "book without a title")

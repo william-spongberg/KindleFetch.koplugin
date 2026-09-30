@@ -1,14 +1,12 @@
-local util = require("util")
 local UIManager = require("ui/uimanager")
+local NetworkMgr = require("ui/network/manager")
 local LogUtil = require("util.logutil")
 local DownloadProgress = require("ui.downloadprogress")
 local DownloadPrompt = require("ui.downloadprompt")
 local HttpUtil = require("util.httputil")
-local StringUtil = require("util.stringutil")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
 local UrlApi = require("api.urlapi")
-local UrlCache = require("cache.urlcache")
 local CoverCache = require("cache.covercache")
 local _ = require("gettext")
 
@@ -18,8 +16,18 @@ LlgiAPI.active_downloads = {}
 -- constants
 local DOWNLOAD_POLL_INTERVAL = 0.5
 
-local function pollDownload(book, filepath, pid, exit_file, download_url, tried_proxy, total_size, progress_widget,
-    current_pid, callback)
+local function pollDownload(
+    book,
+    filepath,
+    pid,
+    exit_file,
+    download_url,
+    tried_proxy,
+    total_size,
+    progress_widget,
+    current_pid,
+    callback
+)
     if progress_widget.cancelled then
         LogUtil.info(string.format("download of %q cancelled at %d bytes", book.title, FileUtil.getSize(filepath) or 0))
         CurlUtil.killPid(pid)
@@ -34,20 +42,28 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
     -- cap at 99% while still in progress and under the total size
     if total_size and total_size > 0 and bytes_downloaded <= total_size then
         local percentage = math.min(bytes_downloaded / total_size, 0.99)
-        progress_widget:update(percentage,
-            string.format("%d%% · %.1f / %.1f MB", math.floor(percentage * 100), bytes_downloaded / (1024 * 1024),
-                total_size / (1024 * 1024)))
+        progress_widget:update(
+            percentage,
+            string.format(
+                "%d%% · %.1f / %.1f MB",
+                math.floor(percentage * 100),
+                bytes_downloaded / (1024 * 1024),
+                total_size / (1024 * 1024)
+            )
+        )
     elseif bytes_downloaded > 0 then
         -- the size wasn't known, or was wrong
-        progress_widget:update(progress_widget.percentage or 0,
-            string.format("%.1f MB", bytes_downloaded / (1024 * 1024)))
+        progress_widget:update(
+            progress_widget.percentage or 0,
+            string.format("%.1f MB", bytes_downloaded / (1024 * 1024))
+        )
     end
 
     LogUtil.debug("download progress", {
         title = book.title,
         md5 = book.md5,
         bytes_downloaded = bytes_downloaded,
-        total_size = total_size
+        total_size = total_size,
     })
 
     -- check exit code, again if curl has stopped, as it may have finished between the two checks
@@ -63,16 +79,32 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
         local seconds = download and download.started and os.time() - download.started or 0
         if exit_code == 0 and final_size and final_size > 0 then
             progress_widget:update(1, "100%")
-            LogUtil.info(string.format("downloaded %q: %d bytes%s in %ds", book.title, final_size,
-                total_size and total_size ~= final_size and " (expected " .. total_size .. ")" or "", seconds))
+            LogUtil.info(
+                string.format(
+                    "downloaded %q: %d bytes%s in %ds",
+                    book.title,
+                    final_size,
+                    total_size and total_size ~= final_size and " (expected " .. total_size .. ")" or "",
+                    seconds
+                )
+            )
             callback(true)
             return
         end
 
-        LogUtil.warn(string.format("download of %q from %s%s failed after %ds: curl exit code %d (%s), %d of %s bytes",
-            book.title, LogUtil.site(download_url), tried_proxy and " through the proxy" or "", seconds, exit_code,
-            exit_code == 0 and "empty file" or CurlUtil.getErrorMeaning(exit_code), final_size or 0,
-            tostring(total_size or "unknown")))
+        LogUtil.warn(
+            string.format(
+                "download of %q from %s%s failed after %ds: curl exit code %d (%s), %d of %s bytes",
+                book.title,
+                LogUtil.site(download_url),
+                tried_proxy and " through the proxy" or "",
+                seconds,
+                exit_code,
+                exit_code == 0 and "empty file" or CurlUtil.getErrorMeaning(exit_code),
+                final_size or 0,
+                tostring(total_size or "unknown")
+            )
+        )
 
         -- use proxy as backup
         if not tried_proxy and os.getenv("PROXY_URL") and os.getenv("PROXY_URL") ~= "" then
@@ -85,8 +117,18 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
                 return
             end
             UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
-                pollDownload(book, filepath, new_pid, new_exit_file, download_url, true, total_size, progress_widget,
-                    current_pid, callback)
+                pollDownload(
+                    book,
+                    filepath,
+                    new_pid,
+                    new_exit_file,
+                    download_url,
+                    true,
+                    total_size,
+                    progress_widget,
+                    current_pid,
+                    callback
+                )
             end)
             return
         end
@@ -98,8 +140,13 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
 
     -- exit early if process ends abruptly
     if not CurlUtil.isPidRunning(pid) then
-        LogUtil.warn(string.format("curl stopped without reporting back while downloading %q, at %d bytes", book.title,
-            bytes_downloaded or 0))
+        LogUtil.warn(
+            string.format(
+                "curl stopped without reporting back while downloading %q, at %d bytes",
+                book.title,
+                bytes_downloaded or 0
+            )
+        )
         FileUtil.removeFile(filepath)
         callback(false, "download process ended unexpectedly")
         return
@@ -107,18 +154,37 @@ local function pollDownload(book, filepath, pid, exit_file, download_url, tried_
 
     -- schedule download check
     UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
-        pollDownload(book, filepath, pid, exit_file, download_url, tried_proxy, total_size, progress_widget,
-            current_pid, callback)
+        pollDownload(
+            book,
+            filepath,
+            pid,
+            exit_file,
+            download_url,
+            tried_proxy,
+            total_size,
+            progress_widget,
+            current_pid,
+            callback
+        )
     end)
 end
 
 function LlgiAPI:_startDownload(book, filepath, callback, retrying)
-    LogUtil.info(string.format("downloading %q (%s, %s, md5 %s) to %s%s", book.title, tostring(book.file_type),
-        tostring(book.file_size), tostring(book.md5), filepath, retrying and ", after looking up mirrors again" or ""))
+    LogUtil.info(
+        string.format(
+            "downloading %q (%s, %s, md5 %s) to %s%s",
+            book.title,
+            tostring(book.file_type),
+            tostring(book.file_size),
+            tostring(book.md5),
+            filepath,
+            retrying and ", after looking up mirrors again" or ""
+        )
+    )
 
     -- store as table to force pass by reference (so cancel callback can access it)
     local current_pid = {
-        pid = nil
+        pid = nil,
     }
 
     -- create and show progress widget immediately
@@ -138,26 +204,33 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
         filepath = filepath,
         progress_widget = progress_widget,
         callback = callback,
-        started = os.time()
+        started = os.time(),
     }
 
-    -- get urls from cache or scrape from wikipedia
-    local base_urls = UrlApi:getLibgenUrls()
+    -- get urls from cache, or scrape them from wikipedia again when retrying
+    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(retrying)
     if not base_urls then
         progress_widget:close()
         LlgiAPI.active_downloads[book.md5] = nil
-        callback(false, "no Library Genesis urls available")
+        callback(
+            false,
+            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or "no Library Genesis urls available"
+        )
         return
     end
 
     -- try each libgen url
     local download_url
     local last_err
+    -- mirrors that didn't answer at all, which may be down, or the device may be offline
+    local unanswered = {}
+    local answered = false
+    local mirror_failed = false
     for _, url in ipairs(base_urls) do
-
         -- load ads page (to get key for download page)
         local ads_page = string.format("%s/ads.php?md5=%s", url, book.md5)
-        local html, err = HttpUtil.getBody(ads_page)
+        local html, err, status = HttpUtil.getBody(ads_page)
+        answered = answered or html ~= nil or status ~= nil
 
         -- find download url with key linked in ads page
         if html then
@@ -170,14 +243,29 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
 
                 break
             else
-                LogUtil.warn("no download link on", LogUtil.site(url) .. "'s download page (" .. #html .. " bytes):",
-                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200))
+                LogUtil.warn(
+                    "no download link on",
+                    LogUtil.site(url) .. "'s download page (" .. #html .. " bytes):",
+                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                )
                 last_err = "no Library Genesis download link found"
             end
-        else
+        elseif status then
+            -- it answered with an error
             last_err = err
+            mirror_failed = true
+            UrlApi:deleteLibgenUrl(url)
+        else
+            table.insert(unanswered, url)
+            last_err = err
+            mirror_failed = true
+        end
+    end
 
-            -- delete from url cache
+    -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
+    -- are down. otherwise the device may be offline, so keep them
+    if answered or retrying then
+        for _, url in ipairs(unanswered) do
             UrlApi:deleteLibgenUrl(url)
         end
     end
@@ -187,8 +275,8 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
         LlgiAPI.active_downloads[book.md5] = nil
 
         LogUtil.warn("no mirror gave a download link:", last_err)
-        -- scrape new urls since all current have failed, and search again
-        if not retrying then
+        -- look the mirrors up again if any failed, in case they've moved, and try again
+        if not retrying and mirror_failed then
             return LlgiAPI:_startDownload(book, filepath, callback, true)
         end
 
@@ -217,19 +305,28 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     current_pid.pid = pid
 
     UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
-        pollDownload(book, filepath, pid, exit_file, download_url, false, total_size, progress_widget, current_pid,
+        pollDownload(
+            book,
+            filepath,
+            pid,
+            exit_file,
+            download_url,
+            false,
+            total_size,
+            progress_widget,
+            current_pid,
             function(ok, err)
                 progress_widget:close()
                 LlgiAPI.active_downloads[book.md5] = nil -- cleanup after download finishes
                 UIManager:forceRePaint()
                 callback(ok, err, filepath)
-            end)
+            end
+        )
     end)
 end
 
 function LlgiAPI:downloadBook(book, filepath, callback)
-    callback = callback or function()
-    end
+    callback = callback or function() end
 
     -- show the progress of a book that is already downloading, in case it was hidden
     local active_download = LlgiAPI.active_downloads[book.md5]
@@ -244,14 +341,17 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     if book.image_url and not CoverCache:cacheExists(book.md5) then
         LogUtil.debug("downloading book cover", {
             title = book.title,
-            md5 = book.md5
+            md5 = book.md5,
         })
-        CoverCache:downloadMultiple({book}, 1)
+        CoverCache:downloadMultiple({ book }, 1)
     end
 
     -- show download prompt to let user choose folder and confirm
     local prompt = DownloadPrompt.new(book, filepath, function(confirmed_filepath)
-        self:_startDownload(book, confirmed_filepath, callback, false)
+        -- turning on wifi first if need be, as KOReader is set up to (it says so itself if it can't connect)
+        NetworkMgr:runWhenConnected(function()
+            self:_startDownload(book, confirmed_filepath, callback, false)
+        end)
     end)
 
     prompt:show()
@@ -265,7 +365,7 @@ function LlgiAPI:getActiveDownloads()
             title = download_info.book.title,
             filepath = download_info.filepath,
             md5 = download_info.book.md5,
-            widget = download_info.progress_widget
+            widget = download_info.progress_widget,
         })
     end
     return downloads
