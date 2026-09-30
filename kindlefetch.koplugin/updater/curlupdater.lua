@@ -152,12 +152,9 @@ end
 
 -- check curl is available and at least MIN_VERSION, update if necessary
 function CurlUpdater.checkVersion()
-    if Device:isSDL() then
-        LogUtil.debug("running in emulator, skipping curl version check")
-        return true
-    end
-    if Device:isAndroid() then
-        LogUtil.debug("running android, skipping curl version check")
+    -- installing curl relies on mntroot, so is only possible on a Kindle
+    if not Device:isKindle() then
+        LogUtil.debug("not running on a kindle, skipping curl version check")
         return true
     end
     LogUtil.debug("checking curl version")

@@ -19,8 +19,8 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Book Cover Previews**: Display cover images in search results and download previews
 - **Download Progress**: Visual download progress bar with real-time file size information
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates
-- **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available
-- **Automatic Plugin Updates**: Checks for new plugin releases and prompts to update with release notes
+- **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available on Kindles
+- **Automatic Plugin Updates**: Checks for new plugin releases once per session and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu)
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
 - **Safe File Handling**: Automatic filename sanitisation and directory management
 
@@ -96,6 +96,8 @@ Downloaded books are saved to your configured download location.
 
 <img width="400" height="533" alt="FileManager_2026-07-12_140038" src="https://github.com/user-attachments/assets/1576b6c1-f5b0-4fd8-b907-841080495950" />
 
+- **Check for Updates Automatically**: Check for plugin and curl updates once per session while connected (default: enabled)
+
 ## How It Works
 
 ### Architecture
@@ -137,7 +139,8 @@ kindlefetch.koplugin/
 ### Workflow
 
 0. **Initialization**
-   - Curl version is checked; user is prompted to update if version is below 8.17.0
+   - Unless turned off in settings, updates are checked for once per session while connected, or manually via Kindle Fetch → Check for updates
+   - On Kindles, curl version is checked; user is prompted to update if version is below 8.17.0
    - Plugin version is checked against GitHub releases; user is prompted to update if new version available
    - Settings are loaded from persistent storage
 

@@ -201,6 +201,7 @@ local function createStubs(state)
     })
 
     stubs.device = {
+        kindle = true,
         sdl = false,
         android = false,
         home_dir = nil,
@@ -218,6 +219,9 @@ local function createStubs(state)
                 return {w = 600, h = 800}
             end
         },
+        isKindle = function(self)
+            return self.kindle
+        end,
         isSDL = function(self)
             return self.sdl
         end,
@@ -360,6 +364,14 @@ local function createStubs(state)
         promptWifi = function(self)
             state.wifi_prompts = (state.wifi_prompts or 0) + 1
             self.prompted = "connect to wifi"
+        end,
+        -- like KOReader, turns wifi on (as the user has configured) and runs callback once connected
+        runWhenConnected = function(self, callback)
+            if self.connected then
+                return callback()
+            end
+            self.prompted = "turn wifi on"
+            self.when_connected = callback
         end
     }
 

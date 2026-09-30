@@ -18,6 +18,7 @@ function SettingsPage:showSettings()
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
     local book_types = KindleFetchSettings:getPreferredBookTypes()
+    local check_for_updates = KindleFetchSettings:getCheckForUpdates()
 
     local menu_items = {{
         text = _(string.format("Show Book Covers: %s", show_book_covers and "☑" or "☐")),
@@ -54,6 +55,13 @@ function SettingsPage:showSettings()
             UIManager:setDirty(menu, "full")
             this:changeBookTypes()
         end
+    }, {
+        text = _(string.format("Check for Updates Automatically: %s", check_for_updates and "☑" or "☐")),
+        callback = function()
+            UIManager:close(menu)
+            UIManager:setDirty(menu, "full")
+            this:changeCheckForUpdates()
+        end
     }}
 
     menu = Menu:new{
@@ -78,6 +86,12 @@ function SettingsPage:changeBookCoverVisibility()
     else
         NotifyUtil.info("Error: " .. err)
     end
+end
+
+function SettingsPage:changeCheckForUpdates()
+    KindleFetchSettings:setCheckForUpdates(not KindleFetchSettings:getCheckForUpdates())
+    NotifyUtil.info("Update checks updated")
+    self:showSettings()
 end
 
 function SettingsPage:changeDownloadFolder()

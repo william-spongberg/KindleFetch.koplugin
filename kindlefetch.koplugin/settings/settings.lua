@@ -11,6 +11,7 @@ local KindleFetchSettings = {}
 -- default settings
 local DEFAULTS = {
     show_book_covers = true,
+    check_for_updates = true,
     download_dir = nil,
     preferred_languages = {"en"},
     preferred_file_types = {"epub", "pdf", "cbr", "cbz"},
@@ -362,6 +363,7 @@ end
 function KindleFetchSettings:load()
     self:setDownloadDir(self:getDownloadDir())
     self:setShowBookCovers(self:getShowBookCovers())
+    self:setCheckForUpdates(self:getCheckForUpdates())
     self:setPreferredLanguages(self:getPreferredLanguages())
     self:setPreferredFileTypes(self:getPreferredFileTypes())
     self:setPreferredBookTypes(self:getPreferredBookTypes())
@@ -398,6 +400,14 @@ function KindleFetchSettings:getShowBookCovers()
 end
 function KindleFetchSettings:setShowBookCovers(bool)
     return KindleFetchSettings:setSetting("show_book_covers", bool)
+end
+
+-- check_for_updates (automatically, once per session)
+function KindleFetchSettings:getCheckForUpdates()
+    return KindleFetchSettings:getSetting("check_for_updates")
+end
+function KindleFetchSettings:setCheckForUpdates(bool)
+    return KindleFetchSettings:setSetting("check_for_updates", bool)
 end
 
 -- last_version (plugin version the last time KOReader was started)

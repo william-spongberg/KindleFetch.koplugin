@@ -20,14 +20,9 @@ describe("CurlUpdater", function()
     after_each(helper.cleanup)
 
     describe("checkVersion", function()
-        it("skips the check in the emulator", function()
-            helper.stubs.device.sdl = true
-            assert.is_true(CurlUpdater.checkVersion())
-            assert.are.equal(0, #helper.state.popen_calls)
-        end)
-
-        it("skips the check on android", function()
-            helper.stubs.device.android = true
+        -- installing curl uses mntroot, which only Kindles have (#1)
+        it("skips the check on devices other than Kindles", function()
+            helper.stubs.device.kindle = false
             assert.is_true(CurlUpdater.checkVersion())
             assert.are.equal(0, #helper.state.popen_calls)
         end)

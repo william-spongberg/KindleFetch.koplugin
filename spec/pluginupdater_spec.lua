@@ -86,10 +86,26 @@ for _, layout in ipairs(LAYOUTS) do
                 assert.matches("KindleFetch v0.0.0 is installed.", helper.state.shown[1].input, 1, true)
             end)
 
-            it("reports when the latest release cannot be fetched", function()
+            it("quietly gives up when the latest release cannot be fetched", function()
                 helper.stubCommand("/releases/latest", "")
-                assert.is_false(PluginUpdater.checkForUpdates())
+                assert.is_false(PluginUpdater.checkForUpdates(false))
+                assert.are.equal(0, #helper.state.notifications)
+            end)
+
+            it("reports when the latest release cannot be fetched, if the user asked", function()
+                helper.stubCommand("/releases/latest", "")
+                assert.is_false(PluginUpdater.checkForUpdates(true))
                 assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastNotification())
+            end)
+
+            it("says it is up to date, if the user asked", function()
+                latestRelease("v0.3")
+                assert.is_true(PluginUpdater.checkForUpdates(true))
+                assert.are.equal("KindleFetch is up to date", helper.lastNotification())
+
+                helper.state.notifications = {}
+                PluginUpdater.checkForUpdates(false)
+                assert.are.equal(0, #helper.state.notifications)
             end)
 
             it("ignores release tags that are not version numbers", function()
