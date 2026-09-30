@@ -10,7 +10,6 @@ local CurlUtil = require("util.curlutil")
 local UrlApi = require("api.urlapi")
 local UrlCache = require("cache.urlcache")
 local CoverCache = require("cache.covercache")
-local NotifyUtil = require("util.notifyutil")
 local _ = require("gettext")
 
 local LlgiAPI = {}
@@ -252,15 +251,13 @@ function LlgiAPI:downloadBook(book, filepath, callback)
         return
     end
 
-    -- download book image
-    if CoverCache:cacheExists(book.md5) then
-        LogUtil.debug("book image already downloaded", {
+    -- get the book cover in the background, the prompt shows a placeholder until it arrives
+    if book.image_url and not CoverCache:cacheExists(book.md5) then
+        LogUtil.debug("downloading book cover", {
             title = book.title,
             md5 = book.md5
         })
-    else
-        NotifyUtil.info("Getting book cover...")
-        self:downloadBookCover(book)
+        CoverCache:downloadMultiple({book}, 1)
     end
 
     -- show download prompt to let user choose folder and confirm
@@ -269,34 +266,6 @@ function LlgiAPI:downloadBook(book, filepath, callback)
     end)
 
     prompt:show()
-end
-
-function LlgiAPI:downloadBookCover(book)
-    if not book.image_url then
-        LogUtil.warn("no image url available", {
-            title = book.title,
-            md5 = book.md5
-        })
-        return
-    end
-
-    -- download book cover
-    LogUtil.debug("downloading book cover", {
-        title = book.title,
-        md5 = book.md5
-    })
-    local path = CoverCache:download(book.md5, book.image_url)
-    if not path then
-        LogUtil.warn("failed to download book cover", {
-            title = book.title,
-            md5 = book.md5
-        })
-    else
-        LogUtil.debug("book cover downloaded successfully", {
-            title = book.title,
-            md5 = book.md5
-        })
-    end
 end
 
 function LlgiAPI:getActiveDownloads()

@@ -480,7 +480,7 @@ local WIDGET_MODULES = {"ui/gesturerange", "ui/widget/container/centercontainer"
                         "ui/widget/verticalgroup", "ui/widget/horizontalgroup", "ui/widget/verticalspan",
                         "ui/widget/horizontalspan", "ui/widget/textboxwidget", "ui/widget/textwidget",
                         "ui/widget/imagewidget", "ui/widget/button", "ui/widget/progresswidget",
-                        "ui/widget/confirmbox"}
+                        "ui/widget/confirmbox", "ui/widget/iconwidget"}
 
 local CONSTANT_MODULES = {
     ["ui/font"] = {
@@ -495,6 +495,7 @@ local CONSTANT_MODULES = {
     ["ffi/blitbuffer"] = {
         COLOR_WHITE = "white",
         COLOR_BLACK = "black",
+        COLOR_LIGHT_GRAY = "light gray",
         COLOR_GRAY = "gray",
         COLOR_DARK_GRAY = "dark gray"
     }

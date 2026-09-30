@@ -14,6 +14,12 @@ describe("DownloadPrompt", function()
         fixtures.cacheCover(helper, book.md5)
     end
 
+    -- the group with the book's title, authors and details, beside the cover if there is one
+    local function detailsGroup(prompt)
+        local header = prompt.frame[1][1]
+        return prompt.cover and header[3] or header
+    end
+
     before_each(function()
         helper.reset()
         data_dir = helper.tmpdir("data")
@@ -42,7 +48,7 @@ describe("DownloadPrompt", function()
         assert.are.equal("/mnt/us/documents/Dune.epub", prompt.path_widget.text)
 
         local details = {}
-        for _, widget in ipairs(prompt.frame[1][1][3]) do
+        for _, widget in ipairs(detailsGroup(prompt)) do
             if widget.text then
                 table.insert(details, widget.text)
             end
@@ -54,13 +60,13 @@ describe("DownloadPrompt", function()
     it("shows the author and details in black", function()
         local prompt = newPrompt()
         assert.are.equal("black", prompt.author.fgcolor)
-        assert.are.equal("black", prompt.frame[1][1][3][5].fgcolor)
+        assert.are.equal("black", detailsGroup(prompt)[5].fgcolor)
     end)
 
     it("shows a dash for missing details", function()
         book.year = nil
         local prompt = newPrompt()
-        assert.are.equal("Year: -", prompt.frame[1][1][3][5].text)
+        assert.are.equal("Year: -", detailsGroup(prompt)[5].text)
     end)
 
     it("shows and closes", function()
@@ -117,12 +123,46 @@ describe("DownloadPrompt", function()
     end)
 
     describe("cover", function()
-        it("is left out when it has not been downloaded", function()
+        it("is left out when the book doesn't have one, giving its details the whole width", function()
             local prompt = newPrompt()
-            assert.is_nil(prompt.cover_container)
+            assert.is_nil(prompt.cover)
+            assert.are.equal(380, prompt.title.width)
 
             prompt:showFullscreenCover()
             assert.is_false(prompt.fullscreen_cover_shown)
+        end)
+
+        it("is a placeholder while it downloads", function()
+            book.image_url = "https://covers.example/dune.jpg"
+            local prompt = newPrompt()
+
+            assert.is_true(prompt.cover[1].is_cover_placeholder)
+            assert.is_nil(prompt.cover_container)
+            assert.are.equal(380 - 192 - 10, prompt.title.width)
+        end)
+
+        it("is shown once it has downloaded", function()
+            book.image_url = "https://covers.example/dune.jpg"
+            local prompt = newPrompt()
+            prompt:show()
+
+            cacheCover()
+            prompt.outer_container:onKindleFetchCoversDownloaded()
+            assert.are.equal(prompt.cover_container, prompt.cover)
+            assert.are.equal(prompt.cover, prompt.frame[1][1][1])
+        end)
+
+        it("is taken away when it couldn't be downloaded", function()
+            book.image_url = "https://covers.example/dune.jpg"
+            local prompt = newPrompt()
+            require("util.curlutil").downloadMultiple = function()
+                return nil, nil, nil, "unable to launch curl"
+            end
+            require("cache.covercache"):downloadMultiple({book}, 1)
+
+            prompt.outer_container:onKindleFetchCoversDownloaded()
+            assert.is_nil(prompt.cover)
+            assert.are.equal(380, prompt.title.width)
         end)
 
         it("is shown when it has been downloaded", function()

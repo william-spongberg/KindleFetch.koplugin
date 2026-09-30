@@ -5,6 +5,7 @@ local fixtures = require("fixtures")
 describe("LlgiAPI", function()
     local MB = 1024 * 1024
     local data_dir, filepath, book, web, mirrors, prompts, spawned, running, killed, results, remote_size
+    local cover_downloads
     local CurlUtil, UrlApi, LlgiAPI
 
     local function adsUrl(mirror)
@@ -84,6 +85,12 @@ describe("LlgiAPI", function()
             })
             return spawned[#spawned].pid, exit_file
         end
+        -- book covers, which download in the background (and fail here)
+        cover_downloads = {}
+        CurlUtil.downloadMultiple = function(urls)
+            table.insert(cover_downloads, urls)
+            return nil, nil, nil, "unable to launch curl"
+        end
         CurlUtil.getRemoteFileSize = function()
             return remote_size
         end
@@ -120,18 +127,18 @@ describe("LlgiAPI", function()
     after_each(helper.cleanup)
 
     describe("downloadBook", function()
-        it("gets the book cover, then asks where to save the book", function()
+        it("asks where to save the book, getting its cover in the background", function()
             LlgiAPI:downloadBook(book, filepath, onResult)
 
-            assert.is_true(require("cache.covercache"):cacheExists(book.md5))
             assert.are.equal(1, #prompts)
             assert.are.equal(filepath, prompts[1].filepath)
+            assert.are.same({{book.image_url}}, cover_downloads)
             assert.are.equal(0, #spawned)
         end)
 
         it("does not download covers it already has", function()
             fixtures.cacheCover(helper, book.md5)
-            CurlUtil.download = function()
+            CurlUtil.downloadMultiple = function()
                 error("should not download")
             end
 
@@ -148,16 +155,11 @@ describe("LlgiAPI", function()
         end)
 
         it("still offers the download when the cover cannot be fetched", function()
-            local download = CurlUtil.download
-            CurlUtil.download = function(url, path, use_proxy, background)
-                if not background then
-                    return false, "HTTP error response"
-                end
-                return download(url, path, use_proxy, background)
-            end
-
             LlgiAPI:downloadBook(book, filepath, onResult)
+            helper.runScheduled()
+
             assert.are.equal(1, #prompts)
+            assert.is_false(require("cache.covercache"):cacheExists(book.md5))
         end)
 
         it("downloads to the folder chosen in the prompt", function()

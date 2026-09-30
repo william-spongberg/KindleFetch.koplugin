@@ -20,6 +20,8 @@ local StringUtil = require("util.stringutil")
 local Screen = require("device").screen
 local TextWidget = require("ui/widget/textwidget")
 local CoverCache = require("cache.covercache")
+local CoverPlaceholder = require("ui.coverplaceholder")
+local KindleFetchSettings = require("settings.settings")
 local LogUtil = require("util.logutil")
 
 -- constants
@@ -88,7 +90,7 @@ function BookMenu:onMenuSelect(entry)
 end
 
 function BookMenu:createBookItemWidget(book)
-    -- cover image (if exists)
+    -- cover image, a placeholder while it downloads, or nothing if there isn't one
     local cover_widget
     if CoverCache:cacheExists(book.md5) then
         cover_widget = ImageWidget:new{
@@ -98,6 +100,8 @@ function BookMenu:createBookItemWidget(book)
             scale_factor = 0,
             alpha = true
         }
+    elseif KindleFetchSettings:getShowBookCovers() and CoverCache:isComing(book) then
+        cover_widget = CoverPlaceholder.new(math.floor(COVER_SIZE * 2 / 3), COVER_SIZE)
     end
 
     -- title

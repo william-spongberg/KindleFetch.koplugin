@@ -18,6 +18,7 @@ local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
 local LogUtil = require("util.logutil")
 local CoverCache = require("cache.covercache")
+local CoverPlaceholder = require("ui.coverplaceholder")
 local _ = require("gettext")
 
 local DownloadPrompt = {}
@@ -26,9 +27,9 @@ DownloadPrompt.__index = DownloadPrompt
 local CONTENT_WIDTH = Screen:scaleBySize(380)
 local COVER_SIZE = Screen:scaleBySize(192)
 
-local function infoLine(label, value)
+local function infoLine(label, value, width)
     return TextBoxWidget:new{
-        width = CONTENT_WIDTH - COVER_SIZE - Size.padding.large,
+        width = width,
         face = Font:getFace("cfont", 16),
         text = string.format("%s: %s", label, value or "-"),
         fgcolor = Blitbuffer.COLOR_BLACK
@@ -45,47 +46,7 @@ function DownloadPrompt.new(book, filepath, on_download)
     self.on_download = on_download
     self.fullscreen_cover_shown = false
 
-    if CoverCache:cacheExists(self.book.md5) then
-        local cover_image = ImageWidget:new{
-            file = CoverCache:get(self.book.md5),
-            width = COVER_SIZE,
-            height = COVER_SIZE,
-            scale_factor = 0,
-            alpha = true
-        }
-
-        self.cover = CenterContainer:new{
-            dimen = Geom:new{
-                w = COVER_SIZE,
-                h = COVER_SIZE
-            },
-            cover_image
-        }
-
-        -- make cover tappable for fullscreen
-        local parent_ref = self
-        self.cover_container = InputContainer:new{}
-        self.cover_container.dimen = Geom:new{
-            w = COVER_SIZE,
-            h = COVER_SIZE
-        }
-        self.cover_container.ges_events = {
-            TapCover = {GestureRange:new{
-                ges = "tap",
-                range = self.cover_container.dimen
-            }}
-        }
-        function self.cover_container:onTapCover()
-            parent_ref:toggleFullscreenCover()
-            return true
-        end
-        self.cover_container[1] = self.cover
-        self.cover = self.cover_container
-    else
-        self.cover = HorizontalSpan:new{
-            width = COVER_SIZE
-        }
-    end
+    self:buildCover()
 
     self.path_widget = Button:new{
         text = self.filepath,
@@ -145,35 +106,106 @@ function DownloadPrompt.new(book, filepath, on_download)
         end
         return false
     end
+    -- show the cover once it has downloaded, or take its placeholder away if it couldn't be
+    function self.outer_container:onKindleFetchCoversDownloaded()
+        parent_ref:refreshCover()
+    end
     self.outer_container[1] = self.container
 
     return self
 end
 
+-- the book's cover (which can be tapped to show it fullscreen), a placeholder while it downloads, or nothing
+function DownloadPrompt:buildCover()
+    self.cover = nil
+    self.cover_container = nil
+
+    if CoverCache:cacheExists(self.book.md5) then
+        local cover_image = ImageWidget:new{
+            file = CoverCache:get(self.book.md5),
+            width = COVER_SIZE,
+            height = COVER_SIZE,
+            scale_factor = 0,
+            alpha = true
+        }
+
+        -- make cover tappable for fullscreen
+        local parent_ref = self
+        self.cover_container = InputContainer:new{}
+        self.cover_container.dimen = Geom:new{
+            w = COVER_SIZE,
+            h = COVER_SIZE
+        }
+        self.cover_container.ges_events = {
+            TapCover = {GestureRange:new{
+                ges = "tap",
+                range = self.cover_container.dimen
+            }}
+        }
+        function self.cover_container:onTapCover()
+            parent_ref:toggleFullscreenCover()
+            return true
+        end
+        self.cover_container[1] = CenterContainer:new{
+            dimen = Geom:new{
+                w = COVER_SIZE,
+                h = COVER_SIZE
+            },
+            cover_image
+        }
+        self.cover = self.cover_container
+    elseif CoverCache:isComing(self.book) then
+        self.cover = CenterContainer:new{
+            dimen = Geom:new{
+                w = COVER_SIZE,
+                h = COVER_SIZE
+            },
+            CoverPlaceholder.new(math.floor(COVER_SIZE * 2 / 3), COVER_SIZE)
+        }
+    end
+end
+
+function DownloadPrompt:refreshCover()
+    self:buildCover()
+    self.frame[1] = self:buildContent()
+    UIManager:setDirty(self.outer_container, "ui")
+end
+
 function DownloadPrompt:buildContent()
+    -- the book's details take the whole width when there's no cover
+    local text_width = self.cover and CONTENT_WIDTH - COVER_SIZE - Size.padding.large or CONTENT_WIDTH
+
     self.title = TextBoxWidget:new{
-        width = CONTENT_WIDTH - COVER_SIZE - Size.padding.large,
+        width = text_width,
         face = Font:getFace("cfont", 20),
         text = self.book.display_title or "",
         bold = true
     }
 
     self.author = TextBoxWidget:new{
-        width = CONTENT_WIDTH - COVER_SIZE - Size.padding.large,
+        width = text_width,
         face = Font:getFace("cfont", 17),
         text = self.book.authors or "",
         fgcolor = Blitbuffer.COLOR_BLACK
     }
 
-    return VerticalGroup:new{HorizontalGroup:new{self.cover, HorizontalSpan:new{
-        width = Size.padding.large
-    }, VerticalGroup:new{self.title, VerticalSpan:new{
+    local details = VerticalGroup:new{self.title, VerticalSpan:new{
         width = Size.padding.small
     }, self.author, VerticalSpan:new{
         width = Size.padding.default
-    }, infoLine(_("Year"), self.book.year), infoLine(_("Language"), self.book.language),
-                         infoLine(_("Type"), self.book.book_type), infoLine(_("Format"), self.book.file_type),
-                         infoLine(_("Size"), self.book.file_size)}}, VerticalSpan:new{
+    }, infoLine(_("Year"), self.book.year, text_width), infoLine(_("Language"), self.book.language, text_width),
+                                      infoLine(_("Type"), self.book.book_type, text_width),
+                                      infoLine(_("Format"), self.book.file_type, text_width),
+                                      infoLine(_("Size"), self.book.file_size, text_width)}
+
+    local header = details
+    if self.cover then
+        header = HorizontalGroup:new{self.cover, HorizontalSpan:new{
+            width = Size.padding.large
+        }, details}
+    end
+
+    return VerticalGroup:new{header, VerticalSpan:new{
         width = Size.padding.large
     }, TextBoxWidget:new{
         width = CONTENT_WIDTH,
