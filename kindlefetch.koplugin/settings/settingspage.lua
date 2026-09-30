@@ -9,6 +9,10 @@ local _ = require("gettext")
 
 local SettingsPage = {}
 
+local function formatDays(days)
+    return string.format(days == 1 and _("%d day") or _("%d days"), days)
+end
+
 function SettingsPage:showSettings()
     local this = self
     local menu
@@ -19,6 +23,8 @@ function SettingsPage:showSettings()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
     local book_types = KindleFetchSettings:getPreferredBookTypes()
     local check_for_updates = KindleFetchSettings:getCheckForUpdates()
+    local search_cache_days = KindleFetchSettings:getSearchCacheExpiryDays()
+    local mirror_cache_days = KindleFetchSettings:getMirrorCacheExpiryDays()
 
     local menu_items = {{
         text = _(string.format("Show Book Covers: %s", show_book_covers and "☑" or "☐")),
@@ -62,6 +68,24 @@ function SettingsPage:showSettings()
             UIManager:setDirty(menu, "full")
             this:changeCheckForUpdates()
         end
+    }, {
+        text = _("Keep Searches For: ") .. formatDays(search_cache_days),
+        callback = function()
+            UIManager:close(menu)
+            UIManager:setDirty(menu, "full")
+            this:changeCacheExpiry(_("Keep Searches For"), search_cache_days, function(days)
+                KindleFetchSettings:setSearchCacheExpiryDays(days)
+            end)
+        end
+    }, {
+        text = _("Keep Mirrors For: ") .. formatDays(mirror_cache_days),
+        callback = function()
+            UIManager:close(menu)
+            UIManager:setDirty(menu, "full")
+            this:changeCacheExpiry(_("Keep Mirrors For"), mirror_cache_days, function(days)
+                KindleFetchSettings:setMirrorCacheExpiryDays(days)
+            end)
+        end
     }}
 
     menu = Menu:new{
@@ -86,6 +110,36 @@ function SettingsPage:changeBookCoverVisibility()
     else
         NotifyUtil.info("Error: " .. err)
     end
+end
+
+function SettingsPage:changeCacheExpiry(title, current_days, save)
+    local this = self
+    local menu
+    local items = {}
+
+    for i, days in ipairs(KindleFetchSettings:getAvailableCacheExpiryDays()) do
+        table.insert(items, {
+            text = string.format("%s %s", days == current_days and "◉" or "○", formatDays(days)),
+            callback = function()
+                save(days)
+                NotifyUtil.info("Cache expiry updated")
+                UIManager:close(menu)
+                UIManager:setDirty(menu, "full")
+                this:showSettings()
+            end
+        })
+    end
+
+    menu = Menu:new{
+        title = title,
+        item_table = items,
+        covers_fullscreen = true,
+        is_borderless = true,
+        width = this.dimen.w,
+        height = this.dimen.h
+    }
+    UIManager:show(menu)
+    UIManager:setDirty(menu, "full")
 end
 
 function SettingsPage:changeCheckForUpdates()

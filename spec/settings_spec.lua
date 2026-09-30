@@ -104,6 +104,22 @@ describe("KindleFetchSettings", function()
         end)
     end)
 
+    describe("cache expiry", function()
+        it("keeps searches for two weeks and mirrors for a week by default", function()
+            assert.are.equal(14, Settings:getSearchCacheExpiryDays())
+            assert.are.equal(7, Settings:getMirrorCacheExpiryDays())
+        end)
+
+        it("can be changed", function()
+            assert.are.same({1, 3, 7, 14, 30}, Settings:getAvailableCacheExpiryDays())
+            Settings:setSearchCacheExpiryDays(30)
+            Settings:setMirrorCacheExpiryDays(1)
+
+            assert.are.equal(30, Settings:getSearchCacheExpiryDays())
+            assert.are.equal(1, Settings:getMirrorCacheExpiryDays())
+        end)
+    end)
+
     it("remembers the plugin version it last ran", function()
         assert.is_nil(Settings:getLastVersion())
         Settings:setLastVersion("0.4")

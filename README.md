@@ -12,8 +12,8 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 - **Book Search + Downloads**: Search Library Genesis from your device with simple text input and download with a tap
 - **Caching**: Minimise network requests and improve performance
-  - Search results (2 week expiry, 1000 entries max)
-  - Mirror URLs (1 week expiry)
+  - Search results (2 week expiry by default, 1000 entries max)
+  - Mirror URLs (1 week expiry by default)
   - Book covers (500 entries max)
 - **Preferences**: Filter results by preferred languages, file types, and book types
 - **Book Cover Previews**: Display cover images in search results and download previews
@@ -98,6 +98,8 @@ Downloaded books are saved to your configured download location.
 <img width="400" height="533" alt="FileManager_2026-07-12_140038" src="https://github.com/user-attachments/assets/1576b6c1-f5b0-4fd8-b907-841080495950" />
 
 - **Check for Updates Automatically**: Check for plugin and curl updates once per session while connected (default: enabled)
+
+- **Keep Searches For / Keep Mirrors For**: How long search results (default: 14 days) and Library Genesis mirror URLs (default: 7 days) are cached
 
 ## How It Works
 

@@ -43,7 +43,8 @@ describe("SettingsPage", function()
 
         assert.are.same({"Show Book Covers: ☑", "Download Folder: " .. helper.abs(data_dir),
                          "Preferred Languages: en", "Preferred File Types: epub, pdf, cbr, cbz",
-                         "Preferred Book Types: fiction, comics", "Check for Updates Automatically: ☑"},
+                         "Preferred Book Types: fiction, comics", "Check for Updates Automatically: ☑",
+                         "Keep Searches For: 14 days", "Keep Mirrors For: 7 days"},
             itemTexts(lastMenu()))
     end)
 
@@ -66,6 +67,29 @@ describe("SettingsPage", function()
 
         tap("Check for Updates Automatically")
         assert.is_true(Settings:getCheckForUpdates())
+    end)
+
+    describe("cache expiry", function()
+        it("sets how long searches are kept", function()
+            SettingsPage:showSettings()
+            tap("Keep Searches For")
+            assert.are.equal("Keep Searches For", lastMenu().title)
+            assert.are.same({"○ 1 day", "○ 3 days", "○ 7 days", "◉ 14 days", "○ 30 days"}, itemTexts(lastMenu()))
+
+            tap("30 days")
+            assert.are.equal(30, Settings:getSearchCacheExpiryDays())
+            assert.are.equal("Cache expiry updated", helper.lastNotification())
+            assert.are.equal("Keep Searches For: 30 days", lastMenu().item_table[7].text)
+        end)
+
+        it("sets how long mirrors are kept", function()
+            SettingsPage:showSettings()
+            tap("Keep Mirrors For")
+            tap("1 day")
+
+            assert.are.equal(1, Settings:getMirrorCacheExpiryDays())
+            assert.are.equal("Keep Mirrors For: 1 day", lastMenu().item_table[8].text)
+        end)
     end)
 
     describe("download folder", function()

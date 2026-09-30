@@ -97,7 +97,8 @@ function KindleFetchCache:get(...)
     end
 
     local age = os.time() - entry.timestamp
-    if self.expiry and age > self.expiry then
+    local expiry = type(self.expiry) == "function" and self.expiry() or self.expiry
+    if expiry and age > expiry then
         LogUtil.debug("cache expired for key:", key, "age:", age, "seconds")
 
         self:delete(key)
