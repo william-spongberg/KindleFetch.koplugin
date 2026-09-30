@@ -10,7 +10,7 @@ local SettingsPage = require("settings.settingspage")
 local util = require("util")
 local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
-local AnnasAPI = require("api.annasapi")
+local LlgiSearch = require("api.lglisearch")
 local LlgiAPI = require("api.lgliapi")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
@@ -68,7 +68,7 @@ function KindleFetch:addToMainMenu(menu_items)
         text = _("Kindle Fetch"),
         sorting_hint = "search",
         sub_item_table = {{
-            text = _("Search Anna's Archive"),
+            text = _("Search Library Genesis"),
             callback = function()
                 self:setupUI()
             end
@@ -86,7 +86,7 @@ function KindleFetch:setupUI()
     local this = self
 
     self.search_box = InputDialog:new{
-        title = "Search Anna's Archive",
+        title = "Search Library Genesis",
         input_type = "text",
         buttons = {{{
             text = "Cancel",
@@ -156,7 +156,7 @@ function KindleFetch:performSearch()
 end
 
 function KindleFetch:search(query, page)
-    local books, err = AnnasAPI:search(query, page)
+    local books, err = LlgiSearch:search(query, page)
 
     if not books or type(books) ~= "table" then
         LogUtil.warn("API search failed for")

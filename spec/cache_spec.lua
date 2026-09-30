@@ -25,10 +25,10 @@ describe("KindleFetchCache", function()
 
     it("stores and returns values", function()
         local cache = newCache()
-        cache:set({"https://annas-archive.example"}, "annas-archive")
+        cache:set({"https://libgen.example"}, "libgen")
 
-        assert.are.same({"https://annas-archive.example"}, cache:get("annas-archive"))
-        assert.is_nil(cache:get("libgen"))
+        assert.are.same({"https://libgen.example"}, cache:get("libgen"))
+        assert.is_nil(cache:get("missing"))
     end)
 
     it("saves entries to its settings file", function()
@@ -150,19 +150,19 @@ describe("SearchCache", function()
     after_each(helper.cleanup)
 
     it("keys results by query, page and filters", function()
-        SearchCache:set({"book"}, "dune", 1, {"en"}, {"epub"}, {"book_fiction"})
+        SearchCache:set({"book"}, "dune", 1, {"en"}, {"epub"}, {"fiction"})
 
-        assert.are.same({"book"}, SearchCache:get("dune", 1, {"en"}, {"epub"}, {"book_fiction"}))
-        assert.is_nil(SearchCache:get("dune", 2, {"en"}, {"epub"}, {"book_fiction"}))
-        assert.is_nil(SearchCache:get("dune", 1, {"en", "fr"}, {"epub"}, {"book_fiction"}))
-        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"pdf"}, {"book_fiction"}))
-        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"epub"}, {"book_comic"}))
+        assert.are.same({"book"}, SearchCache:get("dune", 1, {"en"}, {"epub"}, {"fiction"}))
+        assert.is_nil(SearchCache:get("dune", 2, {"en"}, {"epub"}, {"fiction"}))
+        assert.is_nil(SearchCache:get("dune", 1, {"en", "fr"}, {"epub"}, {"fiction"}))
+        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"pdf"}, {"fiction"}))
+        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"epub"}, {"comics"}))
     end)
 
     it("expires results after two weeks", function()
-        SearchCache:set({"book"}, "dune", 1, {"en"}, {"epub"}, {"book_fiction"})
+        SearchCache:set({"book"}, "dune", 1, {"en"}, {"epub"}, {"fiction"})
         helper.state.time = 1000000 + 14 * 24 * 60 * 60 + 1
-        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"epub"}, {"book_fiction"}))
+        assert.is_nil(SearchCache:get("dune", 1, {"en"}, {"epub"}, {"fiction"}))
     end)
 
     it("keeps at most 1000 searches", function()
@@ -183,12 +183,12 @@ describe("UrlCache", function()
     after_each(helper.cleanup)
 
     it("expires mirrors after a week", function()
-        UrlCache:set({"https://annas-archive.example"}, "annas-archive")
+        UrlCache:set({"https://libgen.example"}, "libgen")
 
         helper.state.time = 1000000 + 7 * 24 * 60 * 60
-        assert.are.same({"https://annas-archive.example"}, UrlCache:get("annas-archive"))
+        assert.are.same({"https://libgen.example"}, UrlCache:get("libgen"))
 
         helper.state.time = 1000000 + 7 * 24 * 60 * 60 + 1
-        assert.is_nil(UrlCache:get("annas-archive"))
+        assert.is_nil(UrlCache:get("libgen"))
     end)
 end)

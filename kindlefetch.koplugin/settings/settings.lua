@@ -14,7 +14,7 @@ local DEFAULTS = {
     download_dir = nil,
     preferred_languages = {"en"},
     preferred_file_types = {"epub", "pdf", "cbr", "cbz"},
-    preferred_book_types = {"book_fiction", "book_comic"}
+    preferred_book_types = {"fiction", "comics"}
 }
 
 -- available settings
@@ -324,22 +324,36 @@ local COMIC_FILE_TYPES = {"cbr", "cbz"}
 local DOCUMENT_FILE_TYPES = {"pdf", "txt", "rtf", "doc", "docx", "odt", "djvu"}
 local IMAGE_FILE_TYPES = {"jpg", "tif", "pdb"}
 local WEB_FILE_TYPES = {"chm", "htm", "html", "htmlz", "mht"}
+-- Library Genesis topics
 local AVAILABLE_BOOK_TYPES = {{
-    text = "Book (fiction)",
-    code = "book_fiction"
+    text = "Fiction",
+    code = "fiction"
 }, {
-    text = "Book (non-fiction)",
-    code = "book_nonfiction"
+    text = "Non-fiction",
+    code = "nonfiction"
 }, {
-    text = "Book (unknown)",
-    code = "book_unknown"
+    text = "Comics",
+    code = "comics"
 }, {
-    text = "Comic book",
-    code = "book_comic"
+    text = "Fiction (Russian)",
+    code = "fiction_rus"
 }, {
-    text = "Standards document",
-    code = "standards_document"
+    text = "Magazines",
+    code = "magazines"
+}, {
+    text = "Scientific articles",
+    code = "articles"
+}, {
+    text = "Standards",
+    code = "standards"
 }}
+-- book types saved when searching Anna's Archive
+local OLD_BOOK_TYPES = {
+    book_fiction = "fiction",
+    book_nonfiction = "nonfiction",
+    book_comic = "comics",
+    standards_document = "standards"
+}
 
 local function getSettingsFile()
     return LuaSettings:open(DataStorage:getSettingsDir() .. "/kindlefetch_settings.lua")
@@ -457,7 +471,20 @@ end
 
 -- preferred_book_types
 function KindleFetchSettings:getPreferredBookTypes()
-    return KindleFetchSettings:getSetting("preferred_book_types")
+    local book_types = {}
+    for _, book_type in ipairs(KindleFetchSettings:getSetting("preferred_book_types")) do
+        book_type = OLD_BOOK_TYPES[book_type] or book_type
+        for _, available in ipairs(AVAILABLE_BOOK_TYPES) do
+            if available.code == book_type then
+                table.insert(book_types, book_type)
+            end
+        end
+    end
+
+    if #book_types == 0 then
+        return DEFAULTS.preferred_book_types
+    end
+    return book_types
 end
 function KindleFetchSettings:setPreferredBookTypes(book_types)
     return KindleFetchSettings:setSetting("preferred_book_types", book_types)

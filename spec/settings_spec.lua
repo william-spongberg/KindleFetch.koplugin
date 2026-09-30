@@ -74,15 +74,15 @@ describe("KindleFetchSettings", function()
             Settings:setShowBookCovers(false)
             Settings:setPreferredLanguages({"fr", "de"})
             Settings:setPreferredFileTypes({"mobi"})
-            Settings:setPreferredBookTypes({"book_nonfiction"})
+            Settings:setPreferredBookTypes({"nonfiction"})
 
             assert.is_false(Settings:getShowBookCovers())
             assert.are.same({"fr", "de"}, Settings:getPreferredLanguages())
             assert.are.same({"mobi"}, Settings:getPreferredFileTypes())
-            assert.are.same({"book_nonfiction"}, Settings:getPreferredBookTypes())
+            assert.are.same({"nonfiction"}, Settings:getPreferredBookTypes())
         end)
 
-        it("offer every choice Anna's Archive supports", function()
+        it("offer every choice Library Genesis supports", function()
             assert.are.same({text = "English", code = "en"}, Settings:getAvailableLanguages()[1])
             assert.are.equal(100, #Settings:getAvailableLanguages())
             assert.are.same({"cbr", "cbz"}, Settings:getComicFileTypes())
@@ -91,7 +91,7 @@ describe("KindleFetchSettings", function()
             assert.are.same({"pdf", "txt", "rtf", "doc", "docx", "odt", "djvu"}, Settings:getDocumentFileTypes())
             assert.are.same({"jpg", "tif", "pdb"}, Settings:getImageFileTypes())
             assert.are.same({"chm", "htm", "html", "htmlz", "mht"}, Settings:getWebFileTypes())
-            assert.are.same({"book_fiction", "book_nonfiction", "book_unknown", "book_comic", "standards_document"},
+            assert.are.same({"fiction", "nonfiction", "comics", "fiction_rus", "magazines", "articles", "standards"},
                 (function()
                     local codes = {}
                     for _, book_type in ipairs(Settings:getAvailableBookTypes()) do
@@ -99,6 +99,26 @@ describe("KindleFetchSettings", function()
                     end
                     return codes
                 end)())
+        end)
+    end)
+
+    describe("preferred book types", function()
+        it("are converted from the ones used for Anna's Archive", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                preferred_book_types = {"book_fiction", "book_nonfiction", "book_unknown", "book_comic",
+                                        "standards_document"}
+            }
+            assert.are.same({"fiction", "nonfiction", "comics", "standards"}, Settings:getPreferredBookTypes())
+
+            Settings:load()
+            assert.are.same({"fiction", "nonfiction", "comics", "standards"}, pluginSettings().preferred_book_types)
+        end)
+
+        it("fall back to the defaults when none are left", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                preferred_book_types = {"book_unknown"}
+            }
+            assert.are.same({"fiction", "comics"}, Settings:getPreferredBookTypes())
         end)
     end)
 
@@ -113,7 +133,7 @@ describe("KindleFetchSettings", function()
             Settings:load()
             assert.are.same({"en"}, pluginSettings().preferred_languages)
             assert.are.same({"epub", "pdf", "cbr", "cbz"}, pluginSettings().preferred_file_types)
-            assert.are.same({"book_fiction", "book_comic"}, pluginSettings().preferred_book_types)
+            assert.are.same({"fiction", "comics"}, pluginSettings().preferred_book_types)
             assert.is_true(pluginSettings().show_book_covers)
         end)
     end)
