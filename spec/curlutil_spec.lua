@@ -54,6 +54,30 @@ describe("CurlUtil", function()
             assert.is_false(CurlUtil.isPidRunning(pid))
         end)
 
+        it("looks in /proc, without starting a shell", function()
+            local proc = helper.tmpdir("proc")
+            CurlUtil.PROC_DIR = proc
+            helper.writeFile(proc .. "/self/stat", "100 (luajit) R 1")
+            helper.writeFile(proc .. "/4242/stat", "4242 (sh (curl)) S 1 4242")
+            helper.writeFile(proc .. "/4343/stat", "4343 (sh) Z 1 4343")
+            helper.stubExecute("kill -0", function()
+                error("started a shell")
+            end)
+
+            assert.is_true(CurlUtil.isPidRunning(4242))
+            -- finished, but not cleaned up yet
+            assert.is_false(CurlUtil.isPidRunning(4343))
+            assert.is_false(CurlUtil.isPidRunning(4444))
+        end)
+
+        it("asks kill on systems without /proc", function()
+            CurlUtil.PROC_DIR = helper.tmpdir("no-proc")
+            helper.stubExecute("kill -0 4242", function()
+                return 0
+            end)
+            assert.is_true(CurlUtil.isPidRunning(4242))
+        end)
+
         it("ignores missing pids", function()
             assert.is_false(CurlUtil.isPidRunning(nil))
             CurlUtil.killPid(nil)
@@ -84,6 +108,12 @@ describe("CurlUtil", function()
             local exit_file = CurlUtil.createExitFile()
             assert.matches(data_dir .. "/settings/tmp/curl_download_", exit_file, 1, true)
             assert.is_false(helper.exists(exit_file))
+        end)
+
+        -- a book's cover and the book itself can start downloading within the same second
+        it("are different for downloads started within the same second", function()
+            helper.state.time = 1000
+            assert.are_not.equal(CurlUtil.createExitFile(), CurlUtil.createExitFile())
         end)
 
         it("reads and removes the exit code once curl has finished", function()
@@ -273,6 +303,19 @@ describe("CurlUtil", function()
             assert.are.equal(4242, pid)
             assert.is_not_nil(exit_file)
             assert.matches('output = "' .. paths[2] .. '"', helper.readFile(config_file), 1, true)
+        end)
+
+        it("keeps the files of downloads started within the same second apart", function()
+            helper.stubCommand("& echo $!", "4242\n")
+            helper.state.time = 1000
+
+            local _, first_exit, first_config = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
+            local _, second_exit, second_config = CurlUtil.downloadMultiple({urls[1]}, {paths[1]}, false, true, 4,
+                false, 15)
+            assert.are_not.equal(first_exit, second_exit)
+            assert.are_not.equal(first_config, second_config)
+            assert.are_not.equal(CurlUtil.getResultsFile(first_config), CurlUtil.getResultsFile(second_config))
+            assert.matches('output = "' .. paths[2] .. '"', helper.readFile(first_config), 1, true)
         end)
 
         it("cleans up when the background download cannot start", function()

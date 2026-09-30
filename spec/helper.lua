@@ -168,6 +168,14 @@ local function widgetClass()
         self.text = text
     end
 
+    -- roughly the size text would take up, for widgets laid out by their size
+    function Widget:getSize()
+        return {
+            w = self.width or #(self.text or "") * 10,
+            h = self.height or 20
+        }
+    end
+
     function Widget:free()
         self.freed = true
     end
@@ -480,7 +488,8 @@ local WIDGET_MODULES = {"ui/gesturerange", "ui/widget/container/centercontainer"
                         "ui/widget/verticalgroup", "ui/widget/horizontalgroup", "ui/widget/verticalspan",
                         "ui/widget/horizontalspan", "ui/widget/textboxwidget", "ui/widget/textwidget",
                         "ui/widget/imagewidget", "ui/widget/button", "ui/widget/progresswidget",
-                        "ui/widget/confirmbox", "ui/widget/iconwidget"}
+                        "ui/widget/confirmbox", "ui/widget/buttondialog", "ui/widget/iconwidget",
+                        "ui/widget/buttontable"}
 
 local CONSTANT_MODULES = {
     ["ui/font"] = {
@@ -490,14 +499,17 @@ local CONSTANT_MODULES = {
     },
     ["ui/size"] = {
         padding = {small = 2, default = 5, large = 10},
-        border = {default = 1, window = 2}
+        border = {thin = 1, default = 1, window = 2},
+        radius = {button = 7, window = 7}
     },
     ["ffi/blitbuffer"] = {
         COLOR_WHITE = "white",
         COLOR_BLACK = "black",
         COLOR_LIGHT_GRAY = "light gray",
         COLOR_GRAY = "gray",
-        COLOR_DARK_GRAY = "dark gray"
+        COLOR_DARK_GRAY = "dark gray",
+        COLOR_GRAY_4 = "gray 4",
+        COLOR_GRAY_6 = "gray 6"
     }
 }
 

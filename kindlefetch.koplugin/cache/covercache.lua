@@ -49,6 +49,32 @@ function CoverCache:cacheExists(md5)
     return self:get(md5) ~= nil
 end
 
+-- Library Genesis links to thumbnails ending in _small, with the full-size cover at the same path without it.
+-- returns the full-size cover as a book of its own, stored alongside the thumbnail, or nil if there isn't one
+local function fullSizeCover(book)
+    local url = book.image_url and book.image_url:gsub("_small(%.%w+)$", "%1")
+    if not book.md5 or not url or url == book.image_url then
+        return nil
+    end
+    return {
+        md5 = book.md5 .. "_full",
+        image_url = url
+    }
+end
+
+-- the book's full-size cover, if it has downloaded
+function CoverCache:getFullSize(book)
+    local cover = fullSizeCover(book)
+    return cover and self:get(cover.md5)
+end
+
+-- download the book's full-size cover in the background, for showing larger than in search results. returns
+-- false when there's nothing to download
+function CoverCache:downloadFullSize(book)
+    local cover = fullSizeCover(book)
+    return cover ~= nil and self:downloadMultiple({cover}, 1)
+end
+
 -- whether a cover for the book is on its way, so worth showing a placeholder for
 function CoverCache:isComing(book)
     return book.image_url ~= nil and not unavailable[book.md5] and not self:cacheExists(book.md5)
