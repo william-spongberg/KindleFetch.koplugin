@@ -159,17 +159,11 @@ function KindleFetch:performSearch()
         return
     end
 
-    -- check device is online
+    -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once connected
     if not NetworkMgr:isConnected() then
-        if not NetworkMgr:isWifiOn() then
-            -- WiFi is off, prompt to turn it on
-            NetworkMgr:promptWifiOn(function()
-            end)
-        else
-            -- WiFi is on but not connected, show different prompt
-            NetworkMgr:promptWifi(function()
-            end)
-        end
+        NetworkMgr:runWhenConnected(function()
+            self:performSearch()
+        end)
         return
     end
 
