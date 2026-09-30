@@ -90,9 +90,10 @@ function BookMenu:onMenuSelect(entry)
 end
 
 function BookMenu:createBookItemWidget(book)
-    -- cover image, a placeholder while it downloads, or nothing if there isn't one
+    -- cover image, a placeholder while it downloads, or nothing if there isn't one or covers are turned off
     local cover_widget
-    if CoverCache:cacheExists(book.md5) then
+    local show_covers = KindleFetchSettings:getShowBookCovers()
+    if show_covers and CoverCache:cacheExists(book.md5) then
         cover_widget = ImageWidget:new{
             file = CoverCache:get(book.md5),
             width = COVER_SIZE,
@@ -100,7 +101,7 @@ function BookMenu:createBookItemWidget(book)
             scale_factor = 0,
             alpha = true
         }
-    elseif KindleFetchSettings:getShowBookCovers() and CoverCache:isComing(book) then
+    elseif show_covers and CoverCache:isComing(book) then
         cover_widget = CoverPlaceholder.new(math.floor(COVER_SIZE * 2 / 3), COVER_SIZE)
     end
 
