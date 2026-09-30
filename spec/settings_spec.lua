@@ -84,15 +84,15 @@ describe("KindleFetchSettings", function()
             assert.are.same({"nonfiction"}, Settings:getPreferredBookTypes())
         end)
 
+        -- and only file types KOReader can open
         it("offer every choice Library Genesis supports", function()
             assert.are.same({text = "English", code = "en"}, Settings:getAvailableLanguages()[1])
             assert.are.equal(100, #Settings:getAvailableLanguages())
             assert.are.same({"cbr", "cbz"}, Settings:getComicFileTypes())
-            assert.are.same({"epub", "mobi", "azw", "azw3", "kfx", "fb2", "lit", "prc", "lrf", "snb", "updb"},
-                Settings:getEbookFileTypes())
+            assert.are.same({"epub", "mobi", "azw", "fb2", "prc"}, Settings:getEbookFileTypes())
             assert.are.same({"pdf", "txt", "rtf", "doc", "docx", "odt", "djvu"}, Settings:getDocumentFileTypes())
             assert.are.same({"jpg", "tif", "pdb"}, Settings:getImageFileTypes())
-            assert.are.same({"chm", "htm", "html", "htmlz", "mht"}, Settings:getWebFileTypes())
+            assert.are.same({"chm", "htm", "html", "htmlz"}, Settings:getWebFileTypes())
             assert.are.same({"fiction", "nonfiction", "comics", "magazines", "articles", "standards"},
                 (function()
                     local codes = {}
@@ -145,11 +145,38 @@ describe("KindleFetchSettings", function()
             assert.are.same({"fiction", "magazines"}, Settings:getPreferredBookTypes())
         end)
 
-        it("fall back to the defaults when none are left", function()
+        it("fall back to the defaults when none of those chosen are left", function()
             helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
                 preferred_book_types = {"book_unknown"}
             }
-            assert.are.same({"fiction", "comics"}, Settings:getPreferredBookTypes())
+            assert.are.same({"fiction", "nonfiction", "comics", "magazines", "articles", "standards"}, Settings:getPreferredBookTypes())
+        end)
+
+        it("can all be turned off", function()
+            Settings:setPreferredBookTypes({})
+            assert.are.same({}, Settings:getPreferredBookTypes())
+        end)
+    end)
+
+    describe("preferred file types", function()
+        it("leave out ones KOReader can't open, which can no longer be chosen", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                preferred_file_types = {"epub", "azw3", "kfx", "pdf"}
+            }
+            assert.are.same({"epub", "pdf"}, Settings:getPreferredFileTypes())
+        end)
+
+        it("fall back to the defaults when none of those chosen are left", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                preferred_file_types = {"azw3", "lit"}
+            }
+            assert.are.same({"epub", "mobi", "azw", "fb2", "prc", "cbr", "cbz", "pdf", "txt", "rtf", "doc", "docx", "odt", "djvu", "jpg", "tif",
+                             "pdb", "chm", "htm", "html", "htmlz"}, Settings:getPreferredFileTypes())
+        end)
+
+        it("can all be turned off", function()
+            Settings:setPreferredFileTypes({})
+            assert.are.same({}, Settings:getPreferredFileTypes())
         end)
     end)
 
@@ -160,11 +187,13 @@ describe("KindleFetchSettings", function()
             assert.are.equal(helper.ROOT, pluginSettings().download_dir)
         end)
 
+        -- every kind of book in every file type KOReader can open, in English
         it("fills in default preferences", function()
             Settings:load()
             assert.are.same({"en"}, pluginSettings().preferred_languages)
-            assert.are.same({"epub", "pdf", "cbr", "cbz"}, pluginSettings().preferred_file_types)
-            assert.are.same({"fiction", "comics"}, pluginSettings().preferred_book_types)
+            assert.are.same({"epub", "mobi", "azw", "fb2", "prc", "cbr", "cbz", "pdf", "txt", "rtf", "doc", "docx", "odt", "djvu", "jpg", "tif",
+                             "pdb", "chm", "htm", "html", "htmlz"}, pluginSettings().preferred_file_types)
+            assert.are.same({"fiction", "nonfiction", "comics", "magazines", "articles", "standards"}, pluginSettings().preferred_book_types)
             assert.is_true(pluginSettings().show_book_covers)
             assert.is_true(pluginSettings().check_for_updates)
         end)

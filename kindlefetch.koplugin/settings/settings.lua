@@ -15,9 +15,8 @@ local DEFAULTS = {
     search_cache_expiry_days = 14,
     mirror_cache_expiry_days = 7,
     download_dir = nil,
-    preferred_languages = {"en"},
-    preferred_file_types = {"epub", "pdf", "cbr", "cbz"},
-    preferred_book_types = {"fiction", "comics"}
+    -- and every file type and book type, set below
+    preferred_languages = {"en"}
 }
 
 -- available settings
@@ -322,11 +321,18 @@ local AVAILABLE_LANGUAGES = {{
     text = "Nyanja",
     code = "ny"
 }}
-local EBOOK_FILE_TYPES = {"epub", "mobi", "azw", "azw3", "kfx", "fb2", "lit", "prc", "lrf", "snb", "updb"}
+-- file types KOReader can open
+local EBOOK_FILE_TYPES = {"epub", "mobi", "azw", "fb2", "prc"}
 local COMIC_FILE_TYPES = {"cbr", "cbz"}
 local DOCUMENT_FILE_TYPES = {"pdf", "txt", "rtf", "doc", "docx", "odt", "djvu"}
 local IMAGE_FILE_TYPES = {"jpg", "tif", "pdb"}
-local WEB_FILE_TYPES = {"chm", "htm", "html", "htmlz", "mht"}
+local WEB_FILE_TYPES = {"chm", "htm", "html", "htmlz"}
+local AVAILABLE_FILE_TYPES = {}
+for _, file_types in ipairs({EBOOK_FILE_TYPES, COMIC_FILE_TYPES, DOCUMENT_FILE_TYPES, IMAGE_FILE_TYPES, WEB_FILE_TYPES}) do
+    for _, file_type in ipairs(file_types) do
+        table.insert(AVAILABLE_FILE_TYPES, file_type)
+    end
+end
 -- Library Genesis topics
 local AVAILABLE_BOOK_TYPES = {{
     text = "Fiction",
@@ -347,6 +353,16 @@ local AVAILABLE_BOOK_TYPES = {{
     text = "Standards",
     code = "standards"
 }}
+-- by default, every kind of book in every file type KOReader can open (in English)
+DEFAULTS.preferred_file_types = {}
+for _, file_type in ipairs(AVAILABLE_FILE_TYPES) do
+    table.insert(DEFAULTS.preferred_file_types, file_type)
+end
+DEFAULTS.preferred_book_types = {}
+for _, book_type in ipairs(AVAILABLE_BOOK_TYPES) do
+    table.insert(DEFAULTS.preferred_book_types, book_type.code)
+end
+
 -- how long searches and mirrors can be cached for
 local AVAILABLE_CACHE_EXPIRY_DAYS = {1, 3, 7, 14, 30}
 -- book types saved when searching Anna's Archive
@@ -485,8 +501,23 @@ function KindleFetchSettings:getAvailableLanguages()
 end
 
 -- preferred_file_types
+-- only those still offered, e.g. dropping azw3 and the other types KOReader can't open
 function KindleFetchSettings:getPreferredFileTypes()
-    return KindleFetchSettings:getSetting("preferred_file_types")
+    local saved = KindleFetchSettings:getSetting("preferred_file_types")
+    local file_types = {}
+    for _, file_type in ipairs(saved) do
+        for _, available in ipairs(AVAILABLE_FILE_TYPES) do
+            if available == file_type then
+                table.insert(file_types, file_type)
+            end
+        end
+    end
+
+    -- none of those chosen are offered any more, rather than every one being turned off
+    if #file_types == 0 and #saved > 0 then
+        return DEFAULTS.preferred_file_types
+    end
+    return file_types
 end
 function KindleFetchSettings:setPreferredFileTypes(file_types)
     return KindleFetchSettings:setSetting("preferred_file_types", file_types)
@@ -509,8 +540,9 @@ end
 
 -- preferred_book_types
 function KindleFetchSettings:getPreferredBookTypes()
+    local saved = KindleFetchSettings:getSetting("preferred_book_types")
     local book_types = {}
-    for _, book_type in ipairs(KindleFetchSettings:getSetting("preferred_book_types")) do
+    for _, book_type in ipairs(saved) do
         book_type = OLD_BOOK_TYPES[book_type] or book_type
         for _, available in ipairs(AVAILABLE_BOOK_TYPES) do
             if available.code == book_type then
@@ -519,7 +551,8 @@ function KindleFetchSettings:getPreferredBookTypes()
         end
     end
 
-    if #book_types == 0 then
+    -- none of those chosen are offered any more, rather than every one being turned off
+    if #book_types == 0 and #saved > 0 then
         return DEFAULTS.preferred_book_types
     end
     return book_types

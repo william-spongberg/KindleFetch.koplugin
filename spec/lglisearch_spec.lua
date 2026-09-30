@@ -5,8 +5,10 @@ local fixtures = require("fixtures")
 describe("LlgiSearch", function()
     local web, mirrors, LlgiSearch
 
+    -- with the default book types
     local function searchUrl(mirror, page, query)
-        return mirror .. "/index.php?" .. LlgiSearch.buildParams(query or "dune", page or 1, {"fiction", "comics"})
+        return mirror .. "/index.php?" ..
+                   LlgiSearch.buildParams(query or "dune", page or 1, require("settings.settings"):getPreferredBookTypes())
     end
 
     local function results(mirror, books, page)
@@ -41,8 +43,9 @@ describe("LlgiSearch", function()
             LlgiSearch:search("dune messiah", 2)
 
             assert.are.equal(mirrors[1] .. "/index.php?req=dune%20messiah&res=100&columns%5B%5D=t&columns%5B%5D=a" ..
-                                 "&columns%5B%5D=s&objects%5B%5D=f&topics%5B%5D=f&topics%5B%5D=c&covers=on" ..
-                                 "&filesuns=all&page=2", searches()[1])
+                                 "&columns%5B%5D=s&objects%5B%5D=f&topics%5B%5D=f&topics%5B%5D=l&topics%5B%5D=c" ..
+                                 "&topics%5B%5D=m&topics%5B%5D=a&topics%5B%5D=s&covers=on&filesuns=all&page=2",
+                searches()[1])
         end)
 
         it("maps every book type to a Library Genesis topic", function()
@@ -217,12 +220,13 @@ describe("LlgiSearch", function()
             assert.are.equal("Dune", books[1].title)
         end)
 
+        -- so books KOReader can't open are never found
         it("only keeps the preferred file types and languages", function()
             results(mirrors[1], {fixtures.DUNE, {
                 md5 = "abc",
-                title = "Dune mobi",
+                title = "Dune azw3",
                 language = "English",
-                file_type = "mobi"
+                file_type = "azw3"
             }, {
                 md5 = "def",
                 title = "Дюна",
@@ -451,7 +455,11 @@ describe("LlgiSearch", function()
                 assert.matches("^%x+$", book.md5)
                 assert.are.equal(32, #book.md5)
                 assert.is_true(#book.title > 0)
-                assert.is_truthy(({epub = true, pdf = true, cbr = true, cbz = true})[book.file_type])
+                local preferred = {}
+                for _, file_type in ipairs(require("settings.settings"):getPreferredFileTypes()) do
+                    preferred[file_type] = true
+                end
+                assert.is_truthy(preferred[book.file_type])
             end
         end)
     end)

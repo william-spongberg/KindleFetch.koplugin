@@ -42,8 +42,10 @@ describe("SettingsPage", function()
         SettingsPage:showSettings()
 
         assert.are.same({"Show Book Covers: ☑", "Download Folder: " .. helper.abs(data_dir),
-                         "Preferred Languages: en", "Preferred File Types: epub, pdf, cbr, cbz",
-                         "Preferred Book Types: fiction, comics", "Check for Updates Automatically: ☑",
+                         "Preferred Languages: en", "Preferred File Types: epub, mobi, azw, fb2, prc, cbr, cbz, " ..
+                             "pdf, txt, rtf, doc, docx, odt, djvu, jpg, tif, pdb, chm, htm, html, htmlz",
+                         "Preferred Book Types: fiction, nonfiction, comics, magazines, articles, standards",
+                         "Check for Updates Automatically: ☑",
                          "Keep Searches For: 14 days", "Keep Mirrors For: 7 days"},
             itemTexts(lastMenu()))
     end)
@@ -157,30 +159,33 @@ describe("SettingsPage", function()
             local menu = lastMenu()
             assert.are.equal("── Ebooks ──", menu.item_table[1].text)
             assert.is_false(menu.item_table[1].enabled)
+            -- every one is ticked by default
             assert.are.equal("☑ epub", menu.item_table[2].text)
-            assert.are.equal("☐ mobi", menu.item_table[3].text)
+            assert.are.equal("☑ mobi", menu.item_table[3].text)
         end)
 
         it("are saved when the menu is closed", function()
             SettingsPage:showSettings()
             tap("Preferred File Types")
-            tap("mobi")
+            tap("☑ mobi")
             tap("☑ pdf")
             lastMenu().onClose()
 
-            assert.are.same({"epub", "mobi", "cbr", "cbz"}, Settings:getPreferredFileTypes())
+            assert.are.same({"epub", "azw", "fb2", "prc", "cbr", "cbz", "txt", "rtf", "doc", "docx", "odt", "djvu", "jpg",
+                             "tif", "pdb", "chm", "htm", "html", "htmlz"}, Settings:getPreferredFileTypes())
             assert.are.equal("File types updated", helper.lastNotification())
         end)
 
         it("cannot all be unticked", function()
             SettingsPage:showSettings()
             tap("Preferred File Types")
-            for _, ext in ipairs({"epub", "pdf", "cbr", "cbz"}) do
+            local all = Settings:getPreferredFileTypes()
+            for _, ext in ipairs(all) do
                 tap("☑ " .. ext)
             end
             lastMenu().onClose()
 
-            assert.are.same({"epub", "pdf", "cbr", "cbz"}, Settings:getPreferredFileTypes())
+            assert.are.same(all, Settings:getPreferredFileTypes())
             assert.are.equal("Select at least one file type", helper.lastNotification())
         end)
     end)
@@ -191,22 +196,24 @@ describe("SettingsPage", function()
             tap("Preferred Book Types")
             assert.are.equal("☑ Fiction", lastMenu().item_table[1].text)
 
-            tap("Non-fiction")
+            tap("☑ Non-fiction")
             tap("☑ Comics")
             lastMenu().onClose()
 
-            assert.are.same({"fiction", "nonfiction"}, Settings:getPreferredBookTypes())
+            assert.are.same({"fiction", "magazines", "articles", "standards"}, Settings:getPreferredBookTypes())
             assert.are.equal("Book types updated", helper.lastNotification())
         end)
 
         it("cannot all be unticked", function()
             SettingsPage:showSettings()
             tap("Preferred Book Types")
-            tap("☑ Fiction")
-            tap("☑ Comics")
+            for _, name in ipairs({"Fiction", "Non-fiction", "Comics", "Magazines", "Scientific articles", "Standards"}) do
+                tap("☑ " .. name)
+            end
             lastMenu().onClose()
 
-            assert.are.same({"fiction", "comics"}, Settings:getPreferredBookTypes())
+            assert.are.same({"fiction", "nonfiction", "comics", "magazines", "articles", "standards"},
+                Settings:getPreferredBookTypes())
             assert.are.equal("Select at least one book type", helper.lastNotification())
         end)
     end)
