@@ -244,6 +244,8 @@ describe("DownloadPrompt", function()
                 prompt.cover_container:onTapCover()
                 assert.are.same({"https://libgen.example/fictioncovers/1000/dune.jpg"}, runs[1].urls)
                 assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
+                -- saying so, as the thumbnail shows until then
+                assert.are.same({"Loading full-size cover..."}, helper.state.notifications)
             end)
 
             it("replaces the thumbnail once it arrives", function()
@@ -259,6 +261,12 @@ describe("DownloadPrompt", function()
                 assert.are.equal(CoverCache:getFullSize(book), prompt.fullscreen_file)
                 assert.are.equal(CoverCache:getFullSize(book), prompt.cover_container[1][1].file)
                 assert.are.equal(1, #runs)
+                assert.are.equal(1, #helper.state.notifications)
+
+                -- and says nothing once it's there
+                prompt:closeFullscreenCover()
+                prompt.cover_container:onTapCover()
+                assert.are.equal(1, #helper.state.notifications)
             end)
 
             it("leaves the thumbnail showing when it couldn't be downloaded", function()
