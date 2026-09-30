@@ -35,10 +35,14 @@ describe("KindleFetch", function()
 
     it("opens search from a gesture", function()
         UIManager:sendEvent(Event:new("KindleFetch"))
-        local plugin = H.plugin()
-        H.waitFor("the search dialog", 10, function()
-            return plugin.search_box and H.isShown(plugin.search_box)
+        local dialog = H.waitFor("the search dialog", 10, function()
+            return H.find(function(widget)
+                return widget.title == "Search Library Genesis" and widget.getInputText
+            end)
         end)
+
+        H.tapButton("Cancel", dialog)
+        assert(not H.isShown(dialog), "search dialog is still open")
     end)
 
     it("changes settings", function()

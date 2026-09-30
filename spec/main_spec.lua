@@ -111,8 +111,9 @@ describe("KindleFetch", function()
         helper.stub("api.lglisearch", {
             search = function(_, query, page)
                 table.insert(searches, {query, page})
+                -- books, error, and the page to carry on from
                 local result = search_results[page] or {{}}
-                return result[1], result[2]
+                return result[1], result[2], result[3]
             end
         })
         cancelled_downloads = 0
@@ -331,7 +332,7 @@ describe("KindleFetch", function()
 
         it("turns on wifi when offline, then searches once connected", function()
             helper.stubs.network.connected = false
-            search_results[1] = {{book("Dune")}}
+            search_results[1] = {{book("Dune")}, nil, 2}
             search(openUI(), "dune")
             assert.are.equal("turn wifi on", helper.stubs.network.prompted)
             assert.are.equal(0, #searches)
@@ -343,13 +344,20 @@ describe("KindleFetch", function()
         end)
 
         it("shows the books found, with a way to load more", function()
-            search_results[1] = {{book("Dune"), book("Dune Messiah")}}
+            search_results[1] = {{book("Dune"), book("Dune Messiah")}, nil, 2}
             search(openUI(), "  dune  ")
 
             assert.are.same({{"dune", 1}}, searches)
             assert.are.equal("Searching...", helper.state.notifications[1])
             assert.are.same({"Dune", "Dune Messiah", "Load more"}, itemTexts(menus[1]))
             assert.are.equal(menus[1], helper.lastShown())
+        end)
+
+        it("doesn't offer more books at the end of the results", function()
+            search_results[1] = {{book("Dune")}}
+            search(openUI(), "dune")
+
+            assert.are.same({"Dune"}, itemTexts(menus[1]))
         end)
 
         it("loads covers for each page shown", function()
@@ -395,17 +403,28 @@ describe("KindleFetch", function()
 
         before_each(function()
             plugin = openUI()
-            search_results[1] = {{book("Dune"), book("Dune Messiah")}}
+            search_results[1] = {{book("Dune"), book("Dune Messiah")}, nil, 2}
             search(plugin, "dune")
         end)
 
-        it("adds the next page of books to the list", function()
-            search_results[2] = {{book("Children of Dune")}}
+        it("adds the next books to the list", function()
+            search_results[2] = {{book("Children of Dune")}, nil, 4}
             loadMore()
 
             assert.are.same({{"dune", 1}, {"dune", 2}}, searches)
             assert.is_true(helper.wasClosed(menus[1]))
             assert.are.same({"Dune", "Dune Messiah", "Children of Dune", "Load more"}, itemTexts(menus[2]))
+        end)
+
+        it("carries on from where the last search stopped", function()
+            search_results[2] = {{book("Children of Dune")}, nil, 4}
+            loadMore()
+            search_results[4] = {{book("God Emperor of Dune")}}
+            loadMore()
+
+            assert.are.same({"dune", 4}, searches[3])
+            -- the end of the results
+            assert.are.same({"Dune", "Dune Messiah", "Children of Dune", "God Emperor of Dune"}, itemTexts(menus[3]))
         end)
 
         it("stays on the same page after an error", function()
@@ -425,8 +444,10 @@ describe("KindleFetch", function()
             assert.are.equal("No more books found", helper.lastNotification())
             assert.are.equal(1, #menus)
 
+            -- and doesn't search again
             loadMore()
-            assert.are.same({"dune", 2}, searches[3])
+            assert.are.equal(2, #searches)
+            assert.are.equal("No more books found", helper.lastNotification())
         end)
     end)
 

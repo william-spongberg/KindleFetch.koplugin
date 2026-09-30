@@ -181,9 +181,9 @@ function KindleFetch:performSearch()
 
     -- start search
     self.current_search_query = query
-    self.current_page = 1
-    local books, err = self:search(query, self.current_page)
+    local books, err, next_page = self:search(query, 1)
     self.books = books
+    self.next_page = next_page
 
     -- check for errors
     if err or not books then
@@ -201,7 +201,7 @@ function KindleFetch:performSearch()
 end
 
 function KindleFetch:search(query, page)
-    local books, err = LlgiSearch:search(query, page)
+    local books, err, next_page = LlgiSearch:search(query, page)
 
     if not books or type(books) ~= "table" then
         LogUtil.warn("API search failed for")
@@ -210,7 +210,7 @@ function KindleFetch:search(query, page)
 
     LogUtil.debug("API returned", #books, "raw books for", query, "page", page)
 
-    return books
+    return books, nil, next_page
 end
 
 function KindleFetch:showBooks(books)
@@ -226,12 +226,14 @@ function KindleFetch:showBooks(books)
         })
     end
 
-    table.insert(menu_items, {
-        text = _("Load more"),
-        callback = function()
-            self:loadMoreBooks()
-        end
-    })
+    if self.next_page then
+        table.insert(menu_items, {
+            text = _("Load more"),
+            callback = function()
+                self:loadMoreBooks()
+            end
+        })
+    end
 
     local menu
     menu = BookMenu:new{
@@ -262,21 +264,23 @@ function KindleFetch:showBooks(books)
 end
 
 function KindleFetch:loadMoreBooks()
-    self.current_page = self.current_page + 1
-
-    NotifyUtil.info("Loading more books...")
-
-    local books, err = self:search(self.current_search_query, self.current_page)
-
-    if err then
-        NotifyUtil.info("Error: " .. err)
-        self.current_page = self.current_page - 1
+    if not self.next_page then
+        NotifyUtil.info("No more books found")
         return
     end
 
+    NotifyUtil.info("Loading more books...")
+
+    local books, err, next_page = self:search(self.current_search_query, self.next_page)
+
+    if err then
+        NotifyUtil.info("Error: " .. err)
+        return
+    end
+
+    self.next_page = next_page
     if not books or #books == 0 then
         NotifyUtil.info("No more books found")
-        self.current_page = self.current_page - 1
         return
     end
 

@@ -27,7 +27,7 @@ describe("Downloading", function()
     end
 
     it("downloads a book and opens it", function()
-        local menu = H.searchUntil(H.QUERY, isEpubToDownload)
+        local menu = H.searchUntil(H.BOOK_QUERY, isEpubToDownload)
         local book = epubs(menu)[1]
 
         H.tapBook(menu, book)
@@ -58,7 +58,7 @@ describe("Downloading", function()
     end)
 
     it("shows a hidden download again when its book is chosen, and cancels it", function()
-        local menu = H.searchUntil(H.QUERY, isEpubToDownload)
+        local menu = H.searchUntil(H.BOOK_QUERY, isEpubToDownload)
         -- the biggest book, so it's still downloading when cancelled
         local books = epubs(menu)
         local book = books[#books]

@@ -188,8 +188,10 @@ function H.openMainMenu(path)
     end
 end
 
--- a public domain book to search for and download
-H.QUERY = "pride and prejudice austen"
+-- what to search for: a popular book, mostly in other languages on the first pages of Library Genesis' results
+H.SEARCH_QUERY = "harry potter and the chamber of secrets"
+-- a public domain book to search for and download, so the tests don't download books under copyright
+H.BOOK_QUERY = "pride and prejudice austen"
 
 -- whether a book is Jane Austen's own Pride and Prejudice, rather than one of the newer books based on it
 function H.isPublicDomain(book)

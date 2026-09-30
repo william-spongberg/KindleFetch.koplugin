@@ -9,7 +9,12 @@ local UrlApi = require("api.urlapi")
 local LlgiSearch = {}
 
 -- constants
-local RESULTS_PER_PAGE = 50
+local RESULTS_PER_PAGE = 100
+-- Library Genesis can't filter by language or file type, so a page of results may have few books to show.
+-- Searches read its pages until they have this many books...
+local MIN_BOOKS = 10
+-- ...or have read this many pages
+local MAX_PAGES = 5
 -- Library Genesis topics for each preferred book type
 local TOPICS = {
     fiction = "f",
@@ -123,15 +128,18 @@ local function languageNames(codes)
     return names
 end
 
+-- books in the preferred languages and file types, and the number of results on the page
 function LlgiSearch.parseResults(html, base_url, languages, file_types)
     local books = {}
     local tbody = html:match('id="tablelibgen".-<tbody>(.-)</tbody>')
     if not tbody then
-        return books
+        return books, 0
     end
 
     local language_names = languageNames(languages)
+    local results = 0
     for row in tbody:gmatch("<tr[^>]*>(.-)</tr>") do
+        results = results + 1
         local book = parseBook(StringUtil.convertHtmlToText(row), base_url)
         if book and isPreferred(book, language_names, file_types) then
             table.insert(books, book)
@@ -139,7 +147,7 @@ function LlgiSearch.parseResults(html, base_url, languages, file_types)
         end
     end
 
-    return books
+    return books, results
 end
 
 function LlgiSearch.buildParams(query, page, book_types)
@@ -160,38 +168,20 @@ local function isBlocked(html)
     return html:find("DDoS%-Guard") or html:find("Checking your browser", 1, true) or html:find("cf-chl", 1, true)
 end
 
--- main search function
-function LlgiSearch:search(query, page, retrying)
-    local languages = KindleFetchSettings:getPreferredLanguages()
-    local file_types = KindleFetchSettings:getPreferredFileTypes()
-    local book_types = KindleFetchSettings:getPreferredBookTypes()
-
-    -- check cache first
-    local cached = SearchCache:get(query, page, languages, file_types, book_types)
-    if cached then
-        return cached
-    end
-
+-- fetch a page of results from the first mirror that works, returning its html and the mirror
+local function fetchResults(params, retrying)
     local base_urls = UrlApi:getLibgenUrls()
     if not base_urls then
         return nil, "no Library Genesis urls available"
     end
 
-    local params = LlgiSearch.buildParams(query, page, book_types)
     local last_err
     for _, url in ipairs(base_urls) do
         LogUtil.debug("trying Library Genesis url:", url)
         local html, err = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
 
         if html and html:find('id="tablelibgen"', 1, true) then
-            local books = LlgiSearch.parseResults(html, url, languages, file_types)
-            LogUtil.debug("parsed", #books, "books for", query)
-
-            -- add new query result to cache before returning, unless empty as the page may have been an error
-            if #books > 0 then
-                SearchCache:set(books, query, page, languages, file_types, book_types)
-            end
-            return books
+            return html, nil, url
         end
 
         if html and isBlocked(html) then
@@ -207,10 +197,67 @@ function LlgiSearch:search(query, page, retrying)
 
     -- scrape new urls since all current have failed, and search again
     if not retrying and last_err ~= BLOCKED_ERROR then
-        return LlgiSearch:search(query, page, true)
+        return fetchResults(params, true)
     end
 
     return nil, last_err or "all Library Genesis mirrors failed"
 end
+
+-- search from the given page of Library Genesis' results, returning the books found and the page to carry on
+-- from, or nil once there are no more results
+function LlgiSearch:search(query, page)
+    local languages = KindleFetchSettings:getPreferredLanguages()
+    local file_types = KindleFetchSettings:getPreferredFileTypes()
+    local book_types = KindleFetchSettings:getPreferredBookTypes()
+
+    -- check cache first (ignoring results cached by older versions, which were just a list of books)
+    local cached = SearchCache:get(query, page, languages, file_types, book_types)
+    if cached and cached.books then
+        return cached.books, nil, cached.next_page
+    end
+
+    local books = {}
+    -- Library Genesis can list the same file more than once, e.g. for each edition it's in
+    local seen = {}
+    local next_page = page
+    for _ = 1, MAX_PAGES do
+        local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types))
+        if not html then
+            -- show the books found so far, carrying on from the page that failed
+            if #books > 0 then
+                break
+            end
+            return nil, err
+        end
+
+        local page_books, results = LlgiSearch.parseResults(html, url, languages, file_types)
+        LogUtil.debug("parsed", #page_books, "books from", results, "results for", query, "page", next_page)
+        for _, book in ipairs(page_books) do
+            if not seen[book.md5] then
+                seen[book.md5] = true
+                table.insert(books, book)
+            end
+        end
+
+        if results < RESULTS_PER_PAGE then
+            next_page = nil
+            break
+        end
+        next_page = next_page + 1
+        if #books >= MIN_BOOKS then
+            break
+        end
+    end
+
+    -- add new query result to cache before returning, unless empty as the page may have been an error
+    if #books > 0 then
+        SearchCache:set({
+            books = books,
+            next_page = next_page
+        }, query, page, languages, file_types, book_types)
+    end
+    return books, nil, next_page
+end
+
 
 return LlgiSearch
