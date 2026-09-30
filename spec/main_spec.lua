@@ -61,7 +61,10 @@ describe("KindleFetch", function()
             show_covers = true,
             download_dir = "/mnt/us/documents",
             last_version = "0.4",
-            check_for_updates = true
+            check_for_updates = true,
+            languages = {"en"},
+            file_types = {"epub"},
+            book_types = {"fiction"}
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
         saved = {}
@@ -82,6 +85,15 @@ describe("KindleFetch", function()
             end,
             setLastVersion = function(_, version)
                 settings.last_version = version
+            end,
+            getPreferredLanguages = function()
+                return settings.languages
+            end,
+            getPreferredFileTypes = function()
+                return settings.file_types
+            end,
+            getPreferredBookTypes = function()
+                return settings.book_types
             end
         })
 
@@ -355,6 +367,18 @@ describe("KindleFetch", function()
             assert.are.equal("Enter a search term first", helper.lastNotification())
             assert.are.equal(0, #searches)
         end)
+
+        -- as nothing could be found
+        for _, preference in ipairs({{"languages", "language"}, {"file_types", "file type"}, {"book_types", "book type"}}) do
+            it("says when every " .. preference[2] .. " is turned off, rather than searching", function()
+                settings[preference[1]] = {}
+                search(openUI(), "dune")
+
+                assert.are.equal(0, #searches)
+                assert.are.equal("Error: turn on at least one " .. preference[2] .. " in Kindle Fetch's settings",
+                    helper.lastNotification())
+            end)
+        end
 
         it("shows results saved from an earlier search without turning on wifi", function()
             helper.stubs.network.connected = false

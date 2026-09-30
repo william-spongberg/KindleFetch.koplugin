@@ -193,6 +193,16 @@ function KindleFetch:performSearch()
         return
     end
 
+    -- nothing can be found with every language, file type or book type turned off
+    local turned_off = #KindleFetchSettings:getPreferredLanguages() == 0 and _("language") or
+                           #KindleFetchSettings:getPreferredFileTypes() == 0 and _("file type") or
+                           #KindleFetchSettings:getPreferredBookTypes() == 0 and _("book type")
+    if turned_off then
+        LogUtil.warn("every", turned_off, "is turned off, so there's nothing to search for")
+        NotifyUtil.info(string.format(_("Error: turn on at least one %s in Kindle Fetch's settings"), turned_off))
+        return
+    end
+
     -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once connected,
     -- unless the results are saved from an earlier search
     if not NetworkMgr:isConnected() and not LlgiSearch:isCached(query, 1) then
