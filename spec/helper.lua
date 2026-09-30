@@ -301,6 +301,9 @@ local function createStubs(state)
         yieldToEPDC = function() end,
         scheduleIn = function(_, _, fn)
             table.insert(state.scheduled, fn)
+        end,
+        nextTick = function(_, fn)
+            table.insert(state.scheduled, fn)
         end
     }
 
@@ -463,7 +466,8 @@ local WIDGET_MODULES = {"ui/gesturerange", "ui/widget/container/centercontainer"
                         "ui/widget/container/framecontainer", "ui/widget/container/leftcontainer",
                         "ui/widget/verticalgroup", "ui/widget/horizontalgroup", "ui/widget/verticalspan",
                         "ui/widget/horizontalspan", "ui/widget/textboxwidget", "ui/widget/textwidget",
-                        "ui/widget/imagewidget", "ui/widget/button", "ui/widget/progresswidget"}
+                        "ui/widget/imagewidget", "ui/widget/button", "ui/widget/progresswidget",
+                        "ui/widget/confirmbox"}
 
 local CONSTANT_MODULES = {
     ["ui/font"] = {

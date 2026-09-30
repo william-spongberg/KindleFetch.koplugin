@@ -1,6 +1,7 @@
 local Dispatcher = require("dispatcher")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
+local ConfirmBox = require("ui/widget/confirmbox")
 local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
 local DownloadMgr = require("ui/downloadmgr")
@@ -297,12 +298,33 @@ local function buildDownloadPath(book)
     return download_dir .. "/" .. filename
 end
 
+function KindleFetch:openBook(filepath)
+    if self.books_menu then
+        UIManager:close(self.books_menu)
+    end
+
+    if self.ui.document then
+        self.ui:switchDocument(filepath)
+    else
+        self.ui:openFile(filepath)
+    end
+end
+
 function KindleFetch:downloadBook(book)
     local filepath = buildDownloadPath(book)
-    LlgiAPI:downloadBook(book, filepath, function(ok, err)
+    LlgiAPI:downloadBook(book, filepath, function(ok, err, saved_filepath)
         if ok then
-            LogUtil.debug("downloaded book")
-            NotifyUtil.info("Downloaded " .. book.title)
+            LogUtil.debug("downloaded book to", saved_filepath)
+            -- ask on the next tick, once the download progress has closed
+            UIManager:nextTick(function()
+                UIManager:show(ConfirmBox:new{
+                    text = string.format(_("Downloaded %s\nWould you like to read it now?"), book.title),
+                    ok_text = _("Read now"),
+                    ok_callback = function()
+                        self:openBook(saved_filepath)
+                    end
+                })
+            end)
         else
             LogUtil.warn("download failed for")
             NotifyUtil.info(err and ("Download failed: " .. err) or "Download failed")
