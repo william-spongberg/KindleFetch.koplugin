@@ -29,16 +29,19 @@ function UrlApi:getUrls(key, url, parse)
 
     local html, err = HttpUtil.getBody(url)
     if not html then
+        LogUtil.warn("could not look up mirrors on", url, "error:", err)
         return nil, err
     end
 
     local urls = parse(html)
 
     if urls then
+        LogUtil.info("found mirrors on", LogUtil.site(url) .. ":", table.concat(urls, ", "))
         UrlCache:set(urls, key)
         return urls
     end
 
+    LogUtil.warn("found no mirrors on", url, "(" .. #html .. " bytes)")
     return nil
 end
 
@@ -47,6 +50,7 @@ function UrlApi:getLibgenUrls()
 end
 
 function UrlApi:deleteLibgenUrl(url)
+    LogUtil.info("dropping mirror", LogUtil.site(url), "as it failed")
     return UrlCache:deleteValueFromKey(url, LIBGEN_KEY)
 end
 

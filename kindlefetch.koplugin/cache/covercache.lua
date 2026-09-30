@@ -140,8 +140,9 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_done)
             FileUtil.removeFile(path)
         end
     end
-    if exit_code ~= 0 then
-        LogUtil.warn("some cover downloads failed", CurlUtil.getErrorMeaning(exit_code))
+    if #downloaded < #filepaths then
+        LogUtil.warn(string.format("%d of %d covers didn't download: curl exit code %s (%s)",
+            #filepaths - #downloaded, #filepaths, tostring(exit_code), CurlUtil.getErrorMeaning(exit_code)))
     end
 
     on_done(downloaded)
@@ -151,7 +152,7 @@ local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs
     local pid, exit_file, config_file, err = CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, true,
         parallel_jobs, false, 15)
     if not pid then
-        LogUtil.warn("could not start cover downloads", err)
+        LogUtil.warn("could not start curl to download", #download_urls, "covers:", err)
         on_done({})
         return
     end

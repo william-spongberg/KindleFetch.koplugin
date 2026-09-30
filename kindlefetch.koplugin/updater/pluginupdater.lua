@@ -34,14 +34,16 @@ local function getUpdateInfo()
     -- output:  "tag_name": "v0.1"
     local tag = output:match('"tag_name"%s*:%s*"([^"]+)"')
     if not tag then
-        LogUtil.debug("failed to find tag name:", output)
+        -- e.g. GitHub's rate limit, or no connection
+        LogUtil.warn("could not read the latest release from GitHub:",
+            output == "" and "no response" or output:gsub("%s+", " "):sub(1, 300))
         return nil
     end
     tag = tag:gsub("^v", "")
 
     local version = VersionUtil.parseVersion(tag)
     if not version then
-        LogUtil.debug("failed to parse tag name:", tag)
+        LogUtil.warn("could not read the version of the latest release, tagged", tag)
         return nil
     end
 
@@ -74,7 +76,7 @@ end
 
 -- download plugin release from github
 local function downloadPluginRelease(version_str)
-    LogUtil.debug("downloading plugin release", version_str)
+    LogUtil.info("downloading KindleFetch", version_str)
     local download_url = string.format(REPO_DOWNLOAD_URL .. "/releases/download/v%s/%s.zip", version_str, PLUGIN_NAME)
     local zip_path = PathUtil.getTmpPath() .. "/" .. PLUGIN_NAME .. ".zip"
 
@@ -83,12 +85,12 @@ local function downloadPluginRelease(version_str)
     -- download the release zip
     local success, err = CurlUtil.download(download_url, zip_path, false, false)
     if not success then
-        LogUtil.warn("failed to download plugin release", download_url, version_str)
+        LogUtil.warn("could not download KindleFetch", version_str, "from", download_url, "error:", err)
         return nil, err
     end
 
     if not FileUtil.isValidFile(zip_path) then
-        LogUtil.warn("downloaded plugin file is invalid")
+        LogUtil.warn("downloaded KindleFetch", version_str, "is not a valid file:", zip_path, FileUtil.getSize(zip_path), "bytes")
         return nil, "downloaded plugin file is invalid"
     end
 
@@ -98,14 +100,14 @@ end
 
 -- extract and install plugin from zip
 local function installPluginRelease(plugin_path, zip_path, version_str)
-    LogUtil.debug("installing plugin release from", zip_path)
+    LogUtil.info("installing KindleFetch from", zip_path, "to", plugin_path)
 
     -- extract zip to temp directory (use -d rather than cd, as paths may be relative to the koreader dir)
     local tmp_path = PathUtil.getTmpPath()
     local extract_cmd = string.format("unzip -q -o %s -d %s", CurlUtil.shellQuote(zip_path),
         CurlUtil.shellQuote(tmp_path))
     if os.execute(extract_cmd .. " 2>/dev/null") ~= 0 then
-        LogUtil.warn("failed to extract plugin zip")
+        LogUtil.warn("could not unzip", zip_path)
         return false
     end
 
@@ -122,7 +124,7 @@ local function installPluginRelease(plugin_path, zip_path, version_str)
         LogUtil.debug("backing up current plugin to", backup_dir)
         if os.execute(string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(plugin_path),
             CurlUtil.shellQuote(backup_dir))) ~= 0 then
-            LogUtil.warn("failed to backup current plugin")
+            LogUtil.warn("could not back up the installed plugin to", backup_dir)
             return false
         end
     end
@@ -131,7 +133,7 @@ local function installPluginRelease(plugin_path, zip_path, version_str)
     LogUtil.debug("installing new plugin to", plugin_path)
     if os.execute(string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(extracted_dir),
         CurlUtil.shellQuote(plugin_path))) ~= 0 then
-        LogUtil.warn("failed to move extracted plugin to plugin directory")
+        LogUtil.warn("could not move", extracted_dir, "to", plugin_path)
         -- restore backup
         if FileUtil.isValidDirectory(backup_dir) then
             os.execute(string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(backup_dir),
@@ -145,14 +147,14 @@ local function installPluginRelease(plugin_path, zip_path, version_str)
 
     -- write new version to version file
     if not FileUtil.writeFile(plugin_path .. "/version.txt", version_str) then
-        LogUtil.warn("failed to write version file")
+        LogUtil.warn("could not write", plugin_path .. "/version.txt")
         return false
     end
 
     -- cleanup temp directory
     os.execute(string.format("rm -rf %s 2>/dev/null", CurlUtil.shellQuote(tmp_path)))
 
-    LogUtil.debug("plugin installation completed successfully")
+    LogUtil.info("installed KindleFetch", version_str)
     return true
 end
 
@@ -201,7 +203,7 @@ local function promptPluginUpdate(plugin_path, installed_version, available_upda
             text = _("Cancel"),
             callback = function()
                 UIManager:close(confirm_dialog)
-                LogUtil.debug("user declined plugin update")
+                LogUtil.info("KindleFetch update declined")
             end
         }, {
             text = _("Update"),
@@ -222,7 +224,7 @@ function PluginUpdater.checkForUpdates(user_requested)
         LogUtil.debug("running in emulator, skipping plugin version check")
         return true
     end
-    LogUtil.debug("checking for plugin updates")
+    LogUtil.debug("checking for plugin updates from", REPO_VERSION_URL)
 
     local plugin_path = PathUtil.getPluginPath()
 
@@ -234,17 +236,14 @@ function PluginUpdater.checkForUpdates(user_requested)
 
     local repo_update = getUpdateInfo()
     if not repo_update then
-        LogUtil.warn("failed to fetch repo update info")
+        LogUtil.warn("could not check for KindleFetch updates")
         if user_requested then
             NotifyUtil.info("Failed to fetch updates for KindleFetch")
         end
         return false
     end
 
-    LogUtil.debug("KindleFetch:", "plugin version check", {
-        installed = installed_version.str,
-        available = repo_update.version.str
-    })
+    LogUtil.info("KindleFetch", installed_version.str, "is installed, and the latest release is", repo_update.version.str)
 
     local cmp = VersionUtil.compareVersions(installed_version, repo_update.version)
     if cmp >= 0 then
@@ -256,7 +255,7 @@ function PluginUpdater.checkForUpdates(user_requested)
     end
 
     -- update available
-    LogUtil.debug("new plugin version available", repo_update.version.str)
+    LogUtil.info("offering to update KindleFetch to", repo_update.version.str)
     return promptPluginUpdate(plugin_path, installed_version.str, repo_update)
 end
 

@@ -35,12 +35,22 @@ describe("HttpUtil", function()
         assert.are.equal(10, http.TIMEOUT)
     end)
 
-    it("returns the error when the request fails", function()
+    it("returns the HTTP status, e.g. of an error page", function()
+        respond({"<html>Forbidden</html>", 1, 403})
+
+        local body, err, status = HttpUtil.getBody("https://libgen.example")
+        assert.are.equal("<html>Forbidden</html>", body)
+        assert.is_nil(err)
+        assert.are.equal(403, status)
+    end)
+
+    it("returns the error when the request fails, and logs it", function()
         respond({"", nil, "timeout"})
 
         local body, err = HttpUtil.getBody("https://libgen.example")
         assert.is_nil(body)
         assert.are.equal("timeout", err)
+        assert.are.equal("could not fetch https://libgen.example error: timeout", helper.logged("warn", "^could not fetch"))
     end)
 
     it("treats an empty page as a failure", function()
@@ -56,13 +66,18 @@ describe("HttpUtil", function()
         assert.are.equal("http://proxy.example:8080", requests[2].proxy)
     end)
 
-    it("returns the proxy error when both requests fail", function()
-        helper.state.env.PROXY_URL = "http://proxy.example:8080"
+    it("returns the proxy error when both requests fail, without logging the proxy's address", function()
+        helper.state.env.PROXY_URL = "http://user:secret@proxy.example:8080"
         respond({"", nil, "connection refused"}, {"", nil, "proxy unreachable"})
 
         local body, err = HttpUtil.getBody("https://libgen.example")
         assert.is_nil(body)
         assert.are.equal("proxy unreachable", err)
+        for _, log in ipairs(helper.state.logs) do
+            for i = 3, #log do
+                assert.is_nil(tostring(log[i]):find("secret", 1, true))
+            end
+        end
     end)
 
     it("does not use a proxy when PROXY_URL is not set", function()

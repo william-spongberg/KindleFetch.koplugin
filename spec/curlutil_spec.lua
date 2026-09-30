@@ -42,6 +42,13 @@ describe("CurlUtil", function()
         assert.are.equal("(curl exit code 99)", CurlUtil.getErrorMeaning(99))
     end)
 
+    it("reads curl's version", function()
+        helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
+        assert.are.equal("8.17.0", CurlUtil.getVersion())
+        helper.stubCommand("curl --version", "")
+        assert.is_nil(CurlUtil.getVersion())
+    end)
+
     describe("processes", function()
         it("detects whether a process is running and can kill it", function()
             local pipe = io.popen("sleep 30 > /dev/null 2>&1 & echo $!")
