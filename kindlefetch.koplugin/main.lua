@@ -193,8 +193,9 @@ function KindleFetch:performSearch()
         return
     end
 
-    -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once connected
-    if not NetworkMgr:isConnected() then
+    -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once connected,
+    -- unless the results are saved from an earlier search
+    if not NetworkMgr:isConnected() and not LlgiSearch:isCached(query, 1) then
         NetworkMgr:runWhenConnected(function()
             self:performSearch()
         end)
@@ -291,6 +292,14 @@ end
 function KindleFetch:loadMoreBooks()
     if not self.next_page then
         NotifyUtil.info("No more books found")
+        return
+    end
+
+    -- turn on wifi first if need be, unless the next page is saved from an earlier search
+    if not NetworkMgr:isConnected() and not LlgiSearch:isCached(self.current_search_query, self.next_page) then
+        NetworkMgr:runWhenConnected(function()
+            self:loadMoreBooks()
+        end)
         return
     end
 

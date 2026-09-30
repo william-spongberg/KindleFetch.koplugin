@@ -313,6 +313,16 @@ describe("LlgiSearch", function()
             assert.are.equal(1, #searches())
         end)
 
+        it("says whether a search's results are saved, e.g. to show them offline", function()
+            results(mirrors[1], {fixtures.DUNE})
+            assert.is_false(LlgiSearch:isCached("dune", 1))
+
+            LlgiSearch:search("dune", 1)
+            assert.is_true(LlgiSearch:isCached("dune", 1))
+            assert.is_false(LlgiSearch:isCached("dune", 2))
+            assert.is_false(LlgiSearch:isCached("dune messiah", 1))
+        end)
+
         it("does not cache searches that found nothing", function()
             results(mirrors[1], {})
             assert.are.same({}, LlgiSearch:search("dune", 1))
@@ -380,12 +390,24 @@ describe("LlgiSearch", function()
             assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
         end)
 
-        it("fails when the mirrors cannot be scraped", function()
+        it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()
             web.wikipedia_down = true
 
             local books, err = LlgiSearch:search("dune", 1)
             assert.is_nil(books)
-            assert.are.equal("no Library Genesis urls available", err)
+            assert.are.equal("no internet connection", err)
+        end)
+
+        -- rather than forgetting every mirror while offline
+        it("keeps the mirrors when nothing answers", function()
+            local UrlApi = require("api.urlapi")
+            UrlApi:getLibgenUrls()
+            web.wikipedia_down = true
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal("no internet connection", err)
+            assert.are.same(mirrors, UrlApi:getLibgenUrls())
         end)
 
         -- catches Library Genesis changing its results page, like Anna's Archive blocking searches did (#24)

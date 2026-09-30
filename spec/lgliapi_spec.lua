@@ -334,14 +334,42 @@ describe("LlgiAPI", function()
             download()
             assert.are.same({{ok = false, err = "no Library Genesis download link found"}}, results)
             assert.are.same({}, LlgiAPI:getActiveDownloads())
+            -- the mirrors answered, so they aren't looked up again
+            assert.are.equal(1, web.scrapes)
         end)
 
-        it("fails when the mirrors cannot be scraped", function()
+        it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()
             web.wikipedia_down = true
 
             download()
-            assert.are.same({{ok = false, err = "no Library Genesis urls available"}}, results)
+            assert.are.same({{ok = false, err = "no internet connection"}}, results)
             assert.is_true(helper.wasClosed(helper.lastShown()))
+        end)
+
+        -- rather than forgetting every mirror while offline
+        it("keeps the mirrors when nothing answers", function()
+            UrlApi:getLibgenUrls()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[adsUrl(mirror)] = nil
+            end
+            web.wikipedia_down = true
+
+            download()
+            assert.are.same({{ok = false, err = "no internet connection"}}, results)
+            assert.are.same(mirrors, UrlApi:getLibgenUrls())
+        end)
+
+        it("turns on wifi first when offline, then downloads once connected", function()
+            hasBook(mirrors[1])
+            helper.stubs.network.connected = false
+
+            download()
+            assert.are.equal("turn wifi on", helper.stubs.network.prompted)
+            assert.are.same({}, spawned)
+
+            helper.stubs.network.connected = true
+            helper.stubs.network.when_connected()
+            assert.are.equal(getUrl(mirrors[1]), spawned[1].url)
         end)
 
         it("fails when curl cannot be started", function()

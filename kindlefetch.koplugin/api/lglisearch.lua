@@ -168,17 +168,25 @@ local function isBlocked(html)
 end
 
 -- fetch a page of results from the first mirror that works, returning its html and the mirror
-local function fetchResults(params, retrying)
-    local base_urls = UrlApi:getLibgenUrls()
+local function fetchResults(params, refresh)
+    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(refresh)
     if not base_urls then
-        return nil, "no Library Genesis urls available"
+        return nil, urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or
+                        "no Library Genesis urls available"
     end
 
     local last_err
+    -- mirrors that didn't answer at all, which may be down, or the device may be offline
+    local unanswered = {}
+    local answered = false
     for _, url in ipairs(base_urls) do
         local html, err, status = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
+        answered = answered or html ~= nil or status ~= nil
 
         if html and html:find('id="tablelibgen"', 1, true) then
+            for _, unanswered_url in ipairs(unanswered) do
+                UrlApi:deleteLibgenUrl(unanswered_url)
+            end
             return html, nil, url
         end
 
@@ -186,20 +194,30 @@ local function fetchResults(params, retrying)
             LogUtil.warn("searching", LogUtil.site(url), "was blocked by its DDoS protection (HTTP", status, #html,
                 "bytes)")
             last_err = BLOCKED_ERROR
-        else
+        elseif html or status then
+            -- it answered, but not with results: e.g. an error page, or a page Library Genesis has changed the layout of
             if html then
-                -- e.g. an error page, or a page Library Genesis has changed the layout of
                 LogUtil.warn("unexpected search page from", LogUtil.site(url) .. ": HTTP", status, #html, "bytes:",
                     html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200))
             end
             last_err = err or "unexpected response from Library Genesis"
-            -- delete from url cache
+            UrlApi:deleteLibgenUrl(url)
+        else
+            table.insert(unanswered, url)
+            last_err = err
+        end
+    end
+
+    -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
+    -- are down. otherwise the device may be offline, so keep them
+    if answered or refresh then
+        for _, url in ipairs(unanswered) do
             UrlApi:deleteLibgenUrl(url)
         end
     end
 
-    -- scrape new urls since all current have failed, and search again
-    if not retrying and last_err ~= BLOCKED_ERROR then
+    -- look the mirrors up again, in case they've moved, and search again
+    if not refresh and last_err ~= BLOCKED_ERROR then
         LogUtil.info("every mirror failed, looking them up again")
         return fetchResults(params, true)
     end
@@ -209,6 +227,13 @@ end
 
 -- search from the given page of Library Genesis' results, returning the books found and the page to carry on
 -- from, or nil once there are no more results
+-- whether there are results saved from an earlier search, which can be shown without an internet connection
+function LlgiSearch:isCached(query, page)
+    local cached = SearchCache:get(query, page, KindleFetchSettings:getPreferredLanguages(),
+        KindleFetchSettings:getPreferredFileTypes(), KindleFetchSettings:getPreferredBookTypes())
+    return cached ~= nil and cached.books ~= nil
+end
+
 function LlgiSearch:search(query, page)
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()

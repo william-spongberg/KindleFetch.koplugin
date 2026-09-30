@@ -4,6 +4,8 @@ local fixtures = require("fixtures")
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
     local cancelled_downloads
+    -- pages of results saved from earlier searches, as "query page"
+    local saved
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
     local opened
@@ -62,6 +64,7 @@ describe("KindleFetch", function()
             check_for_updates = true
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
+        saved = {}
 
         helper.stub("settings.settings", {
             load = function() end,
@@ -114,6 +117,9 @@ describe("KindleFetch", function()
                 -- books, error, and the page to carry on from
                 local result = search_results[page] or {{}}
                 return result[1], result[2], result[3]
+            end,
+            isCached = function(_, query, page)
+                return saved[query .. " " .. page] == true
             end
         })
         cancelled_downloads = 0
@@ -350,6 +356,17 @@ describe("KindleFetch", function()
             assert.are.equal(0, #searches)
         end)
 
+        it("shows results saved from an earlier search without turning on wifi", function()
+            helper.stubs.network.connected = false
+            saved["dune 1"] = true
+            search_results[1] = {{book("Dune")}}
+            search(openUI(), "dune")
+
+            assert.is_nil(helper.stubs.network.prompted)
+            assert.are.same({{"dune", 1}}, searches)
+            assert.are.same({"Dune"}, itemTexts(menus[1]))
+        end)
+
         it("turns on wifi when offline, then searches once connected", function()
             helper.stubs.network.connected = false
             search_results[1] = {{book("Dune")}, nil, 2}
@@ -445,6 +462,28 @@ describe("KindleFetch", function()
             assert.are.same({"dune", 4}, searches[3])
             -- the end of the results
             assert.are.same({"Dune", "Dune Messiah", "Children of Dune", "God Emperor of Dune"}, itemTexts(menus[3]))
+        end)
+
+        it("turns on wifi first when offline, then loads them once connected", function()
+            helper.stubs.network.connected = false
+            search_results[2] = {{book("Children of Dune")}}
+            loadMore()
+            assert.are.equal("turn wifi on", helper.stubs.network.prompted)
+            assert.are.equal(1, #searches)
+
+            helper.stubs.network.connected = true
+            helper.stubs.network.when_connected()
+            assert.are.same({"dune", 2}, searches[2])
+        end)
+
+        it("loads the next books without wifi when they're saved from an earlier search", function()
+            helper.stubs.network.connected = false
+            saved["dune 2"] = true
+            search_results[2] = {{book("Children of Dune")}}
+            loadMore()
+
+            assert.is_nil(helper.stubs.network.prompted)
+            assert.are.same({"dune", 2}, searches[2])
         end)
 
         it("stays on the same page after an error", function()
