@@ -328,8 +328,12 @@ local function buildDownloadPath(book)
 end
 
 function KindleFetch:openBook(filepath)
+    -- close the results and the search box behind them too, which would otherwise show again once the book is closed
     if self.books_menu then
         UIManager:close(self.books_menu)
+    end
+    if self.search_box then
+        UIManager:close(self.search_box)
     end
 
     if self.ui.document then

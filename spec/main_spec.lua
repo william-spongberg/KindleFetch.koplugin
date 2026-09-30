@@ -514,7 +514,9 @@ describe("KindleFetch", function()
             read_now.callback()
             assert.is_true(helper.wasClosed(dialog))
             assert.are.same({"openFile", "/mnt/us/books/Dune.epub"}, opened)
+            -- closing the search box too, which would otherwise show again once the book is closed
             assert.is_true(helper.wasClosed(menus[1]))
+            assert.is_true(helper.wasClosed(plugin.search_box))
         end)
 
         it("closes the offer to read the book when cancelled", function()
