@@ -12,6 +12,7 @@ local Button = require("ui/widget/button")
 local ButtonTable = require("ui/widget/buttontable")
 local TextWidget = require("ui/widget/textwidget")
 local ImageWidget = require("ui/widget/imagewidget")
+local Notification = require("ui/widget/notification")
 local DownloadMgr = require("ui/downloadmgr")
 local Font = require("ui/font")
 local Size = require("ui/size")
@@ -19,7 +20,6 @@ local Geom = require("ui/geometry")
 local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
 local LogUtil = require("util.logutil")
-local NotifyUtil = require("util.notifyutil")
 local CoverCache = require("cache.covercache")
 local CoverPlaceholder = require("ui.coverplaceholder")
 local _ = require("gettext")
@@ -194,6 +194,11 @@ function DownloadPrompt:refreshCover()
     self:buildCover()
     self.body[1] = self:buildContent()
     UIManager:setDirty(self.outer_container, "ui")
+
+    -- stop saying the full-size cover is loading once it's arrived, or couldn't be downloaded
+    if not CoverCache:isFullSizeComing(self.book) then
+        self:closeLoadingNotice()
+    end
 
     -- show the full-size cover fullscreen too, if it arrived while the thumbnail was showing
     if self.fullscreen_cover_shown and self.fullscreen_file ~= self:coverFile() then
@@ -430,9 +435,21 @@ function DownloadPrompt:showFullscreenCover()
 
     UIManager:show(self.fullscreen_container)
     UIManager:setDirty(self.fullscreen_container, "full")
-    -- over the thumbnail, so it's clear something is happening
+    -- over the thumbnail until the full-size cover arrives, so it's clear something is happening (rather than closing
+    -- after a couple of seconds like other notifications)
     if loading_full_size then
-        NotifyUtil.info(_("Loading full-size cover..."))
+        self.loading_notice = Notification:new{
+            text = _("Loading full-size cover..."),
+            timeout = false
+        }
+        UIManager:show(self.loading_notice)
+    end
+end
+
+function DownloadPrompt:closeLoadingNotice()
+    if self.loading_notice then
+        UIManager:close(self.loading_notice)
+        self.loading_notice = nil
     end
 end
 
@@ -442,6 +459,7 @@ function DownloadPrompt:closeFullscreenCover()
     end
 
     self.fullscreen_cover_shown = false
+    self:closeLoadingNotice()
     UIManager:close(self.fullscreen_container)
     UIManager:setDirty(self.fullscreen_container, "full")
 end

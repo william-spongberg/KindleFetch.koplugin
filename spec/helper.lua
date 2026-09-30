@@ -335,6 +335,11 @@ local function createStubs(state)
         SOURCE_ALWAYS_SHOW = 1,
         notify = function(_, text)
             table.insert(state.notifications, text)
+        end,
+        -- a notification shown and closed by the plugin itself
+        new = function(_, notification)
+            notification.is_notification = true
+            return notification
         end
     }
 

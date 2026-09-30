@@ -75,6 +75,12 @@ function CoverCache:downloadFullSize(book)
     return cover ~= nil and self:downloadMultiple({cover}, 1)
 end
 
+-- whether the book's full-size cover is still on its way, once asked for
+function CoverCache:isFullSizeComing(book)
+    local cover = fullSizeCover(book)
+    return cover ~= nil and self:isComing(cover)
+end
+
 -- whether a cover for the book is on its way, so worth showing a placeholder for
 function CoverCache:isComing(book)
     return book.image_url ~= nil and not unavailable[book.md5] and not self:cacheExists(book.md5)
