@@ -181,6 +181,19 @@ function KindleFetch:addToMainMenu(menu_items)
                 end,
             },
             {
+                -- where a download that was hidden can be shown again, without finding its book again
+                text_func = function()
+                    local count = #LlgiAPI:getActiveDownloads()
+                    return count > 0 and string.format(_("Downloads (%d)"), count) or _("Downloads")
+                end,
+                enabled_func = function()
+                    return #LlgiAPI:getActiveDownloads() > 0
+                end,
+                callback = function()
+                    self:showDownloads()
+                end,
+            },
+            {
                 text = _("Settings"),
                 callback = function()
                     SettingsPage:showSettings()
@@ -194,6 +207,43 @@ function KindleFetch:addToMainMenu(menu_items)
             },
         },
     }
+end
+
+-- show the progress of the download in progress, or list them to choose from when there are several
+function KindleFetch:showDownloads()
+    local downloads = LlgiAPI:getActiveDownloads()
+    if #downloads == 0 then
+        NotifyUtil.info(_("No downloads in progress"))
+        return
+    end
+    if #downloads == 1 then
+        LlgiAPI:showDownload(downloads[1].id)
+        return
+    end
+
+    local dialog
+    local buttons = {}
+    for _, download in ipairs(downloads) do
+        -- how far along it is, or what it's doing when that isn't known
+        local percentage = download.widget.percentage or 0
+        local progress = percentage > 0 and string.format("%d%%", math.floor(percentage * 100))
+            or download.widget.status_text
+        table.insert(buttons, {
+            {
+                text = download.title .. " · " .. progress,
+                callback = function()
+                    UIManager:close(dialog)
+                    LlgiAPI:showDownload(download.id)
+                end,
+            },
+        })
+    end
+    dialog = ButtonDialog:new {
+        title = _("Downloads"),
+        title_align = "center",
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
 end
 
 function KindleFetch:setupUI()

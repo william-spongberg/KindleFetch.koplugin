@@ -3,6 +3,8 @@ local helper = require("helper")
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
     local cancelled_downloads, curl_check_user_requested, leftovers_removed
+    -- the downloads LlgiAPI says are in progress, and those it was asked to show the progress of
+    local active_downloads, downloads_shown
     -- whether searches can be called off, and the widget that calls each one off when tapped (false without one)
     local can_cancel, trap_widgets
     -- pages of results saved from earlier searches, as "query page"
@@ -160,6 +162,7 @@ describe("KindleFetch", function()
         })
         cancelled_downloads = 0
         curl_check_user_requested = nil
+        active_downloads, downloads_shown = {}, {}
 
         FileManager = {
             instance = {
@@ -178,6 +181,13 @@ describe("KindleFetch", function()
         helper.stub("api.lgliapi", {
             cancelAllDownloads = function()
                 cancelled_downloads = cancelled_downloads + 1
+            end,
+            getActiveDownloads = function()
+                return active_downloads
+            end,
+            showDownload = function(_, id)
+                table.insert(downloads_shown, id)
+                return true
             end,
             downloadBook = function(_, download_book, filepath, callback, open_existing)
                 table.insert(downloads, {
@@ -397,11 +407,68 @@ describe("KindleFetch", function()
             plugin:addToMainMenu(menu_items)
             assert.are.equal("Kindle Fetch", menu_items.kindlefetch.text)
             for _, item in ipairs(menu_items.kindlefetch.sub_item_table) do
-                if item.text == text then
+                if (item.text or item.text_func()) == text then
                     return item
                 end
             end
         end
+
+        -- where a download that was hidden can be shown again, without finding its book again
+        describe("downloads", function()
+            local function downloading(title, percentage, status_text)
+                table.insert(active_downloads, {
+                    id = title:lower(),
+                    title = title,
+                    widget = {
+                        percentage = percentage,
+                        status_text = status_text,
+                    },
+                })
+            end
+
+            it("can't be chosen while nothing is downloading", function()
+                local item = menuItem(openUI(), "Downloads")
+                assert.is_false(item.enabled_func())
+
+                -- but says so if it is all the same, e.g. as the last download finishes
+                item.callback()
+                assert.are.equal("No downloads in progress", helper.lastNotification())
+            end)
+
+            it("says how many books are downloading", function()
+                downloading("Dune", 0.5)
+                downloading("Emma", 0.25)
+
+                local item = menuItem(openUI(), "Downloads (2)")
+                assert.is_true(item.enabled_func())
+            end)
+
+            it("shows the progress of the book that is downloading", function()
+                downloading("Dune", 0.5)
+                menuItem(openUI(), "Downloads (1)").callback()
+
+                assert.are.same({ "dune" }, downloads_shown)
+                assert.are.equal(0, #helper.state.shown)
+            end)
+
+            it("lists the books that are downloading when there are several, to choose which to show", function()
+                downloading("Dune", 0.456, "45% · 0.5 / 1.1 MB")
+                downloading("Emma", 0, "Starting download...")
+                downloading("Persuasion", 0, "2.0 MB")
+                menuItem(openUI(), "Downloads (3)").callback()
+
+                local dialog = helper.lastShown()
+                assert.are.equal("Downloads", dialog.title)
+                assert.are.same(
+                    { "Dune · 45%", "Emma · Starting download...", "Persuasion · 2.0 MB" },
+                    { dialog.buttons[1][1].text, dialog.buttons[2][1].text, dialog.buttons[3][1].text }
+                )
+
+                dialog.buttons[2][1].callback()
+                assert.is_true(helper.wasClosed(dialog))
+                assert.are.same({ "emma" }, downloads_shown)
+            end)
+        end)
 
         it("opens the search dialog", function()
             local plugin = openUI()

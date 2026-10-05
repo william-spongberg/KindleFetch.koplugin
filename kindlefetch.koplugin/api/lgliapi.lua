@@ -370,11 +370,7 @@ function LlgiAPI:downloadBook(book, filepath, callback, open_existing)
     callback = callback or function() end
 
     -- show the progress of a book that is already downloading, in case it was hidden
-    local active_download = LlgiAPI.active_downloads[book.md5]
-    if active_download then
-        if not active_download.progress_widget.is_visible then
-            active_download.progress_widget:toggleVisibility()
-        end
+    if self:showDownload(book.md5) then
         return
     end
 
@@ -424,6 +420,20 @@ function LlgiAPI:downloadBook(book, filepath, callback, open_existing)
     prompt:show()
 end
 
+-- show the progress of a download, if it was hidden. returns whether the book with that md5 is downloading
+function LlgiAPI:showDownload(md5)
+    local active_download = self.active_downloads[md5]
+    if not active_download then
+        return false
+    end
+
+    if not active_download.progress_widget.is_visible then
+        active_download.progress_widget:toggleVisibility()
+    end
+    return true
+end
+
+-- the downloads in progress, in the order they were started
 function LlgiAPI:getActiveDownloads()
     local downloads = {}
     for id, download_info in pairs(self.active_downloads) do
@@ -433,8 +443,15 @@ function LlgiAPI:getActiveDownloads()
             filepath = download_info.filepath,
             md5 = download_info.book.md5,
             widget = download_info.progress_widget,
+            started = download_info.started,
         })
     end
+    table.sort(downloads, function(a, b)
+        if a.started ~= b.started then
+            return a.started < b.started
+        end
+        return a.title < b.title
+    end)
     return downloads
 end
 

@@ -18,7 +18,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Preferences**: Filter results by preferred languages, file types, and book types
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders while they download; tap a cover in the download prompt to see it full size
 - **Download Progress**: Visual download progress bar with real-time file size information
-- **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download and choose its book again to see its progress, and downloads are cancelled when KOReader closes
+- **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch, in KOReader's gesture manager)
 - **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available on Kindles
@@ -57,7 +57,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 <img width="400" alt="Download prompt" src="docs/screenshots/06-download-prompt.png" />
 <img width="400" alt="Fullscreen cover" src="docs/screenshots/07-download-cover.png" />
 
-4. Monitor the download's progress; tap Hide to keep it downloading in the background (choose the book again to see its progress) or Cancel to stop it.
+4. Monitor the download's progress; tap Hide to keep it downloading in the background (to see its progress again, choose **Search → Kindle Fetch → Downloads**, or the book again) or Cancel to stop it.
 
 <img width="400" alt="Download progress" src="docs/screenshots/08-download-progress.png" />
 

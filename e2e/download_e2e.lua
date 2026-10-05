@@ -107,29 +107,47 @@ describe("Downloading", function()
         H.shot("reading")
     end)
 
-    it("shows a hidden download again when its book is chosen, and cancels it", function()
+    it("shows a hidden download again from the menu or when its book is chosen, and cancels it", function()
         local menu = H.searchUntil(H.BOOK_QUERY, isEpubToDownload)
-        -- the biggest book, so it's still downloading when cancelled
-        local books = epubs(menu)
-        local book = books[#books]
+        local book = epubs(menu)[1]
 
-        H.tapBook(menu, book)
-        H.waitFor("the download prompt", 60, function()
-            return H.findButton("Download")
+        -- have curl download slowly, so even a small book is still downloading by the time it's been hidden, shown
+        -- again and cancelled
+        local CurlUtil = require("util.curlutil")
+        local pretendBrowser = CurlUtil.pretendBrowser
+        CurlUtil.pretendBrowser = function(cmd)
+            return pretendBrowser(cmd) .. " --limit-rate 5k"
+        end
+
+        local ok, err = pcall(function()
+            H.tapBook(menu, book)
+            H.waitFor("the download prompt", 60, function()
+                return H.findButton("Download")
+            end)
+            confirmDownload()
+            waitForDownload("the download progress", 60, isDownloadShowing)
+            H.shot("download-progress")
+
+            H.tapButton("Hide")
+            assert(not isDownloadShowing(), "the download progress is still showing")
+
+            -- from Kindle Fetch's menu, which says how many books are downloading
+            H.openMainMenu({ "Kindle Fetch", "Downloads (1)" })
+            H.waitFor("the download progress to show again", 10, isDownloadShowing)
+            H.tapButton("Hide")
+            assert(not isDownloadShowing(), "the download progress is still showing")
+
+            H.tapBook(menu, book)
+            H.waitFor("the download progress to show again", 10, isDownloadShowing)
+
+            local since = #H.notifications
+            H.tapButton("Cancel")
+            H.waitForNotification("Download cancelled", 30, since)
+            H.eq(0, #require("api.lgliapi"):getActiveDownloads(), "downloads in progress")
         end)
-        confirmDownload()
-        waitForDownload("the download progress", 60, isDownloadShowing)
-        H.shot("download-progress")
-
-        H.tapButton("Hide")
-        assert(not isDownloadShowing(), "the download progress is still showing")
-
-        H.tapBook(menu, book)
-        H.waitFor("the download progress to show again", 10, isDownloadShowing)
-
-        local since = #H.notifications
-        H.tapButton("Cancel")
-        H.waitForNotification("Download cancelled", 30, since)
-        H.eq(0, #require("api.lgliapi"):getActiveDownloads(), "downloads in progress")
+        CurlUtil.pretendBrowser = pretendBrowser
+        if not ok then
+            error(err, 0)
+        end
     end)
 end)
