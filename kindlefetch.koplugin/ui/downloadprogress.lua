@@ -130,12 +130,29 @@ function DownloadProgress:build()
     }
 end
 
+-- show the widget, refreshing only the part of the screen it takes up, as a download refreshes it twice a second
+-- and an e-ink screen is slow to
+function DownloadProgress:_show()
+    UIManager:show(self.container)
+    UIManager:setDirty(self.container, function()
+        return "ui", self.frame.dimen
+    end)
+end
+
+-- take the widget off the screen, refreshing only where it was
+function DownloadProgress:_close()
+    local frame = self.frame
+    UIManager:close(self.container)
+    UIManager:setDirty(nil, function()
+        return "ui", frame.dimen
+    end)
+end
+
 function DownloadProgress:show()
     if not self.is_visible then
         return
     end
-    UIManager:show(self.container)
-    UIManager:setDirty(self.container, "full")
+    self:_show()
 end
 
 -- toggle visibility of the progress widget
@@ -143,11 +160,10 @@ function DownloadProgress:toggleVisibility()
     self.is_visible = not self.is_visible
     if self.is_visible then
         self:build()
-        UIManager:show(self.container)
+        self:_show()
     else
-        UIManager:close(self.container)
+        self:_close()
     end
-    UIManager:setDirty(self.container, "ui")
 end
 
 -- update percentage text and force repaint
@@ -157,11 +173,13 @@ function DownloadProgress:update(percentage, status_text)
     end
 
     -- keep track of progress while hidden, for when it's shown again
+    local changed = percentage ~= self.percentage or (status_text ~= nil and status_text ~= self.status_text)
     self.percentage = percentage
     if status_text then
         self.status_text = status_text
     end
-    if not self.is_visible then
+    -- nothing to redraw when it's off screen, or says the same as it did
+    if not self.is_visible or not changed then
         return
     end
 
@@ -169,7 +187,9 @@ function DownloadProgress:update(percentage, status_text)
     if status_text then
         self.status_widget:setText(status_text)
     end
-    UIManager:setDirty(self.container, "ui")
+    UIManager:setDirty(self.container, function()
+        return "ui", self.frame.dimen
+    end)
 end
 
 function DownloadProgress:cancel()
@@ -191,8 +211,7 @@ function DownloadProgress:close()
     if not self.is_visible then
         return
     end
-    UIManager:close(self.container)
-    UIManager:setDirty(self.container, "full")
+    self:_close()
 end
 
 return DownloadProgress

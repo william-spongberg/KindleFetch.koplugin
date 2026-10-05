@@ -270,7 +270,6 @@ local function promptPluginUpdate(plugin_path, installed_version, available_upda
     }
 
     UIManager:show(confirm_dialog)
-    UIManager:setDirty(confirm_dialog, "full")
 end
 
 -- check plugin version and offer to update if a new version is available, reporting the result if the user asked

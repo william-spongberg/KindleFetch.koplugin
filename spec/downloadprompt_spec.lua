@@ -98,6 +98,19 @@ describe("DownloadPrompt", function()
         assert.is_true(helper.wasClosed(prompt.outer_container))
     end)
 
+    -- as KOReader's own dialogs do, rather than flashing the whole screen each time
+    it("only refreshes the part of the screen it takes up when shown and closed", function()
+        local prompt = newPrompt()
+        prompt.frame.dimen = { x = 50, y = 200, w = 500, h = 400 }
+
+        prompt:show()
+        assert.are.same({ "ui", prompt.frame.dimen }, helper.state.refreshes[#helper.state.refreshes])
+
+        helper.state.refreshes = {}
+        prompt:close()
+        assert.are.same({ { "ui", prompt.frame.dimen } }, helper.state.refreshes)
+    end)
+
     it("downloads to the chosen path when confirmed", function()
         local prompt = newPrompt()
         prompt:show()

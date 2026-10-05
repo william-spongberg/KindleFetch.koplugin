@@ -320,9 +320,9 @@ function BookMenu:loadCoversForPage(current_page)
 end
 
 -- redraw with covers once they have downloaded, even if another search started downloading them
+-- (updateItems refreshes the screen itself, without the flash of a full refresh each time covers arrive)
 function BookMenu:onKindleFetchCoversDownloaded()
     self:updateItems()
-    UIManager:setDirty(self, "full")
 end
 
 return BookMenu

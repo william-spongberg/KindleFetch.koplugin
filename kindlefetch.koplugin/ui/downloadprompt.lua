@@ -481,9 +481,12 @@ function DownloadPrompt:closeFullscreenCover()
     UIManager:setDirty(self.fullscreen_container, "full")
 end
 
+-- only the part of the screen the prompt takes up is refreshed, as KOReader's own dialogs do
 function DownloadPrompt:show()
     UIManager:show(self.outer_container)
-    UIManager:setDirty(self.outer_container, "full")
+    UIManager:setDirty(self.outer_container, function()
+        return "ui", self.frame.dimen
+    end)
 end
 
 function DownloadPrompt:close()
@@ -491,7 +494,9 @@ function DownloadPrompt:close()
         self:closeFullscreenCover()
     end
     UIManager:close(self.outer_container)
-    UIManager:setDirty(self.outer_container, "full")
+    UIManager:setDirty(nil, function()
+        return "ui", self.frame.dimen
+    end)
 end
 
 return DownloadPrompt

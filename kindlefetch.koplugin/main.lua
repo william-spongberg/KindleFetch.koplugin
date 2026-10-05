@@ -203,7 +203,6 @@ function KindleFetch:setupUI()
                     text = "Cancel",
                     callback = function()
                         UIManager:close(this.search_box)
-                        UIManager:setDirty(this.search_box, "ui")
                     end,
                 },
                 {
@@ -216,7 +215,6 @@ function KindleFetch:setupUI()
         },
     }
     UIManager:show(self.search_box)
-    UIManager:setDirty(self.search_box, "ui")
 end
 
 function KindleFetch:performSearch()

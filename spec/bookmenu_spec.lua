@@ -298,10 +298,14 @@ describe("BookMenu", function()
         it("redraws the page showing once covers have downloaded", function()
             local menu = newMenu(11)
             menu.page = 3
+            helper.state.refreshes = {}
             menu:onKindleFetchCoversDownloaded()
 
             assert.are.equal(2, #menu.item_group)
             assert.are.equal("md5-11", menu.item_group[1].entry.book.md5)
+            -- once, and without the flash of a full refresh
+            assert.are.equal(1, #helper.state.refreshes)
+            assert.are.equal("ui", helper.state.refreshes[1][1])
         end)
 
         it("does nothing when every cover is there", function()

@@ -152,7 +152,6 @@ local function promptCurlUpdate(current_version, min_version)
     }
 
     UIManager:show(confirm_dialog)
-    UIManager:setDirty(confirm_dialog, "full")
 end
 
 -- check curl is available and at least MIN_VERSION, offering to update it if not (again after it was turned down

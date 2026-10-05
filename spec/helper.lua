@@ -322,9 +322,13 @@ local function createStubs(state)
         close = function(_, widget)
             table.insert(state.closed, widget)
         end,
-        setDirty = function(_, _, refresh)
+        -- every refresh asked for is kept, as its type and the region of the screen it covers (none for all of it)
+        setDirty = function(_, _, refresh, region)
             if type(refresh) == "function" then
                 state.refresh = { refresh() }
+                table.insert(state.refreshes, state.refresh)
+            else
+                table.insert(state.refreshes, { refresh, region })
             end
         end,
         forceRePaint = function() end,
@@ -597,6 +601,7 @@ function helper.reset()
         popen_calls = {},
         shown = {},
         closed = {},
+        refreshes = {},
         scheduled = {},
         broadcasts = {},
         notifications = {},
