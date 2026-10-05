@@ -1,6 +1,7 @@
 local NotifyUtil = require("util.notifyutil")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
+local StringUtil = require("util.stringutil")
 local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
 
@@ -385,9 +386,18 @@ function CurlUtil.downloadMultiple(
     local config_file = tmpFile("curl_download_config", ".txt")
     local f = io.open(config_file, "w")
 
+    -- backslashes and quotes mean something inside the quotes of curl's config file
+    local function quote(value)
+        return (value:gsub("\\", "\\\\"):gsub('"', '\\"'))
+    end
     for i, download_url in ipairs(download_urls) do
-        f:write(string.format('url = "%s"\n', download_url:gsub('"', '\\"')))
-        f:write(string.format('output = "%s"\n', filepaths[i]:gsub('"', '\\"')))
+        -- an address with a line break in it would add lines of its own to the config file, so leave it out
+        if StringUtil.isSafeUrl(download_url) and not filepaths[i]:find("%c") then
+            f:write(string.format('url = "%s"\n', quote(download_url)))
+            f:write(string.format('output = "%s"\n', quote(filepaths[i])))
+        else
+            LogUtil.warn("left out a download whose address can't be used:", download_url)
+        end
     end
     f:close()
 

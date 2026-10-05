@@ -74,6 +74,11 @@ local function parseBook(row, base_url)
     local image_path = cells[1]:match('src="([^"]+)"')
     if image_path then
         book.image_url = image_path:match("^https?://") and image_path or base_url .. "/" .. image_path:gsub("^/", "")
+        -- the book is shown without a cover rather than asking curl for an address that isn't just an address
+        if not StringUtil.isSafeUrl(book.image_url) then
+            LogUtil.warn("left out a cover whose address can't be used:", book.image_url)
+            book.image_url = nil
+        end
     end
 
     -- the title to name the book's file after, and the title as it's written, for showing on screen. what shows

@@ -12,11 +12,21 @@ UrlApi.NO_CONNECTION_ERROR = "no internet connection"
 -- constants
 local LIBGEN_KEY = "libgen"
 local LIBGEN_URL = "https://en.wikipedia.org/wiki/Library_Genesis"
+-- the mirrors Wikipedia listed when this was written, for when it answers without them, e.g. once its page has
+-- been rearranged. without them, nothing could be searched for until the plugin was updated
+local FALLBACK_URLS = {
+    "https://libgen.vg",
+    "https://libgen.la",
+    "https://libgen.bz",
+    "https://libgen.gl",
+    "https://libgen.li",
+}
 
 local function parseLibgenUrls(html)
     local urls = {}
 
-    for domain in html:gmatch("<li>%s*(libgen%.[^<]+)%s*</li>") do
+    -- only the names of sites, as anyone can edit the page: not a name followed by a path, or anything else
+    for domain in html:gmatch("<li>%s*(libgen%.[%w%.%-]+)%s*</li>") do
         local url = "https://" .. domain
         table.insert(urls, url)
         LogUtil.debug("new LibGen URL", domain)
@@ -57,7 +67,20 @@ end
 
 -- Library Genesis' mirrors, looked up on Wikipedia again when refresh is set (see getUrls)
 function UrlApi:getLibgenUrls(refresh)
-    return self:getUrls(LIBGEN_KEY, LIBGEN_URL, parseLibgenUrls, refresh)
+    local urls, err, answered = self:getUrls(LIBGEN_KEY, LIBGEN_URL, parseLibgenUrls, refresh)
+    if urls or not answered then
+        return urls, err, answered
+    end
+
+    -- Wikipedia answered, but not with the mirrors. they're kept like any others, so Wikipedia is asked again
+    -- once they stop working or are due to be looked up again, rather than for every page of every search
+    LogUtil.warn("using the mirrors known when KindleFetch was written, as Wikipedia didn't list any:", err)
+    local fallback_urls = {}
+    for _, url in ipairs(FALLBACK_URLS) do
+        table.insert(fallback_urls, url)
+    end
+    UrlCache:set(fallback_urls, LIBGEN_KEY)
+    return fallback_urls
 end
 
 function UrlApi:deleteLibgenUrl(url)

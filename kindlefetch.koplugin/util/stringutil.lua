@@ -70,6 +70,13 @@ function StringUtil.cleanTitle(text)
     return title
 end
 
+-- whether text is a web address that can be passed on as it is. mirrors are looked up on a page anyone can edit,
+-- so what a mirror sends can't be trusted: a line break or quote in an address written to curl's config file
+-- would add options of the mirror's own, such as where on the device to save a file
+function StringUtil.isSafeUrl(text)
+    return type(text) == "string" and text:find('^https?://[^%c%s"\\]+$') ~= nil
+end
+
 function StringUtil.cleanFileName(text)
     if not StringUtil.assertValidString(text) then
         return ""

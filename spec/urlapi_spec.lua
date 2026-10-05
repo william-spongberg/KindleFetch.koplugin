@@ -77,12 +77,53 @@ describe("UrlApi", function()
             assert.are.equal("could not resolve host", err)
         end)
 
-        it("are nil when Wikipedia does not list any", function()
+        -- the page can be edited by anyone
+        it("are only the names of sites", function()
             http.request = function(request)
-                request.sink("<html><body>Page not found</body></html>")
+                request.sink(
+                    "<ul><li>libgen.example</li><li> libgen.my-mirror.example </li>"
+                        .. "<li>libgen.evil.example/steal?from=you</li><li>libgen.evil example</li>"
+                        .. '<li>libgen.evil.example"</li><li>not-libgen.example</li></ul>'
+                )
                 return 1, 200
             end
-            assert.is_nil(UrlApi:getLibgenUrls())
+
+            assert.are.same({ "https://libgen.example", "https://libgen.my-mirror.example" }, UrlApi:getLibgenUrls())
+        end)
+
+        -- e.g. once its page has been rearranged, which would otherwise stop every search until the next update
+        describe("when Wikipedia answers without any", function()
+            before_each(function()
+                http.request = function(request)
+                    table.insert(http.requests, request.url)
+                    request.sink("<html><body>Page not found</body></html>")
+                    return 1, 404
+                end
+            end)
+
+            it("are the ones known when the plugin was written", function()
+                local urls = UrlApi:getLibgenUrls()
+
+                assert.are.equal("https://libgen.vg", urls[1])
+                assert.are.equal(5, #urls)
+                assert.is_truthy(helper.logged("warn", "^using the mirrors known when KindleFetch was written"))
+            end)
+
+            -- rather than for every page of every search
+            it("are kept, so Wikipedia isn't asked again until they stop working", function()
+                local urls = UrlApi:getLibgenUrls()
+                UrlApi:getLibgenUrls()
+                assert.are.equal(1, #http.requests)
+
+                UrlApi:deleteLibgenUrl(urls[1])
+                assert.are.equal("https://libgen.la", UrlApi:getLibgenUrls()[1])
+                assert.are.equal(4, #UrlApi:getLibgenUrls())
+                assert.are.equal(1, #http.requests)
+
+                -- the built-in list itself is left as it was
+                assert.are.equal("https://libgen.vg", UrlApi:getLibgenUrls(true)[1])
+                assert.are.equal(2, #http.requests)
+            end)
         end)
     end)
 end)

