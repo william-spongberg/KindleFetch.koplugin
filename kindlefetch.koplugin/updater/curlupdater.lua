@@ -20,7 +20,7 @@ local function remountReadOnly()
     LogUtil.debug("remounting rootfs as read-only")
     if os.execute("mntroot ro 2>/dev/null") ~= 0 then
         LogUtil.warn("failed to remount rootfs as read-only")
-        NotifyUtil.info("Failed to remount root as read-only")
+        NotifyUtil.error("Failed to remount root as read-only")
         return false
     end
     return true
@@ -42,7 +42,7 @@ local function updateCurl()
     local success, err = CurlUtil.download(download_url, curl_path, false, false)
     if not success then
         LogUtil.warn("could not download static curl from", download_url, "error:", err)
-        NotifyUtil.info("Failed to download curl update")
+        NotifyUtil.error("Failed to download curl update")
         return false
     end
 
@@ -51,7 +51,7 @@ local function updateCurl()
     if os.execute(chmod_cmd) ~= 0 then
         os.remove(curl_path) -- remove downloaded file
         LogUtil.warn("could not make", curl_path, "executable")
-        NotifyUtil.info("Failed to set file permissions")
+        NotifyUtil.error("Failed to set file permissions")
         return false
     end
 
@@ -63,7 +63,7 @@ local function updateCurl()
     LogUtil.debug("remounting rootfs as read-write")
     if os.execute("mntroot rw 2>/dev/null") ~= 0 then
         LogUtil.warn("failed to remount rootfs as read-write")
-        NotifyUtil.info("Failed to remount root as read-write")
+        NotifyUtil.error("Failed to remount root as read-write")
         return false
     end
 
@@ -80,7 +80,7 @@ local function updateCurl()
             ) ~= 0
         then
             LogUtil.warn("could not back up", system_curl, "to", backup_curl)
-            NotifyUtil.info("Failed to create curl backup")
+            NotifyUtil.error("Failed to create curl backup")
             remountReadOnly()
             return false
         end
@@ -94,7 +94,7 @@ local function updateCurl()
         ) ~= 0
     then
         LogUtil.warn("could not copy", curl_path, "to", system_curl)
-        NotifyUtil.info("Failed to install new curl update")
+        NotifyUtil.error("Failed to install new curl update")
         remountReadOnly()
         return false
     end

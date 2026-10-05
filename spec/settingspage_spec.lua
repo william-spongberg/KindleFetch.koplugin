@@ -3,8 +3,14 @@ local helper = require("helper")
 describe("SettingsPage", function()
     local data_dir, Settings, SettingsPage
 
+    -- the menu on top: the last one shown that hasn't been closed since
     local function lastMenu()
-        return helper.lastShown()
+        for i = #helper.state.shown, 1, -1 do
+            local widget = helper.state.shown[i]
+            if widget.item_table and not helper.wasClosed(widget) then
+                return widget
+            end
+        end
     end
 
     local function itemTexts(menu)
@@ -51,7 +57,23 @@ describe("SettingsPage", function()
             "Check for Updates Automatically: ☑",
             "Keep Searches For: 14 days",
             "Keep Mirrors For: 7 days",
+            "Clear Cache",
         }, itemTexts(lastMenu()))
+        assert.are.equal("Kindle Fetch Settings", lastMenu().title)
+    end)
+
+    -- rounded corners aren't painted, so the top edge of KOReader's menu showed in the corners of the settings
+    it("fills the screen to its corners, as do the menus it opens", function()
+        SettingsPage:showSettings()
+        local settings = lastMenu()
+        tap("Preferred Languages")
+        local languages = lastMenu()
+
+        assert.are_not.equal(settings, languages)
+        for _, menu in ipairs({ settings, languages }) do
+            assert.is_true(menu.covers_fullscreen)
+            assert.is_false(menu.is_popout)
+        end
     end)
 
     it("toggles book covers", function()
@@ -61,6 +83,21 @@ describe("SettingsPage", function()
         assert.is_false(Settings:getShowBookCovers())
         assert.are.equal("Show Book Covers: ☐", lastMenu().item_table[1].text)
         assert.are.equal("Book cover visibility updated", helper.lastNotification())
+    end)
+
+    -- closing the menu and opening another for every change flashed the whole screen twice
+    it("shows a change in the menu that's open, on the page it's on", function()
+        SettingsPage:showSettings()
+        local menu = lastMenu()
+        tap("Show Book Covers")
+        tap("Check for Updates Automatically")
+
+        assert.are.equal(1, #helper.state.shown)
+        assert.is_false(helper.wasClosed(menu))
+        assert.are.equal(-1, menu.switched_to_item)
+        for _, refresh in ipairs(helper.state.refreshes) do
+            assert.are_not.equal("full", refresh[1])
+        end
     end)
 
     it("turns automatic update checks off and on", function()
@@ -85,10 +122,14 @@ describe("SettingsPage", function()
                 itemTexts(lastMenu())
             )
 
+            local choices = lastMenu()
             tap("30 days")
             assert.are.equal(30, Settings:getSearchCacheExpiryDays())
             assert.are.equal("Cache expiry updated", helper.lastNotification())
+            -- back in the settings, which were open underneath
+            assert.is_true(helper.wasClosed(choices))
             assert.are.equal("Keep Searches For: 30 days", lastMenu().item_table[7].text)
+            assert.are.equal(2, #helper.state.shown)
         end)
 
         it("sets how long mirrors are kept", function()
@@ -119,7 +160,7 @@ describe("SettingsPage", function()
             helper.state.dir_choosers[1].onConfirm(data_dir .. "/missing")
 
             assert.are.equal(helper.abs(data_dir), Settings:getDownloadDir())
-            assert.are.equal("Error: Invalid directory path", helper.lastNotification())
+            assert.are.equal("Invalid directory path", helper.lastError())
         end)
     end)
 
@@ -145,6 +186,41 @@ describe("SettingsPage", function()
             assert.are.same({ "es", "fr" }, Settings:getPreferredLanguages())
             assert.are.equal("Languages updated", helper.lastNotification())
             assert.are.equal("Preferred Languages: es, fr", lastMenu().item_table[3].text)
+        end)
+
+        -- there are eight pages of languages, and each tick used to go back to the first
+        it("are ticked in the menu that's open, on the page it's on", function()
+            SettingsPage:showSettings()
+            tap("Preferred Languages")
+            local languages = lastMenu()
+            tap("Welsh")
+            tap("Welsh")
+            tap("Zulu")
+
+            assert.are.equal(languages, lastMenu())
+            assert.are.equal(2, #helper.state.shown)
+            assert.are.equal(-1, languages.switched_to_item)
+            local ticked = {}
+            for _, text in ipairs(itemTexts(languages)) do
+                if text:find("☑", 1, true) then
+                    table.insert(ticked, text)
+                end
+            end
+            assert.are.same({ "☑ English", "☑ Zulu" }, ticked)
+        end)
+
+        it("stay as they were, with their menu still open, while none are ticked", function()
+            SettingsPage:showSettings()
+            tap("Preferred Languages")
+            local languages = lastMenu()
+            tap("English")
+            languages.onClose()
+
+            assert.is_false(helper.wasClosed(languages))
+            tap("French")
+            languages.onClose()
+            assert.is_true(helper.wasClosed(languages))
+            assert.are.same({ "fr" }, Settings:getPreferredLanguages())
         end)
 
         it("cannot all be unticked", function()
@@ -250,6 +326,43 @@ describe("SettingsPage", function()
                 Settings:getPreferredBookTypes()
             )
             assert.are.equal("Select at least one book type", helper.lastNotification())
+        end)
+    end)
+
+    -- they had to be found and deleted by hand when they no longer matched what Library Genesis has
+    describe("clearing the cache", function()
+        local cleared
+
+        before_each(function()
+            cleared = {}
+            for _, name in ipairs({ "search", "url", "cover" }) do
+                helper.stub("cache." .. name .. "cache", {
+                    clear = function()
+                        table.insert(cleared, name)
+                    end,
+                })
+            end
+            package.loaded["settings.settingspage"] = nil
+            SettingsPage = require("settings.settingspage")
+        end)
+
+        it("asks first", function()
+            SettingsPage:showSettings()
+            tap("Clear Cache")
+
+            local confirm = helper.lastShown()
+            assert.are.equal("Clear the searches, mirrors and book covers that Kindle Fetch has saved?", confirm.text)
+            assert.are.equal("Clear", confirm.ok_text)
+            assert.are.same({}, cleared)
+        end)
+
+        it("forgets the searches, mirrors and book covers that are saved", function()
+            SettingsPage:showSettings()
+            tap("Clear Cache")
+            helper.lastShown().ok_callback()
+
+            assert.are.same({ "search", "url", "cover" }, cleared)
+            assert.are.equal("Cache cleared", helper.lastNotification())
         end)
     end)
 end)

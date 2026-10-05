@@ -183,6 +183,7 @@ for _, layout in ipairs(LAYOUTS) do
                 checkForUpdates(false)
                 assert.are.equal(0, #helper.state.shown)
                 assert.are.equal(0, #helper.state.notifications)
+                assert.is_nil(helper.lastError())
                 assert.matches(
                     "curl exit code 6 %(could not resolve host%)",
                     helper.logged("warn", "^could not look up")
@@ -191,7 +192,7 @@ for _, layout in ipairs(LAYOUTS) do
 
             it("reports when the latest release cannot be fetched, if the user asked", function()
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastNotification())
+                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
             end)
 
             it("gives up when curl cannot be started", function()
@@ -199,7 +200,7 @@ for _, layout in ipairs(LAYOUTS) do
                     return nil, nil, "unable to launch curl"
                 end
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastNotification())
+                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
             end)
 
             -- e.g. when github limits how often it can be asked
@@ -207,15 +208,16 @@ for _, layout in ipairs(LAYOUTS) do
                 release_response = '{"message": "API rate limit exceeded for 203.0.113.7."}'
                 checkForUpdates(true)
 
-                assert.are.equal(0, #helper.state.shown)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastNotification())
+                -- and nothing else, such as an offer to update
+                assert.are.equal(1, #helper.state.shown)
+                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
                 assert.matches("API rate limit exceeded", helper.logged("warn", "^could not read the latest release"))
             end)
 
             it("gives up when the answer can't be read at all", function()
                 release_response = "<html>Bad gateway</html>"
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastNotification())
+                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
 
                 -- KOReader's json gives an error rather than nothing
                 helper.stub("json", {
@@ -225,9 +227,9 @@ for _, layout in ipairs(LAYOUTS) do
                 })
                 package.loaded["updater.pluginupdater"] = nil
                 PluginUpdater = require("updater.pluginupdater")
-                helper.state.notifications = {}
+                helper.state.shown = {}
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastNotification())
+                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
             end)
 
             it("says it is up to date, if the user asked", function()
@@ -379,7 +381,7 @@ for _, layout in ipairs(LAYOUTS) do
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to install update", helper.lastNotification())
+                assert.are.equal("Failed to install update", helper.lastError())
             end)
 
             it("keeps the installed plugin when it cannot be moved aside", function()
@@ -389,7 +391,7 @@ for _, layout in ipairs(LAYOUTS) do
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to install update", helper.lastNotification())
+                assert.are.equal("Failed to install update", helper.lastError())
             end)
 
             it("restores the installed plugin when the new one cannot be moved into place", function()
@@ -400,7 +402,7 @@ for _, layout in ipairs(LAYOUTS) do
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
                 assert.is_false(helper.exists(plugin_path .. ".backup"))
-                assert.are.equal("Failed to install update", helper.lastNotification())
+                assert.are.equal("Failed to install update", helper.lastError())
             end)
 
             it("keeps the installed plugin when the download leaves no file", function()
@@ -410,7 +412,7 @@ for _, layout in ipairs(LAYOUTS) do
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to download update", helper.lastNotification())
+                assert.are.equal("Failed to download update", helper.lastError())
             end)
 
             it("keeps the installed plugin when the download fails", function()
@@ -420,7 +422,7 @@ for _, layout in ipairs(LAYOUTS) do
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to download update", helper.lastNotification())
+                assert.are.equal("Failed to download update", helper.lastError())
             end)
 
             it("keeps the installed plugin when the download is not a valid zip", function()
@@ -431,7 +433,7 @@ for _, layout in ipairs(LAYOUTS) do
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to install update", helper.lastNotification())
+                assert.are.equal("Failed to install update", helper.lastError())
             end)
         end)
     end)

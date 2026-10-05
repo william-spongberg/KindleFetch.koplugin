@@ -32,18 +32,14 @@ describe("Searching", function()
             assert(preferred[book.file_type], book.title .. " is a " .. book.file_type)
         end
         H.eq("Load more", menu.item_table[#menu.item_table].text, "last entry")
+        -- what was searched for and how many books there are so far, above them
+        H.eq(H.SEARCH_QUERY .. " · " .. #books .. "+ books", menu.title, "title")
     end)
 
     -- KOReader carries on while Library Genesis answers, rather than being held up until it has
     it("can be called off while waiting for Library Genesis", function()
-        H.openMainMenu({ "Kindle Fetch", "Search Library Genesis" })
-        local plugin = H.plugin()
-        local dialog = H.waitFor("the search dialog", 10, function()
-            return plugin.search_box and H.isShown(plugin.search_box) and plugin.search_box
-        end)
-        dialog:setInputText(H.SEARCH_QUERY)
         local since = #H.notifications
-        H.tapButton("Search", dialog)
+        local plugin, dialog = H.startSearch(H.SEARCH_QUERY)
 
         local message = H.waitFor("the message saying it's searching", 10, function()
             for _, window in ipairs(H.windows()) do
@@ -67,9 +63,41 @@ describe("Searching", function()
         assert(not (plugin.books_menu and H.isShown(plugin.books_menu)), "the books were shown all the same")
         assert(H.isShown(dialog), "the search dialog has gone")
         -- calling it off isn't an error
+        local failure = H.errorShown()
+        assert(not failure, "said " .. tostring(failure))
         for i = since + 1, #H.notifications do
-            assert(not H.notifications[i]:find("Error", 1, true), "said " .. H.notifications[i])
             assert(not H.notifications[i]:find("No books", 1, true), "said " .. H.notifications[i])
+        end
+    end)
+
+    -- rather than only that no books were found, which is what it looks like when there are plenty of other kinds
+    it("says when the results are all in other file types or languages", function()
+        local Settings = require("settings.settings")
+        local file_types = Settings:getPreferredFileTypes()
+        -- a file type that books about Harry Potter aren't in
+        Settings:setPreferredFileTypes({ "tif" })
+
+        local ok, err = pcall(function()
+            local plugin = H.startSearch(H.SEARCH_QUERY)
+            local explanation = H.waitFor("the explanation", 180, function()
+                assert(not H.errorShown(), H.errorShown())
+                assert(not (plugin.books_menu and H.isShown(plugin.books_menu)), "found books as tif files")
+                return H.messageSaying("but none in the languages and file types chosen")
+            end)
+            assert(explanation:find("Library Genesis listed %d+ results"), explanation)
+            H.shot("search-other-file-types")
+
+            -- which is where to change what's shown
+            H.tapButton("Settings")
+            H.waitFor("the settings", 10, function()
+                return H.find(function(widget)
+                    return type(widget.text) == "string" and widget.text:find("Preferred File Types", 1, true)
+                end)
+            end)
+        end)
+        Settings:setPreferredFileTypes(file_types)
+        if not ok then
+            error(err, 0)
         end
     end)
 
@@ -104,10 +132,21 @@ describe("Searching", function()
         H.tapMenuEntry(menu, function(item)
             return item.text == "Load more"
         end)
-        local more = H.waitFor("more books", 120, function()
-            return plugin.books_menu ~= menu and H.isShown(plugin.books_menu) and plugin.books_menu
+        local last_page = menu.page
+        H.waitFor("more books", 120, function()
+            return #H.books(menu) > count
         end)
-        assert(#H.books(more) > count, "no more books were added")
+        -- added to the list that's open, which stays where it was rather than going back to its first page
+        H.eq(menu, plugin.books_menu, "the menu of books")
+        assert(H.isShown(menu), "the books are no longer showing")
+        H.eq(last_page, menu.page, "page showing")
+        local first_new = H.books(menu)[count + 1]
+        assert(
+            H.find(function(widget)
+                return widget.entry and widget.entry.book == first_new
+            end, menu),
+            "the first of the new books isn't on the page showing"
+        )
         H.shot("search-more")
     end)
 end)

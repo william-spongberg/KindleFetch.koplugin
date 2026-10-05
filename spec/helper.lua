@@ -515,6 +515,12 @@ local function createStubs(state)
     function stubs.Menu:onCloseWidget()
         self.close_widget_handled = true
     end
+    -- show other entries, on the page with the given one, or the page that's showing for a negative one
+    function stubs.Menu:switchItemTable(title, item_table, item_number)
+        self.title = title or self.title
+        self.item_table = item_table or self.item_table
+        self.switched_to_item = item_number
+    end
     stubs.InputContainer = widgetClass()
     stubs.geometry = {
         new = function(_, o)
@@ -788,6 +794,15 @@ end
 
 function helper.lastShown()
     return helper.state.shown[#helper.state.shown]
+end
+
+-- what the last message about something going wrong said (see NotifyUtil.error)
+function helper.lastError()
+    for i = #helper.state.shown, 1, -1 do
+        if helper.state.shown[i].icon == "notice-warning" then
+            return helper.state.shown[i].text
+        end
+    end
 end
 
 function helper.wasClosed(widget)

@@ -569,6 +569,31 @@ describe("LlgiAPI", function()
             )
         end)
 
+        -- as happened while this was written: the mirrors linked to the book, then answered with an error
+        it("says Library Genesis is too busy when its servers fail to send the book", function()
+            download()
+            helper.writeFile(spawned[1].headers_file, "HTTP/2 503 \r\ncontent-length: 212\r\n\r\n")
+            helper.writeFile(spawned[1].exit_file, "22")
+            helper.runScheduled()
+
+            assert.are.same({
+                {
+                    ok = false,
+                    err = "Library Genesis is too busy to send books right now, try again in a few minutes",
+                },
+            }, results)
+            assert.matches("curl exit code 22 %(HTTP error response, HTTP 503%)", helper.logged("warn", "failed after"))
+        end)
+
+        it("says which HTTP error stopped the download when it isn't Library Genesis' servers failing", function()
+            download()
+            helper.writeFile(spawned[1].headers_file, "HTTP/2 404 \r\ncontent-length: 9\r\n\r\n")
+            helper.writeFile(spawned[1].exit_file, "22")
+            helper.runScheduled()
+
+            assert.are.same({ { ok = false, err = "HTTP error response (HTTP 404)" } }, results)
+        end)
+
         it("fails when the downloaded file is empty", function()
             download()
 
@@ -661,6 +686,44 @@ describe("LlgiAPI", function()
             assert.are.equal("Dune", downloads[1].title)
             assert.are.equal(filepath, downloads[1].filepath)
             assert.are.equal(progress(), downloads[1].widget)
+        end)
+
+        it("are listed in the order they were started", function()
+            helper.state.time = 3000
+            download()
+            for i, title in ipairs({ "Zebra", "Apple" }) do
+                LlgiAPI.active_downloads["other" .. i] = {
+                    book = { md5 = "other" .. i, title = title },
+                    progress_widget = {},
+                    started = 1000 + (title == "Zebra" and 0 or 1000),
+                }
+            end
+
+            local titles = {}
+            for _, active_download in ipairs(LlgiAPI:getActiveDownloads()) do
+                table.insert(titles, active_download.title)
+            end
+            assert.are.same({ "Zebra", "Apple", "Dune" }, titles)
+        end)
+
+        -- e.g. from the Downloads entry in KindleFetch's menu
+        it("can have their progress shown again once hidden", function()
+            download()
+            local widget = progress()
+            widget.hide_button.callback()
+
+            assert.is_true(LlgiAPI:showDownload(book.md5))
+            assert.is_true(widget.is_visible)
+            assert.are.equal(widget.container, helper.lastShown())
+
+            -- and nothing happens when it's showing already
+            local shown = #helper.state.shown
+            assert.is_true(LlgiAPI:showDownload(book.md5))
+            assert.are.equal(shown, #helper.state.shown)
+        end)
+
+        it("can't have their progress shown once they're over", function()
+            assert.is_false(LlgiAPI:showDownload(book.md5))
         end)
 
         it("can all be cancelled at once", function()

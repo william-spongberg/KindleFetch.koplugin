@@ -3,6 +3,8 @@ local helper = require("helper")
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
     local cancelled_downloads, curl_check_user_requested, leftovers_removed
+    -- the downloads LlgiAPI says are in progress, and those it was asked to show the progress of
+    local active_downloads, downloads_shown
     -- whether searches can be called off, and the widget that calls each one off when tapped (false without one)
     local can_cancel, trap_widgets
     -- pages of results saved from earlier searches, as "query page"
@@ -146,12 +148,13 @@ describe("KindleFetch", function()
             search = function(_, query, page)
                 table.insert(searches, { query, page })
                 table.insert(trap_widgets, require("util.httputil").trap_widget or false)
-                -- books, error, and the page to carry on from (or a function to run in place of the search)
+                -- books, error, the page to carry on from and how many results were read (or a function to run in
+                -- place of the search)
                 local result = search_results[page] or { {} }
                 if type(result) == "function" then
                     return result()
                 end
-                return result[1], result[2], result[3]
+                return result[1], result[2], result[3], result[4]
             end,
             isCached = function(_, query, page)
                 return saved[query .. " " .. page] == true
@@ -159,6 +162,7 @@ describe("KindleFetch", function()
         })
         cancelled_downloads = 0
         curl_check_user_requested = nil
+        active_downloads, downloads_shown = {}, {}
 
         FileManager = {
             instance = {
@@ -178,6 +182,13 @@ describe("KindleFetch", function()
             cancelAllDownloads = function()
                 cancelled_downloads = cancelled_downloads + 1
             end,
+            getActiveDownloads = function()
+                return active_downloads
+            end,
+            showDownload = function(_, id)
+                table.insert(downloads_shown, id)
+                return true
+            end,
             downloadBook = function(_, download_book, filepath, callback, open_existing)
                 table.insert(downloads, {
                     book = download_book,
@@ -190,8 +201,18 @@ describe("KindleFetch", function()
         helper.stub("ui.bookmenu", {
             new = function(_, menu)
                 menu.covers_loaded = {}
+                menu.page = 1
                 function menu:loadCoversForPage(page)
                     table.insert(self.covers_loaded, page)
+                end
+                -- like KOReader's menu, show other entries, turning to the page with the given one (2 to a page here)
+                -- (or staying on the page that's showing for a negative one)
+                function menu:switchItemTable(title, item_table, item_number)
+                    self.title = title or self.title
+                    self.item_table = item_table
+                    if item_number >= 0 then
+                        self.page = math.ceil(item_number / 2)
+                    end
                 end
                 table.insert(menus, menu)
                 return menu
@@ -387,11 +408,68 @@ describe("KindleFetch", function()
             plugin:addToMainMenu(menu_items)
             assert.are.equal("Kindle Fetch", menu_items.kindlefetch.text)
             for _, item in ipairs(menu_items.kindlefetch.sub_item_table) do
-                if item.text == text then
+                if (item.text or item.text_func()) == text then
                     return item
                 end
             end
         end
+
+        -- where a download that was hidden can be shown again, without finding its book again
+        describe("downloads", function()
+            local function downloading(title, percentage, status_text)
+                table.insert(active_downloads, {
+                    id = title:lower(),
+                    title = title,
+                    widget = {
+                        percentage = percentage,
+                        status_text = status_text,
+                    },
+                })
+            end
+
+            it("can't be chosen while nothing is downloading", function()
+                local item = menuItem(openUI(), "Downloads")
+                assert.is_false(item.enabled_func())
+
+                -- but says so if it is all the same, e.g. as the last download finishes
+                item.callback()
+                assert.are.equal("No downloads in progress", helper.lastNotification())
+            end)
+
+            it("says how many books are downloading", function()
+                downloading("Dune", 0.5)
+                downloading("Emma", 0.25)
+
+                local item = menuItem(openUI(), "Downloads (2)")
+                assert.is_true(item.enabled_func())
+            end)
+
+            it("shows the progress of the book that is downloading", function()
+                downloading("Dune", 0.5)
+                menuItem(openUI(), "Downloads (1)").callback()
+
+                assert.are.same({ "dune" }, downloads_shown)
+                assert.are.equal(0, #helper.state.shown)
+            end)
+
+            it("lists the books that are downloading when there are several, to choose which to show", function()
+                downloading("Dune", 0.456, "45% · 0.5 / 1.1 MB")
+                downloading("Emma", 0, "Starting download...")
+                downloading("Persuasion", 0, "2.0 MB")
+                menuItem(openUI(), "Downloads (3)").callback()
+
+                local dialog = helper.lastShown()
+                assert.are.equal("Downloads", dialog.title)
+                assert.are.same(
+                    { "Dune · 45%", "Emma · Starting download...", "Persuasion · 2.0 MB" },
+                    { dialog.buttons[1][1].text, dialog.buttons[2][1].text, dialog.buttons[3][1].text }
+                )
+
+                dialog.buttons[2][1].callback()
+                assert.is_true(helper.wasClosed(dialog))
+                assert.are.same({ "emma" }, downloads_shown)
+            end)
+        end)
 
         it("opens the search dialog", function()
             local plugin = openUI()
@@ -438,6 +516,16 @@ describe("KindleFetch", function()
             assert.are.equal(0, #searches)
         end)
 
+        it("starts from the keyboard's enter key as well as the Search button", function()
+            local plugin = openUI()
+            plugin:setupUI()
+
+            local search_button = plugin.search_box.buttons[1][2]
+            assert.are.equal("Search", search_button.text)
+            assert.is_true(search_button.is_enter_default)
+            assert.is_nil(plugin.search_box.buttons[1][1].is_enter_default)
+        end)
+
         it("needs a search term", function()
             local plugin = openUI()
             search(plugin, "   ")
@@ -459,8 +547,8 @@ describe("KindleFetch", function()
 
                 assert.are.equal(0, #searches)
                 assert.are.equal(
-                    "Error: turn on at least one " .. preference[2] .. " in Kindle Fetch's settings",
-                    helper.lastNotification()
+                    "Turn on at least one " .. preference[2] .. " in Kindle Fetch's settings first.",
+                    helper.lastError()
                 )
             end)
         end
@@ -555,7 +643,7 @@ describe("KindleFetch", function()
 
                 assert.is_true(helper.wasClosed(message()))
                 assert.is_nil(require("util.httputil").trap_widget)
-                assert.are.equal("Error: search went wrong, see crash.log", helper.lastNotification())
+                assert.are.equal("Search failed: something went wrong, see crash.log", helper.lastError())
                 assert.matches("attempt to index a nil value", helper.logged("err", '^search for "dune" went wrong'))
             end)
         end)
@@ -565,6 +653,31 @@ describe("KindleFetch", function()
             search(openUI(), "dune")
 
             assert.are.same({ "Dune" }, itemTexts(menus[1]))
+        end)
+
+        it("says above the books what was searched for, and how many were found", function()
+            search_results[1] = { { book("Dune"), book("Dune Messiah") } }
+            search(openUI(), " dune ")
+            assert.are.equal("dune · 2 books", menus[1].title)
+            assert.is_true(menus[1].title_shrink_font_to_fit)
+
+            search_results[1] = { { book("Dune") } }
+            search(openUI(), "dune")
+            assert.are.equal("dune · 1 book", menus[2].title)
+
+            -- with more to load
+            search_results[1] = { { book("Dune") }, nil, 2 }
+            search(openUI(), "dune")
+            assert.are.equal("dune · 1+ books", menus[3].title)
+        end)
+
+        -- rounded corners aren't painted, and show what was on screen before
+        it("fills the screen with the books, to its corners", function()
+            search_results[1] = { { book("Dune") } }
+            search(openUI(), "dune")
+
+            assert.is_true(menus[1].covers_fullscreen)
+            assert.is_false(menus[1].is_popout)
         end)
 
         it("loads covers for each page shown", function()
@@ -588,15 +701,54 @@ describe("KindleFetch", function()
             search_results[1] = { nil, "no Library Genesis urls available" }
             search(openUI(), "dune")
 
-            assert.are.equal("Error: no Library Genesis urls available", helper.lastNotification())
+            assert.are.equal("Search failed: no Library Genesis urls available", helper.lastError())
             assert.are.equal(0, #menus)
         end)
 
+        -- in a message that stays, as it may come a while after the search was started
         it("says when nothing was found", function()
             search(openUI(), "dune")
 
-            assert.are.equal("No books found", helper.lastNotification())
+            assert.are.equal("No books found", helper.lastShown().text)
+            assert.is_nil(helper.lastShown().ok_callback)
             assert.are.equal(0, #menus)
+            assert.are.equal(0, #helper.state.notifications)
+        end)
+
+        -- which is why most searches that find nothing do
+        describe("when Library Genesis lists results, but none in the languages and file types chosen", function()
+            it("says so, and offers the settings", function()
+                search_results[1] = { {}, nil, nil, 37 }
+                search(openUI(), "dune")
+
+                local explanation = helper.lastShown()
+                assert.are.equal(
+                    "Library Genesis listed 37 results, but none in the languages and file types chosen in Kindle "
+                        .. "Fetch's settings.",
+                    explanation.text
+                )
+                assert.are.equal("Settings", explanation.ok_text)
+                assert.are.equal("Close", explanation.cancel_text)
+                -- there are no more results to look through
+                assert.is_nil(explanation.other_buttons)
+                assert.are.equal(0, #menus)
+
+                explanation.ok_callback()
+                assert.are.equal(1, settings_shown)
+            end)
+
+            it("offers to keep searching while there are more results to look through", function()
+                search_results[1] = { {}, nil, 6, 500 }
+                search_results[6] = { { book("Dune") }, nil, 7, 100 }
+                search(openUI(), "dune")
+
+                local keep_searching = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Keep searching", keep_searching.text)
+
+                keep_searching.callback()
+                assert.are.same({ { "dune", 1 }, { "dune", 6 } }, searches)
+                assert.are.same({ "Dune", "Load more" }, itemTexts(menus[1]))
+            end)
         end)
     end)
 
@@ -636,7 +788,7 @@ describe("KindleFetch", function()
             -- and can be asked for again
             search_results[2] = { { book("Children of Dune") } }
             loadMore()
-            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune" }, itemTexts(menus[2]))
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune" }, itemTexts(menus[1]))
         end)
 
         it("adds the next books to the list", function()
@@ -644,8 +796,32 @@ describe("KindleFetch", function()
             loadMore()
 
             assert.are.same({ { "dune", 1 }, { "dune", 2 } }, searches)
-            assert.is_true(helper.wasClosed(menus[1]))
-            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "Load more" }, itemTexts(menus[2]))
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "Load more" }, itemTexts(menus[1]))
+            assert.are.equal("dune · 3+ books", menus[1].title)
+        end)
+
+        -- it used to show them in a new list, back at its first page
+        it("adds them to the list that's open, turning to the first of them and loading their covers", function()
+            search_results[2] = { { book("Children of Dune"), book("God Emperor of Dune") }, nil, 4 }
+            loadMore()
+
+            assert.are.equal(1, #menus)
+            assert.is_false(helper.wasClosed(menus[1]))
+            -- the third book is the first on the second page
+            assert.are.equal(2, menus[1].page)
+            assert.are.same({ 1, 2 }, menus[1].covers_loaded)
+            -- and the new books can be chosen, like the first ones
+            menus[1].item_table[3].callback()
+            assert.are.equal("Children of Dune", downloads[1].book.title)
+        end)
+
+        it("doesn't load the new books' covers when covers are turned off", function()
+            settings.show_covers = false
+            search_results[2] = { { book("Children of Dune") } }
+            loadMore()
+
+            -- only the first page's, from before they were turned off
+            assert.are.same({ 1 }, menus[1].covers_loaded)
         end)
 
         it("carries on from where the last search stopped", function()
@@ -656,7 +832,7 @@ describe("KindleFetch", function()
 
             assert.are.same({ "dune", 4 }, searches[3])
             -- the end of the results
-            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "God Emperor of Dune" }, itemTexts(menus[3]))
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "God Emperor of Dune" }, itemTexts(menus[1]))
         end)
 
         it("turns on wifi first when offline, then loads them once connected", function()
@@ -684,24 +860,48 @@ describe("KindleFetch", function()
         it("stays on the same page after an error", function()
             search_results[2] = { nil, "request timed out" }
             loadMore()
-            assert.are.equal("Error: request timed out", helper.lastNotification())
+            assert.are.equal("Loading more books failed: request timed out", helper.lastError())
 
             search_results[2] = { { book("Children of Dune") } }
             loadMore()
             assert.are.same({ "dune", 2 }, searches[3])
         end)
 
-        it("says when there are no more books", function()
+        it("says when there are no more books, and takes Load more off the end of the list", function()
             search_results[2] = { {} }
             loadMore()
 
-            assert.are.equal("No more books found", helper.lastNotification())
+            assert.are.equal("No more books found", helper.lastShown().text)
             assert.are.equal(1, #menus)
+            assert.are.same({ "Dune", "Dune Messiah" }, itemTexts(menus[1]))
+            assert.are.equal("dune · 2 books", menus[1].title)
+            -- staying on the page that was showing
+            assert.are.equal(1, menus[1].page)
+        end)
 
-            -- and doesn't search again
+        it("doesn't search again once there are no more books", function()
+            search_results[2] = { {} }
             loadMore()
+            plugin:loadMoreBooks()
+
             assert.are.equal(2, #searches)
-            assert.are.equal("No more books found", helper.lastNotification())
+            assert.are.equal("No more books found", helper.lastShown().text)
+        end)
+
+        it("says when none of the next results could be shown, with more to look through", function()
+            search_results[2] = { {}, nil, 7, 500 }
+            loadMore()
+
+            assert.are.equal(
+                "None of the next 500 results are in the languages and file types chosen. Load more to keep looking.",
+                helper.lastShown().text
+            )
+            assert.are.same({ "Dune", "Dune Messiah", "Load more" }, itemTexts(menus[1]))
+
+            search_results[7] = { { book("Children of Dune") } }
+            loadMore()
+            assert.are.same({ "dune", 7 }, searches[3])
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune" }, itemTexts(menus[1]))
         end)
     end)
 
@@ -820,16 +1020,17 @@ describe("KindleFetch", function()
         it("says why a download failed", function()
             selectBook("Dune")
             downloads[1].callback(false, "download produced empty file")
-            assert.are.equal("Download failed: download produced empty file", helper.lastNotification())
+            assert.are.equal("Download failed: download produced empty file", helper.lastError())
 
             downloads[1].callback(false)
-            assert.are.equal("Download failed", helper.lastNotification())
+            assert.are.equal("Download failed", helper.lastError())
         end)
 
         it("says a download was cancelled, rather than that it failed", function()
             selectBook("Dune")
             downloads[1].callback(false, "cancelled")
             assert.are.equal("Download cancelled", helper.lastNotification())
+            assert.is_nil(helper.lastError())
         end)
     end)
 end)

@@ -115,15 +115,21 @@ local function pollDownload(
             return
         end
 
+        -- the error the mirror answered with, when that's why curl gave up
+        local http_status = exit_code == 22 and CurlUtil.getDownloadStatus(headers_file) or nil
+        if http_status and http_status < 400 then
+            http_status = nil
+        end
         LogUtil.warn(
             string.format(
-                "download of %q from %s%s failed after %ds: curl exit code %d (%s), %d of %s bytes",
+                "download of %q from %s%s failed after %ds: curl exit code %d (%s%s), %d of %s bytes",
                 book.title,
                 LogUtil.site(download_url),
                 tried_proxy and " through the proxy" or "",
                 seconds,
                 exit_code,
                 exit_code == 0 and "empty file" or CurlUtil.getErrorMeaning(exit_code),
+                http_status and ", HTTP " .. http_status or "",
                 final_size or 0,
                 tostring(total_size or "unknown")
             )
@@ -161,7 +167,12 @@ local function pollDownload(
         end
 
         FileUtil.removeFile(part_path)
-        callback(false, exit_code == 0 and "download produced empty file" or CurlUtil.getErrorMeaning(exit_code))
+        local err = exit_code == 0 and "download produced empty file" or CurlUtil.getErrorMeaning(exit_code)
+        if http_status then
+            -- its servers failing, as they do while very busy, rather than e.g. the book not being there
+            err = http_status >= 500 and BUSY_ERROR or string.format("%s (HTTP %d)", err, http_status)
+        end
+        callback(false, err)
         return
     end
 
@@ -370,11 +381,7 @@ function LlgiAPI:downloadBook(book, filepath, callback, open_existing)
     callback = callback or function() end
 
     -- show the progress of a book that is already downloading, in case it was hidden
-    local active_download = LlgiAPI.active_downloads[book.md5]
-    if active_download then
-        if not active_download.progress_widget.is_visible then
-            active_download.progress_widget:toggleVisibility()
-        end
+    if self:showDownload(book.md5) then
         return
     end
 
@@ -424,6 +431,20 @@ function LlgiAPI:downloadBook(book, filepath, callback, open_existing)
     prompt:show()
 end
 
+-- show the progress of a download, if it was hidden. returns whether the book with that md5 is downloading
+function LlgiAPI:showDownload(md5)
+    local active_download = self.active_downloads[md5]
+    if not active_download then
+        return false
+    end
+
+    if not active_download.progress_widget.is_visible then
+        active_download.progress_widget:toggleVisibility()
+    end
+    return true
+end
+
+-- the downloads in progress, in the order they were started
 function LlgiAPI:getActiveDownloads()
     local downloads = {}
     for id, download_info in pairs(self.active_downloads) do
@@ -433,8 +454,15 @@ function LlgiAPI:getActiveDownloads()
             filepath = download_info.filepath,
             md5 = download_info.book.md5,
             widget = download_info.progress_widget,
+            started = download_info.started,
         })
     end
+    table.sort(downloads, function(a, b)
+        if a.started ~= b.started then
+            return a.started < b.started
+        end
+        return a.title < b.title
+    end)
     return downloads
 end
 

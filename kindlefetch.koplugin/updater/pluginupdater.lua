@@ -211,14 +211,14 @@ local function updatePlugin(plugin_path, version_str)
     local zip_path, err = downloadPluginRelease(version_str)
     if not zip_path then
         LogUtil.warn("failed to dowload plugin update", err)
-        NotifyUtil.info("Failed to download update")
+        NotifyUtil.error("Failed to download update")
         return false
     end
 
     -- install the plugin
     if not installPluginRelease(plugin_path, zip_path, version_str) then
         LogUtil.warn("failed to install plugin release from zip:", zip_path)
-        NotifyUtil.info("Failed to install update")
+        NotifyUtil.error("Failed to install update")
         return false
     end
 
@@ -293,7 +293,7 @@ function PluginUpdater.checkForUpdates(user_requested)
         if not repo_update then
             LogUtil.warn("could not check for KindleFetch updates")
             if user_requested then
-                NotifyUtil.info("Failed to fetch updates for KindleFetch")
+                NotifyUtil.error("Failed to fetch updates for KindleFetch")
             end
             return
         end

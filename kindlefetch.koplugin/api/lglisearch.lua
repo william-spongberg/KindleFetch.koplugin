@@ -273,8 +273,6 @@ local function fetchResults(params, refresh)
     return nil, last_err or "all Library Genesis mirrors failed"
 end
 
--- search from the given page of Library Genesis' results, returning the books found and the page to carry on
--- from, or nil once there are no more results
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
 function LlgiSearch:isCached(query, page)
     local cached = SearchCache:get(
@@ -287,6 +285,9 @@ function LlgiSearch:isCached(query, page)
     return cached ~= nil and cached.books ~= nil
 end
 
+-- search from the given page of Library Genesis' results, returning the books found, the page to carry on from
+-- (or nil once there are no more results), and how many results were read to find them: most may have been in
+-- other languages or file types (unknown, so nil, for books saved from an earlier search)
 function LlgiSearch:search(query, page)
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
@@ -313,6 +314,7 @@ function LlgiSearch:search(query, page)
     -- Library Genesis can list the same file more than once, e.g. for each edition it's in
     local seen = {}
     local next_page = page
+    local results_read = 0
     for _ = 1, MAX_PAGES do
         local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types))
         if not html then
@@ -333,6 +335,7 @@ function LlgiSearch:search(query, page)
                 results
             )
         )
+        results_read = results_read + results
         for _, book in ipairs(page_books) do
             if not seen[book.md5] then
                 seen[book.md5] = true
@@ -365,7 +368,7 @@ function LlgiSearch:search(query, page)
             next_page = next_page,
         }, query, page, languages, file_types, book_types)
     end
-    return books, nil, next_page
+    return books, nil, next_page, results_read
 end
 
 return LlgiSearch

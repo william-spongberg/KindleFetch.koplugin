@@ -347,12 +347,25 @@ describe("LlgiSearch", function()
                     results(mirrors[1], fullPage(page, 4), page)
                 end
 
-                local books, err, next_page = LlgiSearch:search("dune", 1)
+                local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
                 assert.is_nil(err)
                 assert.are.equal(12, #books)
                 assert.are.equal("Book 3.4", books[12].title)
                 assert.are.equal(4, next_page)
                 assert.are.equal(3, #searches())
+                -- so it can be said how many were left out when none are found
+                assert.are.equal(300, results_read)
+            end)
+
+            it("says how many results it read when none of them were books to show", function()
+                results(mirrors[1], fullPage(1, 0), 1)
+                results(mirrors[1], { { md5 = "abc", title = "Dune", language = "Spanish", file_type = "epub" } }, 2)
+
+                local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
+                assert.are.same({}, books)
+                assert.is_nil(err)
+                assert.is_nil(next_page)
+                assert.are.equal(101, results_read)
             end)
 
             it("stops at the last page of results", function()
