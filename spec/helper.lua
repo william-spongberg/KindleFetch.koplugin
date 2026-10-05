@@ -512,6 +512,9 @@ local function createStubs(state)
         self.page = page
         return true
     end
+    function stubs.Menu:onCloseWidget()
+        self.close_widget_handled = true
+    end
     stubs.InputContainer = widgetClass()
     stubs.geometry = {
         new = function(_, o)

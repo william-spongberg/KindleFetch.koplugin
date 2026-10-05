@@ -169,13 +169,14 @@ describe("CoverCache", function()
 
         before_each(function()
             runs, results = {}, {}
-            CurlUtil.downloadMultiple = function(urls, paths, use_proxy, background, parallel_jobs)
+            CurlUtil.downloadMultiple = function(urls, paths, use_proxy, background, parallel_jobs, _, _, opts)
                 assert.is_true(background)
                 local run = {
                     urls = urls,
                     paths = paths,
                     use_proxy = use_proxy,
                     parallel_jobs = parallel_jobs,
+                    stall_time = opts.stall_time,
                     pid = 4000 + #runs,
                     exit_file = CurlUtil.createExitFile() .. #runs,
                 }
@@ -202,6 +203,8 @@ describe("CoverCache", function()
             assert.are.same({ covers_dir .. "new.jpg" }, runs[1].paths)
             assert.are.equal(6, runs[1].parallel_jobs)
             assert.is_false(runs[1].use_proxy)
+            -- covers are shown once they've all finished, so one that has stalled mustn't keep the rest waiting
+            assert.are.equal(10, runs[1].stall_time)
             -- search results show placeholders, rather than a notification
             assert.are.equal(0, #helper.state.notifications)
 

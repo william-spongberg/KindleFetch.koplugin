@@ -439,6 +439,22 @@ describe("CurlUtil", function()
             assert.is_truthy(helper.logged("warn", "^left out a download whose address can't be used"))
         end)
 
+        -- the files are shown once they've all finished, so one that has stalled would keep the rest waiting
+        it("gives up on a file once nothing of it has arrived for a while, when asked to", function()
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }))
+
+            CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15, { stall_time = 10 })
+            assert.matches(
+                "--max-time 30 --speed-limit 1 --speed-time 10",
+                helper.state.executed[#helper.state.executed],
+                1,
+                true
+            )
+
+            CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find("--speed-time", 1, true))
+        end)
+
         it("removes the curl config file afterwards", function()
             local config_file
             helper.stubExecute("curl -sL -f --config", function(cmd)

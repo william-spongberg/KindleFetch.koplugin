@@ -14,6 +14,9 @@ local CACHE_DIR = DataStorage:getSettingsDir() .. "/kindlefetch_covers/"
 local POLL_INTERVAL = 0.5
 -- the cover is fetched before the download prompt shows, so don't wait long for it
 local COVER_MAX_TIME = 10
+-- a cover that nothing has arrived of for this many seconds is given up on. the covers on a page are shown once
+-- they have all finished, so one that has stalled would otherwise keep the rest waiting for as long as they can take
+local COVER_STALL_TIME = 10
 
 -- md5s of covers being downloaded, so they aren't downloaded twice at once
 local downloading = {}
@@ -208,7 +211,9 @@ end
 
 local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs, on_done)
     local pid, exit_file, config_file, err =
-        CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, true, parallel_jobs, false, 15)
+        CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, true, parallel_jobs, false, 15, {
+            stall_time = COVER_STALL_TIME,
+        })
     if not pid then
         LogUtil.warn("could not start curl to download", #download_urls, "covers:", err)
         on_done({})

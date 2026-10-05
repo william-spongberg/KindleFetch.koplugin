@@ -446,6 +446,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
     end
 end
 
+-- opts.stall_time optionally gives up on a file once nothing of it has arrived for that many seconds
 function CurlUtil.downloadMultiple(
     download_urls,
     filepaths,
@@ -453,8 +454,10 @@ function CurlUtil.downloadMultiple(
     background,
     num_parallel_jobs,
     enable_retry,
-    timeout
+    timeout,
+    opts
 )
+    opts = opts or {}
     ensureTmpDir()
 
     local config_file = tmpFile("curl_download_config", ".txt")
@@ -484,8 +487,11 @@ function CurlUtil.downloadMultiple(
         cmd = CurlUtil.enableRetry(cmd, 2, 2)
     end
     cmd = CurlUtil.setTimeout(cmd, timeout)
-    -- give up on files that stall, so they don't hold up the rest
+    -- give up on files that take too long, so they don't hold up the rest
     cmd = string.format("%s --max-time %d", cmd, timeout * 2)
+    if opts.stall_time then
+        cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
+    end
     cmd = CurlUtil.enableParallel(cmd, num_parallel_jobs)
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)

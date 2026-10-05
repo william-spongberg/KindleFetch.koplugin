@@ -173,7 +173,8 @@ kindlefetch.koplugin/
 
 3. **Cover Loading**
    - Covers for the page of results showing are downloaded in the background, in parallel using curl's `--parallel` flag, with placeholders shown until they arrive
-   - Turning the page loads the covers for that page
+   - Turning the page loads the covers for that page, and the next page's are downloaded ahead so they're there when it's turned to
+   - A cover that stalls is given up on after 10 seconds, so it doesn't keep the rest of its page waiting
    - Downloaded covers are cached locally with persistent storage
    - If a cover can't be downloaded, its book is shown without one
    - Tapping a cover in the download prompt downloads the full-size cover, showing the thumbnail until it arrives
