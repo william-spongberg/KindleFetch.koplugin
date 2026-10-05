@@ -16,10 +16,13 @@ LlgiAPI.active_downloads = {}
 
 -- constants
 local DOWNLOAD_POLL_INTERVAL = 0.5
+-- a download that hasn't received anything for this many seconds is given up on, rather than waited on forever
+local DOWNLOAD_STALL_TIME = 30
 
+-- part_path is where curl is downloading the book to, see _startDownload
 local function pollDownload(
     book,
-    filepath,
+    part_path,
     pid,
     exit_file,
     headers_file,
@@ -31,15 +34,17 @@ local function pollDownload(
     callback
 )
     if progress_widget.cancelled then
-        LogUtil.info(string.format("download of %q cancelled at %d bytes", book.title, FileUtil.getSize(filepath) or 0))
+        LogUtil.info(
+            string.format("download of %q cancelled at %d bytes", book.title, FileUtil.getSize(part_path) or 0)
+        )
         CurlUtil.killPid(pid)
-        FileUtil.removeFile(filepath)
+        FileUtil.removeFile(part_path)
         callback(false, "cancelled")
         return
     end
 
     current_pid.pid = pid
-    local bytes_downloaded = FileUtil.getSize(filepath)
+    local bytes_downloaded = FileUtil.getSize(part_path)
 
     -- curl notes down the headers it's sent, which say how big the book is, before the book starts to arrive
     if not total_size and bytes_downloaded > 0 then
@@ -82,7 +87,7 @@ local function pollDownload(
         exit_code = CurlUtil.getExitCode(exit_file)
     end
     if exit_code then
-        local final_size = FileUtil.getSize(filepath)
+        local final_size = FileUtil.getSize(part_path)
 
         -- check if completed successfully
         local download = LlgiAPI.active_downloads[book.md5]
@@ -119,18 +124,20 @@ local function pollDownload(
         -- use proxy as backup
         if not tried_proxy and os.getenv("PROXY_URL") and os.getenv("PROXY_URL") ~= "" then
             LogUtil.info("retrying the download through the proxy")
-            local new_pid, new_exit_file, spawn_err =
-                CurlUtil.download(download_url, filepath, true, true, nil, { headers_file = headers_file })
+            local new_pid, new_exit_file, spawn_err = CurlUtil.download(download_url, part_path, true, true, nil, {
+                headers_file = headers_file,
+                stall_time = DOWNLOAD_STALL_TIME,
+            })
             if not new_pid then
                 LogUtil.warn("could not start curl to retry through the proxy:", spawn_err)
-                FileUtil.removeFile(filepath)
+                FileUtil.removeFile(part_path)
                 callback(false, spawn_err or "download failed and proxy retry could not start")
                 return
             end
             UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
                 pollDownload(
                     book,
-                    filepath,
+                    part_path,
                     new_pid,
                     new_exit_file,
                     headers_file,
@@ -145,7 +152,7 @@ local function pollDownload(
             return
         end
 
-        FileUtil.removeFile(filepath)
+        FileUtil.removeFile(part_path)
         callback(false, exit_code == 0 and "download produced empty file" or CurlUtil.getErrorMeaning(exit_code))
         return
     end
@@ -159,7 +166,7 @@ local function pollDownload(
                 bytes_downloaded or 0
             )
         )
-        FileUtil.removeFile(filepath)
+        FileUtil.removeFile(part_path)
         callback(false, "download process ended unexpectedly")
         return
     end
@@ -168,7 +175,7 @@ local function pollDownload(
     UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
         pollDownload(
             book,
-            filepath,
+            part_path,
             pid,
             exit_file,
             headers_file,
@@ -211,10 +218,15 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     progress_widget:update(0, "Starting download...")
     UIManager:forceRePaint()
 
+    -- the book is downloaded next to where it's wanted and moved there once it's all arrived, so that half a book
+    -- is never left looking like a whole one, and a book being downloaded over is kept until then
+    local part_path = filepath .. ".part"
+
     -- track this download
     LlgiAPI.active_downloads[book.md5] = {
         book = book,
         filepath = filepath,
+        part_path = part_path,
         progress_widget = progress_widget,
         callback = callback,
         started = os.time(),
@@ -299,8 +311,10 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
 
     -- start background curl downloader, noting down the headers it's sent, which say how big the book is
     local headers_file = CurlUtil.createHeadersFile()
-    local pid, exit_file, spawn_err =
-        CurlUtil.download(download_url, filepath, false, true, nil, { headers_file = headers_file })
+    local pid, exit_file, spawn_err = CurlUtil.download(download_url, part_path, false, true, nil, {
+        headers_file = headers_file,
+        stall_time = DOWNLOAD_STALL_TIME,
+    })
     if not pid then
         LogUtil.warn("could not start curl to download:", spawn_err)
         progress_widget:close()
@@ -315,7 +329,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
         pollDownload(
             book,
-            filepath,
+            part_path,
             pid,
             exit_file,
             headers_file,
@@ -328,6 +342,11 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
                 progress_widget:close()
                 LlgiAPI.active_downloads[book.md5] = nil -- cleanup after download finishes
                 FileUtil.removeFile(headers_file)
+                if ok and not os.rename(part_path, filepath) then
+                    LogUtil.warn("could not move the downloaded book from", part_path, "to", filepath)
+                    FileUtil.removeFile(part_path)
+                    ok, err = false, "could not save the book"
+                end
                 UIManager:forceRePaint()
                 callback(ok, err, filepath)
             end
@@ -413,7 +432,7 @@ function LlgiAPI:cancelAllDownloads()
     for id, download_info in pairs(self.active_downloads) do
         -- stops curl straight away, as there may not be another poll to stop it (e.g. when exiting)
         download_info.progress_widget:cancel()
-        FileUtil.removeFile(download_info.filepath)
+        FileUtil.removeFile(download_info.part_path)
         FileUtil.removeFile(download_info.headers_file)
     end
     self.active_downloads = {}

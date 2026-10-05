@@ -226,6 +226,16 @@ describe("CurlUtil", function()
             assert.is_nil(helper.state.executed[#helper.state.executed]:find(" -D ", 1, true))
         end)
 
+        it("gives up on a download once nothing has arrived for a while, when asked to", function()
+            helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false, nil, { stall_time = 30 })
+            assert.matches("--speed-limit 1 --speed-time 30", helper.state.executed[#helper.state.executed], 1, true)
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find("--speed-time", 1, true))
+        end)
+
         it("fails and cleans up when curl fails", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("partial", 6))
 

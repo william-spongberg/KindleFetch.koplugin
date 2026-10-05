@@ -209,6 +209,11 @@ function CurlUtil.setTimeout(curl_cmd, seconds)
     return string.format("%s --connect-timeout %d", curl_cmd, seconds)
 end
 
+-- give up once nothing has arrived for this many seconds
+function CurlUtil.abortWhenStalled(curl_cmd, seconds)
+    return string.format("%s --speed-limit 1 --speed-time %d", curl_cmd, seconds)
+end
+
 function CurlUtil.dumpHeaders(curl_cmd, headers_file)
     return string.format("%s -D %s", curl_cmd, CurlUtil.shellQuote(headers_file))
 end
@@ -276,7 +281,8 @@ function CurlUtil.getCMD(download_url, filepath, exit_file, use_proxy)
 end
 
 -- max_time optionally limits how long each attempt (and retrying) can take, in seconds.
--- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize)
+-- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize), and
+-- opts.stall_time gives up on a download once nothing has arrived for that many seconds
 function CurlUtil.download(download_url, filepath, use_proxy, background, max_time, opts)
     opts = opts or {}
 
@@ -290,6 +296,9 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
     end
     if opts.headers_file then
         cmd = CurlUtil.dumpHeaders(cmd, opts.headers_file)
+    end
+    if opts.stall_time then
+        cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)
