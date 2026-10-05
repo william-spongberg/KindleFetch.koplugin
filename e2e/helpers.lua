@@ -213,9 +213,13 @@ function H.search(query)
     H.tapButton("Search", dialog)
     return H.waitFor("search results", 120, function()
         for i = since + 1, #H.notifications do
-            if H.notifications[i]:find("Error", 1, true) or H.notifications[i]:find("No books found", 1, true) then
+            if H.notifications[i]:find("No books found", 1, true) then
                 error("search failed: " .. H.notifications[i], 0)
             end
+        end
+        local failure = H.errorShown()
+        if failure then
+            error("search failed: " .. failure, 0)
         end
         return plugin.books_menu and H.isShown(plugin.books_menu) and plugin.books_menu
     end)
@@ -340,6 +344,15 @@ local notify = Notification.notify
 function Notification:notify(text, ...)
     table.insert(H.notifications, tostring(text))
     return notify(self, text, ...)
+end
+
+-- what a message on screen about something going wrong says, if there is one
+function H.errorShown()
+    for _, window in ipairs(H.windows()) do
+        if window.icon == "notice-warning" and type(window.text) == "string" then
+            return window.text
+        end
+    end
 end
 
 -- wait for a notification containing text, shown after the first `since` notifications

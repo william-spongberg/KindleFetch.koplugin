@@ -22,6 +22,17 @@ describe("Downloading", function()
         return H.findButton("Hide") and H.findButton("Cancel")
     end
 
+    -- wait for something a download leads to, failing straight away if it says it has failed instead
+    local function waitForDownload(what, timeout, check)
+        return H.waitFor(what, timeout, function()
+            local failure = H.errorShown()
+            if failure then
+                error(failure, 0)
+            end
+            return check()
+        end)
+    end
+
     local function isEpubToDownload(book)
         return book.file_type == "epub" and H.isPublicDomain(book)
     end
@@ -49,7 +60,7 @@ describe("Downloading", function()
             return H.findButton("Download")
         end)
         confirmDownload()
-        H.waitFor("the download to finish", 300, function()
+        waitForDownload("the download to finish", 300, function()
             return H.findButton("Read now")
         end)
 
@@ -72,7 +83,7 @@ describe("Downloading", function()
         H.shot("download-prompt")
         confirmDownload()
 
-        H.waitFor("the download to finish", 300, function()
+        waitForDownload("the download to finish", 300, function()
             return H.findButton("Read now")
         end)
         H.shot("downloaded")
@@ -107,7 +118,7 @@ describe("Downloading", function()
             return H.findButton("Download")
         end)
         confirmDownload()
-        H.waitFor("the download progress", 60, isDownloadShowing)
+        waitForDownload("the download progress", 60, isDownloadShowing)
         H.shot("download-progress")
 
         H.tapButton("Hide")

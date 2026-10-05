@@ -242,7 +242,7 @@ function KindleFetch:performSearch()
         or #KindleFetchSettings:getPreferredBookTypes() == 0 and _("book type")
     if turned_off then
         LogUtil.warn("every", turned_off, "is turned off, so there's nothing to search for")
-        NotifyUtil.info(string.format(_("Error: turn on at least one %s in Kindle Fetch's settings"), turned_off))
+        NotifyUtil.error(string.format(_("Turn on at least one %s in Kindle Fetch's settings first."), turned_off))
         return
     end
 
@@ -268,7 +268,7 @@ function KindleFetch:performSearch()
         if err or not books then
             err = err or "search failed"
             LogUtil.warn(string.format("search for %q failed: %s", query, err))
-            NotifyUtil.info("Error: " .. err)
+            NotifyUtil.error(_("Search failed: ") .. err)
             return
         end
         if #books == 0 then
@@ -323,7 +323,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
         end
         if not ok then
             LogUtil.err(string.format("search for %q went wrong: %s", query, tostring(books)))
-            books, err, next_page = nil, "search went wrong, see crash.log", nil
+            books, err, next_page = nil, "something went wrong, see crash.log", nil
         end
 
         if err == HttpUtil.CANCELLED then
@@ -401,7 +401,7 @@ function KindleFetch:loadMoreBooks()
     local query = self.current_search_query
     self:searchInBackground(query, self.next_page, _("Loading more books..."), function(books, err, next_page)
         if err then
-            NotifyUtil.info("Error: " .. err)
+            NotifyUtil.error(_("Loading more books failed: ") .. err)
             return
         end
 
@@ -501,7 +501,7 @@ function KindleFetch:downloadBook(book)
             NotifyUtil.info(_("Download cancelled"))
         else
             LogUtil.warn("download failed for", book.title, err)
-            NotifyUtil.info(err and ("Download failed: " .. err) or "Download failed")
+            NotifyUtil.error(err and ("Download failed: " .. err) or "Download failed")
         end
     end, function(existing_filepath)
         -- the book is already there, and was chosen to be read rather than downloaded again

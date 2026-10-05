@@ -790,6 +790,15 @@ function helper.lastShown()
     return helper.state.shown[#helper.state.shown]
 end
 
+-- what the last message about something going wrong said (see NotifyUtil.error)
+function helper.lastError()
+    for i = #helper.state.shown, 1, -1 do
+        if helper.state.shown[i].icon == "notice-warning" then
+            return helper.state.shown[i].text
+        end
+    end
+end
+
 function helper.wasClosed(widget)
     for _, closed in ipairs(helper.state.closed) do
         if closed == widget then

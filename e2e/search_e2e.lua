@@ -67,8 +67,8 @@ describe("Searching", function()
         assert(not (plugin.books_menu and H.isShown(plugin.books_menu)), "the books were shown all the same")
         assert(H.isShown(dialog), "the search dialog has gone")
         -- calling it off isn't an error
+        assert(not H.errorShown(), "said " .. tostring(H.errorShown()))
         for i = since + 1, #H.notifications do
-            assert(not H.notifications[i]:find("Error", 1, true), "said " .. H.notifications[i])
             assert(not H.notifications[i]:find("No books", 1, true), "said " .. H.notifications[i])
         end
     end)

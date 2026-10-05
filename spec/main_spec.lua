@@ -469,8 +469,8 @@ describe("KindleFetch", function()
 
                 assert.are.equal(0, #searches)
                 assert.are.equal(
-                    "Error: turn on at least one " .. preference[2] .. " in Kindle Fetch's settings",
-                    helper.lastNotification()
+                    "Turn on at least one " .. preference[2] .. " in Kindle Fetch's settings first.",
+                    helper.lastError()
                 )
             end)
         end
@@ -565,7 +565,7 @@ describe("KindleFetch", function()
 
                 assert.is_true(helper.wasClosed(message()))
                 assert.is_nil(require("util.httputil").trap_widget)
-                assert.are.equal("Error: search went wrong, see crash.log", helper.lastNotification())
+                assert.are.equal("Search failed: something went wrong, see crash.log", helper.lastError())
                 assert.matches("attempt to index a nil value", helper.logged("err", '^search for "dune" went wrong'))
             end)
         end)
@@ -598,7 +598,7 @@ describe("KindleFetch", function()
             search_results[1] = { nil, "no Library Genesis urls available" }
             search(openUI(), "dune")
 
-            assert.are.equal("Error: no Library Genesis urls available", helper.lastNotification())
+            assert.are.equal("Search failed: no Library Genesis urls available", helper.lastError())
             assert.are.equal(0, #menus)
         end)
 
@@ -694,7 +694,7 @@ describe("KindleFetch", function()
         it("stays on the same page after an error", function()
             search_results[2] = { nil, "request timed out" }
             loadMore()
-            assert.are.equal("Error: request timed out", helper.lastNotification())
+            assert.are.equal("Loading more books failed: request timed out", helper.lastError())
 
             search_results[2] = { { book("Children of Dune") } }
             loadMore()
@@ -830,16 +830,17 @@ describe("KindleFetch", function()
         it("says why a download failed", function()
             selectBook("Dune")
             downloads[1].callback(false, "download produced empty file")
-            assert.are.equal("Download failed: download produced empty file", helper.lastNotification())
+            assert.are.equal("Download failed: download produced empty file", helper.lastError())
 
             downloads[1].callback(false)
-            assert.are.equal("Download failed", helper.lastNotification())
+            assert.are.equal("Download failed", helper.lastError())
         end)
 
         it("says a download was cancelled, rather than that it failed", function()
             selectBook("Dune")
             downloads[1].callback(false, "cancelled")
             assert.are.equal("Download cancelled", helper.lastNotification())
+            assert.is_nil(helper.lastError())
         end)
     end)
 end)

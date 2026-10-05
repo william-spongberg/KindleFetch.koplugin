@@ -116,7 +116,7 @@ function SettingsPage:changeBookCoverVisibility()
         KindleFetchSettings:load()
         this:showSettings()
     else
-        NotifyUtil.info("Error: " .. err)
+        NotifyUtil.error(err)
     end
 end
 
@@ -168,7 +168,7 @@ function SettingsPage:changeDownloadFolder()
                 KindleFetchSettings:load()
                 this:showSettings()
             else
-                NotifyUtil.info("Error: " .. err)
+                NotifyUtil.error(err)
             end
         end,
     }:chooseDir()
@@ -225,7 +225,7 @@ function SettingsPage:changeLanguages()
                         UIManager:setDirty(menu, "full")
                         this:showSettings()
                     else
-                        NotifyUtil.info("Error: " .. err)
+                        NotifyUtil.error(err)
                     end
                 else
                     NotifyUtil.info("Select at least one language")
@@ -323,7 +323,7 @@ function SettingsPage:changeFileTypes()
                         KindleFetchSettings:load()
                         this:showSettings()
                     else
-                        NotifyUtil.info("Error: " .. err)
+                        NotifyUtil.error(err)
                     end
                 else
                     NotifyUtil.info("Select at least one file type")
@@ -390,7 +390,7 @@ function SettingsPage:changeBookTypes()
                         KindleFetchSettings:load()
                         this:showSettings()
                     else
-                        NotifyUtil.info("Error: " .. err)
+                        NotifyUtil.error(err)
                     end
                 else
                     NotifyUtil.info("Select at least one book type")

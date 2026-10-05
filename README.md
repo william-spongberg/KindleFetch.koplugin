@@ -138,7 +138,7 @@ kindlefetch.koplugin/
     ├── fileutil.lua           # File operations (size, creation, deletion, validation) and directory checks
     ├── stringutil.lua         # String utilities (trimming, validation, emoji removal, HTML entity conversion)
     ├── logutil.lua            # Logger wrapper
-    ├── notifyutil.lua         # Notification wrapper
+    ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed
     ├── pathutil.lua           # Plugin install location and temporary download directory
     └── versionutil.lua        # Version parsing and comparison utilities
 ```
@@ -198,7 +198,7 @@ kindlefetch.koplugin/
    - If Wikipedia answers without listing any mirrors (e.g. once its page has been rearranged), the mirrors known when the plugin was released are used
    - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything
    - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes
-   - Curl exit codes are mapped to human-readable error messages and the user is notified
+   - Curl exit codes are mapped to human-readable error messages, and what went wrong is shown in a message that stays until it's dismissed
 
 ### Environment Variables
 

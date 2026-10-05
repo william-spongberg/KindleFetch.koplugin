@@ -119,7 +119,7 @@ describe("SettingsPage", function()
             helper.state.dir_choosers[1].onConfirm(data_dir .. "/missing")
 
             assert.are.equal(helper.abs(data_dir), Settings:getDownloadDir())
-            assert.are.equal("Error: Invalid directory path", helper.lastNotification())
+            assert.are.equal("Invalid directory path", helper.lastError())
         end)
     end)
 
