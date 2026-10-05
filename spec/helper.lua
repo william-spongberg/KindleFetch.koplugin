@@ -582,6 +582,7 @@ local WIDGET_MODULES = {
     "ui/widget/button",
     "ui/widget/progresswidget",
     "ui/widget/confirmbox",
+    "ui/widget/infomessage",
     "ui/widget/buttondialog",
     "ui/widget/iconwidget",
     "ui/widget/buttontable",

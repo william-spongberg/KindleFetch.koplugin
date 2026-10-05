@@ -34,6 +34,45 @@ describe("Searching", function()
         H.eq("Load more", menu.item_table[#menu.item_table].text, "last entry")
     end)
 
+    -- KOReader carries on while Library Genesis answers, rather than being held up until it has
+    it("can be called off while waiting for Library Genesis", function()
+        H.openMainMenu({ "Kindle Fetch", "Search Library Genesis" })
+        local plugin = H.plugin()
+        local dialog = H.waitFor("the search dialog", 10, function()
+            return plugin.search_box and H.isShown(plugin.search_box) and plugin.search_box
+        end)
+        dialog:setInputText(H.SEARCH_QUERY)
+        local since = #H.notifications
+        H.tapButton("Search", dialog)
+
+        local message = H.waitFor("the message saying it's searching", 10, function()
+            for _, window in ipairs(H.windows()) do
+                if type(window.text) == "string" and window.text:find("Searching Library Genesis", 1, true) then
+                    return window
+                end
+            end
+        end)
+        assert(message.text:find("Tap to cancel", 1, true), "the message doesn't say how to call the search off")
+        H.shot("searching")
+
+        H.tap(message.movable)
+        H.waitFor("the message to go", 10, function()
+            return not H.isShown(message)
+        end)
+        -- long enough for Library Genesis to have answered
+        H.sleep(1)
+        H.poll(15, function()
+            return plugin.books_menu and H.isShown(plugin.books_menu)
+        end)
+        assert(not (plugin.books_menu and H.isShown(plugin.books_menu)), "the books were shown all the same")
+        assert(H.isShown(dialog), "the search dialog has gone")
+        -- calling it off isn't an error
+        for i = since + 1, #H.notifications do
+            assert(not H.notifications[i]:find("Error", 1, true), "said " .. H.notifications[i])
+            assert(not H.notifications[i]:find("No books", 1, true), "said " .. H.notifications[i])
+        end
+    end)
+
     it("shows book covers once they have downloaded", function()
         local CoverCache = require("cache.covercache")
         local menu = H.search(H.SEARCH_QUERY)

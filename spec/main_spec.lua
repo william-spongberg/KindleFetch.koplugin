@@ -3,6 +3,8 @@ local helper = require("helper")
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
     local cancelled_downloads, curl_check_user_requested, leftovers_removed
+    -- whether searches can be called off, and the widget that calls each one off when tapped (false without one)
+    local can_cancel, trap_widgets
     -- pages of results saved from earlier searches, as "query page"
     local saved
 
@@ -133,11 +135,22 @@ describe("KindleFetch", function()
                 settings_shown = settings_shown + 1
             end,
         })
+        can_cancel, trap_widgets = true, {}
+        helper.stub("util.httputil", {
+            CANCELLED = "request cancelled",
+            canCancel = function()
+                return can_cancel
+            end,
+        })
         helper.stub("api.lglisearch", {
             search = function(_, query, page)
                 table.insert(searches, { query, page })
-                -- books, error, and the page to carry on from
+                table.insert(trap_widgets, require("util.httputil").trap_widget or false)
+                -- books, error, and the page to carry on from (or a function to run in place of the search)
                 local result = search_results[page] or { {} }
+                if type(result) == "function" then
+                    return result()
+                end
                 return result[1], result[2], result[3]
             end,
             isCached = function(_, query, page)
@@ -481,9 +494,70 @@ describe("KindleFetch", function()
             search(openUI(), "  dune  ")
 
             assert.are.same({ { "dune", 1 } }, searches)
-            assert.are.equal("Searching...", helper.state.notifications[1])
             assert.are.same({ "Dune", "Dune Messiah", "Load more" }, itemTexts(menus[1]))
             assert.are.equal(menus[1], helper.lastShown())
+        end)
+
+        -- KOReader carries on meanwhile, rather than being held up until Library Genesis has answered
+        describe("while waiting for Library Genesis", function()
+            local function message()
+                return helper.state.shown[2]
+            end
+
+            it("says it's searching until the books are found, and how to call it off", function()
+                search_results[1] = { { book("Dune") } }
+                search(openUI(), "dune")
+
+                assert.are.equal("Searching Library Genesis...\nTap to cancel.", message().text)
+                assert.is_true(message().flush_events_on_show)
+                assert.is_true(helper.wasClosed(message()))
+                assert.are.equal(0, #helper.state.notifications)
+                -- a tap on the message is what calls it off
+                assert.are.same({ message() }, trap_widgets)
+                assert.is_nil(require("util.httputil").trap_widget)
+            end)
+
+            it("doesn't say how to call it off when it can't be", function()
+                can_cancel = false
+                search_results[1] = { { book("Dune") } }
+                search(openUI(), "dune")
+
+                assert.are.equal("Searching Library Genesis...", message().text)
+            end)
+
+            it("shows nothing more once it's called off", function()
+                search_results[1] = { nil, "request cancelled" }
+                local plugin = openUI()
+                search(plugin, "dune")
+
+                assert.is_true(helper.wasClosed(message()))
+                assert.are.equal(0, #menus)
+                assert.are.equal(0, #helper.state.notifications)
+                assert.are.equal(2, #helper.state.shown)
+                -- the search box is still there to search again from
+                assert.is_false(helper.wasClosed(plugin.search_box))
+            end)
+
+            it("says nothing for results saved from an earlier search, which are there straight away", function()
+                saved["dune 1"] = true
+                search_results[1] = { { book("Dune") } }
+                search(openUI(), "dune")
+
+                assert.are.equal(menus[1], helper.state.shown[2])
+                assert.are.same({ false }, trap_widgets)
+            end)
+
+            it("says so when the search goes wrong, rather than leaving its message up", function()
+                search_results[1] = function()
+                    error("attempt to index a nil value")
+                end
+                search(openUI(), "dune")
+
+                assert.is_true(helper.wasClosed(message()))
+                assert.is_nil(require("util.httputil").trap_widget)
+                assert.are.equal("Error: search went wrong, see crash.log", helper.lastNotification())
+                assert.matches("attempt to index a nil value", helper.logged("err", '^search for "dune" went wrong'))
+            end)
         end)
 
         it("doesn't offer more books at the end of the results", function()
@@ -538,6 +612,31 @@ describe("KindleFetch", function()
             plugin = openUI()
             search_results[1] = { { book("Dune"), book("Dune Messiah") }, nil, 2 }
             search(plugin, "dune")
+        end)
+
+        it("says it's loading more until they're found, and how to call it off", function()
+            search_results[2] = { { book("Children of Dune") }, nil, 4 }
+            local shown = #helper.state.shown
+            loadMore()
+
+            local message = helper.state.shown[shown + 1]
+            assert.are.equal("Loading more books...\nTap to cancel.", message.text)
+            assert.is_true(helper.wasClosed(message))
+            assert.are.equal(message, trap_widgets[2])
+        end)
+
+        it("leaves the books as they were once loading more is called off", function()
+            search_results[2] = { nil, "request cancelled" }
+            loadMore()
+
+            assert.are.equal(1, #menus)
+            assert.is_false(helper.wasClosed(menus[1]))
+            assert.are.equal(0, #helper.state.notifications)
+
+            -- and can be asked for again
+            search_results[2] = { { book("Children of Dune") } }
+            loadMore()
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune" }, itemTexts(menus[2]))
         end)
 
         it("adds the next books to the list", function()

@@ -19,6 +19,11 @@ HttpUtil.trap_widget = nil
 local ANSWER_TIMEOUT = 10
 local PAGE_TIMEOUT = 60
 
+-- whether requests made from inside Trapper:wrap can be called off (see trap_widget), which those made with curl can
+function HttpUtil.canCancel()
+    return CurlUtil.canFetch()
+end
+
 -- fetch a page with curl, which asks for it compressed, and doesn't hold KOReader up while it waits when called
 -- from inside Trapper:wrap
 local function requestBodyWithCurl(request_url, use_proxy)

@@ -49,7 +49,9 @@ function UrlApi:getUrls(key, url, parse, refresh)
     NotifyUtil.info(_("Looking up Library Genesis mirrors..."))
     local html, err, status = HttpUtil.getBody(url)
     if not html then
-        LogUtil.warn("could not look up mirrors on", url, "error:", err)
+        if err ~= HttpUtil.CANCELLED then
+            LogUtil.warn("could not look up mirrors on", url, "error:", err)
+        end
         return nil, err, status ~= nil
     end
 

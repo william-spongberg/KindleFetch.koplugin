@@ -2,6 +2,8 @@ local Dispatcher = require("dispatcher")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local ButtonDialog = require("ui/widget/buttondialog")
+local InfoMessage = require("ui/widget/infomessage")
+local Trapper = require("ui/trapper")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local Device = require("device")
 local Screen = Device.screen
@@ -13,6 +15,7 @@ local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
 local LlgiSearch = require("api.lglisearch")
 local LlgiAPI = require("api.lgliapi")
+local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
@@ -252,31 +255,31 @@ function KindleFetch:performSearch()
     end
 
     LogUtil.debug("starting search for", query)
-    NotifyUtil.info("Searching...")
 
     -- start search
     self.current_search_query = query
-    local books, err, next_page = self:search(query, 1)
-    self.books = books
-    self.next_page = next_page
+    self:searchInBackground(query, 1, _("Searching Library Genesis..."), function(books, err, next_page)
+        self.books = books
+        self.next_page = next_page
 
-    -- check for errors
-    if err or not books then
-        err = err or "search failed"
-        LogUtil.warn(string.format("search for %q failed: %s", query, err))
-        NotifyUtil.info("Error: " .. err)
-        return
-    end
-    if #books == 0 then
-        LogUtil.info(
-            string.format("no books found for %q with the preferred languages, file types and book types", query)
-        )
-        NotifyUtil.info("No books found")
-        return
-    end
+        -- check for errors
+        if err or not books then
+            err = err or "search failed"
+            LogUtil.warn(string.format("search for %q failed: %s", query, err))
+            NotifyUtil.info("Error: " .. err)
+            return
+        end
+        if #books == 0 then
+            LogUtil.info(
+                string.format("no books found for %q with the preferred languages, file types and book types", query)
+            )
+            NotifyUtil.info("No books found")
+            return
+        end
 
-    -- show books
-    self:showBooks(books)
+        -- show books
+        self:showBooks(books)
+    end)
 end
 
 function KindleFetch:search(query, page)
@@ -287,6 +290,46 @@ function KindleFetch:search(query, page)
     end
 
     return books, nil, next_page
+end
+
+-- search without holding up the rest of KOReader while Library Genesis answers, where that's possible (see
+-- HttpUtil), showing waiting_text until it has. calls on_done with what search returned, unless the search was
+-- called off by tapping that message
+function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
+    Trapper:wrap(function()
+        -- results saved from an earlier search are there straight away
+        local message
+        if not LlgiSearch:isCached(query, page) then
+            if HttpUtil.canCancel() then
+                waiting_text = waiting_text .. "\n" .. _("Tap to cancel.")
+            end
+            message = InfoMessage:new {
+                text = waiting_text,
+                -- so that a second tap on what started the search doesn't call it off
+                flush_events_on_show = true,
+            }
+            UIManager:show(message)
+            UIManager:forceRePaint()
+        end
+
+        -- an error is passed on rather than left to Trapper, which would log it and leave the message up
+        HttpUtil.trap_widget = message
+        local ok, books, err, next_page = pcall(self.search, self, query, page)
+        HttpUtil.trap_widget = nil
+        if message then
+            UIManager:close(message)
+        end
+        if not ok then
+            LogUtil.err(string.format("search for %q went wrong: %s", query, tostring(books)))
+            books, err, next_page = nil, "search went wrong, see crash.log", nil
+        end
+
+        if err == HttpUtil.CANCELLED then
+            LogUtil.info(string.format("search for %q was called off", query))
+            return
+        end
+        on_done(books, err, next_page)
+    end)
 end
 
 function KindleFetch:showBooks(books)
@@ -353,31 +396,30 @@ function KindleFetch:loadMoreBooks()
         return
     end
 
-    NotifyUtil.info("Loading more books...")
+    local query = self.current_search_query
+    self:searchInBackground(query, self.next_page, _("Loading more books..."), function(books, err, next_page)
+        if err then
+            NotifyUtil.info("Error: " .. err)
+            return
+        end
 
-    local books, err, next_page = self:search(self.current_search_query, self.next_page)
+        self.next_page = next_page
+        if not books or #books == 0 then
+            NotifyUtil.info("No more books found")
+            return
+        end
 
-    if err then
-        NotifyUtil.info("Error: " .. err)
-        return
-    end
+        -- append new books
+        for _, book in ipairs(books) do
+            table.insert(self.books, book)
+        end
 
-    self.next_page = next_page
-    if not books or #books == 0 then
-        NotifyUtil.info("No more books found")
-        return
-    end
+        -- close old menu, show new menu
+        UIManager:close(self.books_menu)
+        UIManager:setDirty(self.books_menu, "full")
 
-    -- append new books
-    for _, book in ipairs(books) do
-        table.insert(self.books, book)
-    end
-
-    -- close old menu, show new menu
-    UIManager:close(self.books_menu)
-    UIManager:setDirty(self.books_menu, "full")
-
-    self:showBooks(self.books)
+        self:showBooks(self.books)
+    end)
 end
 
 local function buildDownloadPath(book)

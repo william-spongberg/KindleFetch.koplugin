@@ -10,7 +10,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 ## Features
 
-- **Book Search + Downloads**: Search Library Genesis from your device with simple text input and download with a tap
+- **Book Search + Downloads**: Search Library Genesis from your device with simple text input and download with a tap; searches run in the background, and can be cancelled with a tap
 - **Caching**: Minimise network requests and improve performance
   - Search results (2 week expiry by default, 100 entries max)
   - Mirror URLs (1 week expiry by default)
@@ -43,7 +43,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 <img width="400" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" />
 <img width="400" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
-1. Enter a book title, author, or keyword in the search box.
+1. Enter a book title, author, or keyword in the search box. KOReader carries on while Library Genesis answers; tap the message saying it's searching to cancel.
 
 <img width="400" alt="Search box" src="docs/screenshots/03-search-dialog.png" />
 
@@ -165,6 +165,7 @@ kindlefetch.koplugin/
    - User enters a search query via InputDialog
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
+   - Pages are fetched with curl where there is one (on a Kindle, once it has been updated): compressed, which Library Genesis sends several times sooner, and in the background, so KOReader isn't held up and a tap on the message cancels the search. Otherwise they're fetched with KOReader's own HTTP, which holds KOReader up until they arrive
    - HTML table is parsed to extract book metadata (title, authors, year, language, file type, MD5 hash, cover image URL), keeping books in the preferred languages and file types
    - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there
    - Results are cached (2 weeks by default, 100 entries max) to minimise requests
