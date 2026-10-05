@@ -10,7 +10,7 @@ local KindleFetchSettings = require("settings.settings")
 local _ = require("gettext")
 
 -- constants
-local MIN_VERSION = "8.17.0"
+local MIN_VERSION = CurlUtil.MIN_VERSION
 local CURL_REPO_URL = "https://github.com/moparisthebest/static-curl"
 
 local CurlUpdater = {}

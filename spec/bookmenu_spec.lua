@@ -319,10 +319,77 @@ describe("BookMenu", function()
             assert.are.equal(0, #menu.item_group)
         end)
 
+        describe("once that page's covers have downloaded", function()
+            local menu
+
+            before_each(function()
+                menu = newMenu(11)
+                menu.page = 2
+                menu:loadCoversForPage(2)
+            end)
+
+            -- so they're there by the time it's turned to
+            it("downloads the next page's covers", function()
+                requested.on_done(5)
+
+                assert.are.same({ "md5-11" }, { requested[1], requested[2] })
+                assert.are.equal(5, requested.parallel_jobs)
+                -- and stops there, rather than going on through every page
+                assert.is_nil(requested.on_done)
+            end)
+
+            it("leaves the next page's covers when another page has been turned to, which gets its own", function()
+                local first = requested
+                menu.page = 1
+                first.on_done(5)
+
+                assert.are.equal(first, requested)
+            end)
+
+            it("leaves the next page's covers when the books have been closed", function()
+                local first = requested
+                menu:onCloseWidget()
+                first.on_done(5)
+
+                assert.are.equal(first, requested)
+                assert.is_true(menu.close_widget_handled)
+            end)
+        end)
+
+        it("goes straight on to the next page's covers when that page has all of its own", function()
+            local menu = newMenu(11)
+            for n = 1, 5 do
+                cacheCover("md5-" .. n)
+            end
+
+            menu:loadCoversForPage(1)
+            assert.are.same({ "md5-6", "md5-7", "md5-8", "md5-9", "md5-10" }, {
+                requested[1],
+                requested[2],
+                requested[3],
+                requested[4],
+                requested[5],
+            })
+            assert.is_nil(requested.on_done)
+        end)
+
+        it("goes on to the next page's covers when that page's are downloading already", function()
+            local menu = newMenu(11)
+            local requests = {}
+            CoverCache.downloadMultiple = function(_, books)
+                table.insert(requests, books[1].md5)
+                return false
+            end
+
+            menu:loadCoversForPage(1)
+            assert.are.same({ "md5-1", "md5-6" }, requests)
+        end)
+
         -- covers another search started downloading still show up once they download
         it("redraws the page showing once covers have downloaded", function()
             local menu = newMenu(11)
             menu.page = 3
+            menu:updateItems()
             helper.state.refreshes = {}
             menu:onKindleFetchCoversDownloaded()
 
@@ -331,6 +398,19 @@ describe("BookMenu", function()
             -- once, and without the flash of a full refresh
             assert.are.equal(1, #helper.state.refreshes)
             assert.are.equal("ui", helper.state.refreshes[1][1])
+        end)
+
+        -- such as the next page's, which are downloaded ahead of it being turned to
+        it("doesn't redraw the page when the covers that downloaded are all for another one", function()
+            local menu = newMenu(11)
+            for n = 1, 5 do
+                cacheCover("md5-" .. n)
+            end
+            menu:updateItems()
+            helper.state.refreshes = {}
+
+            menu:onKindleFetchCoversDownloaded()
+            assert.are.equal(0, #helper.state.refreshes)
         end)
 
         it("does nothing when every cover is there", function()

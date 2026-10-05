@@ -199,6 +199,9 @@ end
 local function fetchResults(params, refresh)
     local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(refresh)
     if not base_urls then
+        if urls_err == HttpUtil.CANCELLED then
+            return nil, urls_err
+        end
         return nil,
             urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or "no Library Genesis urls available"
     end
@@ -209,6 +212,10 @@ local function fetchResults(params, refresh)
     local answered = false
     for _, url in ipairs(base_urls) do
         local html, err, status = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
+        -- the search was called off, which says nothing about the mirrors
+        if err == HttpUtil.CANCELLED then
+            return nil, err
+        end
         answered = answered or html ~= nil or status ~= nil
 
         if html and html:find('id="tablelibgen"', 1, true) then
@@ -309,8 +316,8 @@ function LlgiSearch:search(query, page)
     for _ = 1, MAX_PAGES do
         local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types))
         if not html then
-            -- show the books found so far, carrying on from the page that failed
-            if #books > 0 then
+            -- show the books found so far, carrying on from the page that failed, unless the search was called off
+            if #books > 0 and err ~= HttpUtil.CANCELLED then
                 break
             end
             return nil, err

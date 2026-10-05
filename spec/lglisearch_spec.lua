@@ -393,6 +393,55 @@ describe("LlgiSearch", function()
                 assert.are.equal(2, next_page)
             end)
 
+            -- by a tap on the message saying that it's searching, see HttpUtil
+            describe("called off", function()
+                local HttpUtil
+
+                -- as if the message were tapped while waiting for a page whose address contains part
+                local function callOffAt(part)
+                    HttpUtil = require("util.httputil")
+                    local getBody = HttpUtil.getBody
+                    HttpUtil.getBody = function(url)
+                        if url:find(part, 1, true) then
+                            table.insert(web.fetched, url)
+                            return nil, HttpUtil.CANCELLED
+                        end
+                        return getBody(url)
+                    end
+                end
+
+                it("stops without finding fault with any of the mirrors", function()
+                    callOffAt("/index.php?")
+
+                    local books, err = LlgiSearch:search("dune", 1)
+                    assert.is_nil(books)
+                    assert.are.equal(HttpUtil.CANCELLED, err)
+                    assert.are.equal(1, #searches())
+                    assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
+                    assert.are.equal(1, web.scrapes)
+                end)
+
+                it("doesn't show the books found on earlier pages, or save them", function()
+                    results(mirrors[1], fullPage(1, 3), 1)
+                    callOffAt("&page=2")
+
+                    local books, err = LlgiSearch:search("dune", 1)
+                    assert.is_nil(books)
+                    assert.are.equal(HttpUtil.CANCELLED, err)
+                    assert.is_false(LlgiSearch:isCached("dune", 1))
+                end)
+
+                it("stops while the mirrors are being looked up, rather than taking it for being offline", function()
+                    callOffAt("wikipedia.org")
+
+                    local books, err = LlgiSearch:search("dune", 1)
+                    assert.is_nil(books)
+                    assert.are.equal(HttpUtil.CANCELLED, err)
+                    assert.are.equal(0, #searches())
+                    assert.is_nil(helper.logged("warn", "could not look up mirrors"))
+                end)
+            end)
+
             it("remembers where to carry on from", function()
                 for page = 1, 3 do
                     results(mirrors[1], fullPage(page, 4), page)

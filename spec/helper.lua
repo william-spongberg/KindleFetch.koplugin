@@ -456,6 +456,36 @@ local function createStubs(state)
             end,
         },
     }
+    -- KOReader's Trapper, which runs a function without holding up the rest of KOReader. here the function is just
+    -- run, and the commands it waits for are kept in state.trapped (and aren't finished if state.dismiss is set, as
+    -- when the widget that was given is tapped)
+    stubs.trapper = {
+        wrapped = false,
+        wrap = function(self, fn)
+            local wrapped = self.wrapped
+            self.wrapped = true
+            fn()
+            self.wrapped = wrapped
+            return true
+        end,
+        isWrapped = function(self)
+            return self.wrapped
+        end,
+        dismissablePopen = function(_, cmd, trap_widget)
+            table.insert(state.trapped, {
+                cmd = cmd,
+                trap_widget = trap_widget,
+            })
+            if state.dismiss then
+                return false
+            end
+            local pipe = io.popen(cmd, "r")
+            local output = pipe:read("*a")
+            pipe:close()
+            return true, output
+        end,
+    }
+
     -- KOReader's json, read with dkjson instead, which busted installs
     stubs.json = {
         decode = function(text)
@@ -481,6 +511,9 @@ local function createStubs(state)
     function stubs.Menu:onGotoPage(page)
         self.page = page
         return true
+    end
+    function stubs.Menu:onCloseWidget()
+        self.close_widget_handled = true
     end
     stubs.InputContainer = widgetClass()
     stubs.geometry = {
@@ -529,6 +562,7 @@ local MODULE_STUBS = {
     ["ltn12"] = "ltn12",
     ["socketutil"] = "socketutil",
     ["json"] = "json",
+    ["ui/trapper"] = "trapper",
     ["ui/widget/menu"] = "Menu",
     ["ui/widget/container/inputcontainer"] = "InputContainer",
     ["ui/geometry"] = "geometry",
@@ -551,6 +585,7 @@ local WIDGET_MODULES = {
     "ui/widget/button",
     "ui/widget/progresswidget",
     "ui/widget/confirmbox",
+    "ui/widget/infomessage",
     "ui/widget/buttondialog",
     "ui/widget/iconwidget",
     "ui/widget/buttontable",
@@ -595,7 +630,9 @@ function helper.reset()
         fs = {}, -- path -> "directory" | "file" | false, overrides the real filesystem
         settings_files = {},
         reader_settings = {},
-        commands = {},
+        -- curl isn't there unless a spec says it is, so pages are fetched with luasocket
+        commands = { { pattern = "curl --version", output = "" } },
+        trapped = {},
         execute_stubs = {},
         executed = {},
         popen_calls = {},

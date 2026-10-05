@@ -54,6 +54,76 @@ describe("CurlUtil", function()
         assert.is_nil(CurlUtil.getVersion())
     end)
 
+    -- pages are fetched with curl where it's up to it, as it asks for them compressed and can wait in the background
+    describe("fetching pages", function()
+        local function installedCurl(description)
+            helper.stubCommand("curl --version", description .. "\nRelease-Date: 2025-11-05\n")
+        end
+
+        it("is left to curl once it's new enough to connect to Library Genesis from a Kindle", function()
+            installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
+            assert.is_true(CurlUtil.canFetch())
+            assert.is_truthy(helper.logged("info", "^fetching pages with curl compressed$"))
+        end)
+
+        it("isn't left to the curl a Kindle comes with", function()
+            installedCurl("curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2 zlib/1.2.8")
+            assert.is_false(CurlUtil.canFetch())
+        end)
+
+        it("is left to whichever curl other devices have", function()
+            helper.stubs.device.kindle = false
+            installedCurl("curl 7.68.0 (x86_64-pc-linux-gnu) libcurl/7.68.0 OpenSSL/1.1.1 zlib/1.2.11")
+            assert.is_true(CurlUtil.canFetch())
+        end)
+
+        it("isn't left to curl when there isn't one", function()
+            assert.is_false(CurlUtil.canFetch())
+            assert.is_truthy(helper.logged("info", "^fetching pages with KOReader, as curl is missing or too old,"))
+        end)
+
+        it("is only worked out once per session, as it means running curl", function()
+            installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
+            CurlUtil.canFetch()
+            CurlUtil.canFetch()
+            CurlUtil.fetchCommand("https://libgen.example", "page", false, 10, 60)
+
+            assert.are.equal(1, #helper.state.popen_calls)
+        end)
+
+        it("asks for the page compressed, like a browser, and prints the status and curl's exit code", function()
+            installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
+            assert.are.equal(
+                "(curl -sL -o 'the page' 'https://libgen.example/index.php?req=dune' --compressed -A 'Mozilla/5.0' "
+                    .. "-e 'https://libgen.example/' --connect-timeout 10 --max-time 60 -w '%{http_code}'; "
+                    .. 'echo " $?") 2>/dev/null',
+                CurlUtil.fetchCommand("https://libgen.example/index.php?req=dune", "the page", false, 10, 60)
+            )
+        end)
+
+        it("doesn't ask for the page compressed when curl can't decompress it", function()
+            installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4")
+            local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", false, 10, 60)
+            assert.is_nil(cmd:find("--compressed", 1, true))
+        end)
+
+        it("goes through PROXY_URL when asked to", function()
+            helper.state.env.PROXY_URL = "http://proxy.example:8080"
+            assert.matches(
+                "--max-time 60 -x 'http://proxy.example:8080' -w ",
+                CurlUtil.fetchCommand("https://libgen.example", "page", true, 10, 60),
+                1,
+                true
+            )
+        end)
+
+        it("fetches into a file of its own in the plugin's tmp dir", function()
+            local page_file = CurlUtil.createPageFile()
+            assert.matches(data_dir .. "/settings/tmp/curl_download_", page_file, 1, true)
+            assert.are_not.equal(page_file, CurlUtil.createPageFile())
+        end)
+    end)
+
     describe("processes", function()
         it("detects whether a process is running and can kill it", function()
             local pipe = io.popen("sleep 30 > /dev/null 2>&1 & echo $!")
@@ -367,6 +437,22 @@ describe("CurlUtil", function()
                 helper.readFile(config_file)
             )
             assert.is_truthy(helper.logged("warn", "^left out a download whose address can't be used"))
+        end)
+
+        -- the files are shown once they've all finished, so one that has stalled would keep the rest waiting
+        it("gives up on a file once nothing of it has arrived for a while, when asked to", function()
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }))
+
+            CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15, { stall_time = 10 })
+            assert.matches(
+                "--max-time 30 --speed-limit 1 --speed-time 10",
+                helper.state.executed[#helper.state.executed],
+                1,
+                true
+            )
+
+            CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find("--speed-time", 1, true))
         end)
 
         it("removes the curl config file afterwards", function()

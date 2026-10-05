@@ -101,6 +101,8 @@ function BookMenu:createBookItemWidget(book)
         }
     elseif show_covers and CoverCache:isComing(book) then
         cover_widget = CoverPlaceholder.new(math.floor(COVER_SIZE * 2 / 3), COVER_SIZE)
+        -- so the page is drawn again once its covers arrive
+        self.awaiting_covers = true
     end
 
     -- the room there is for text beside the cover
@@ -229,6 +231,7 @@ end
 
 function BookMenu:updateItems(select_number, no_recalculate_dimen)
     local old_dimen = self.dimen and self.dimen:copy()
+    self.awaiting_covers = false
     self.layout = {}
     self.item_group:clear()
     self.page_info:resetLayout()
@@ -302,34 +305,62 @@ function BookMenu:updateItems(select_number, no_recalculate_dimen)
     end)
 end
 
-function BookMenu:loadCoversForPage(current_page)
+-- the books on a page whose covers are yet to be downloaded
+function BookMenu:booksWithoutCovers(page)
     local items_per_page = self:getNumberBooksPerPage() + 1
-    local start_idx = (current_page - 1) * items_per_page + 1
+    local start_idx = (page - 1) * items_per_page + 1
     local end_idx = math.min(start_idx + items_per_page - 1, #self.item_table)
 
-    -- collect books that need downloading
-    local books_to_download = {}
-    local items_being_modified = {}
+    local books = {}
     for idx = start_idx, end_idx do
         local item = self.item_table[idx]
         if item and item.book and item.book.image_url and not CoverCache:cacheExists(item.book.md5) then
-            table.insert(books_to_download, item.book)
-            table.insert(items_being_modified, idx)
-            item.widget = nil -- clear cache
+            table.insert(books, item.book)
+        end
+    end
+    return books
+end
+
+function BookMenu:loadCoversForPage(current_page)
+    local items_per_page = self:getNumberBooksPerPage() + 1
+
+    -- once this page has its covers, get the next page's, so they're there by the time it's turned to
+    local function loadNextPage()
+        -- unless another page has been turned to since, which gets its own, or the books have been closed
+        if self.page ~= current_page or self.closed then
+            return
+        end
+        local next_books = self:booksWithoutCovers(current_page + 1)
+        if #next_books > 0 then
+            LogUtil.debug("downloading", #next_books, "covers for the next page")
+            CoverCache:downloadMultiple(next_books, items_per_page)
         end
     end
 
+    local books_to_download = self:booksWithoutCovers(current_page)
     if #books_to_download > 0 then
         -- download all at once in parallel, in the background
         LogUtil.debug("downloading", #books_to_download, "covers in parallel")
-        CoverCache:downloadMultiple(books_to_download, items_per_page)
+        if CoverCache:downloadMultiple(books_to_download, items_per_page, loadNextPage) then
+            return
+        end
     end
+    -- there was nothing to download for this page (or it's downloading already)
+    loadNextPage()
 end
 
--- redraw with covers once they have downloaded, even if another search started downloading them
+function BookMenu:onCloseWidget()
+    self.closed = true
+    return Menu.onCloseWidget(self)
+end
+
+-- redraw with covers once they have downloaded, even if another search started downloading them, unless they're
+-- all for another page, such as the next one
 -- (updateItems refreshes the screen itself, without the flash of a full refresh each time covers arrive)
 function BookMenu:onKindleFetchCoversDownloaded()
-    self:updateItems()
+    if self.awaiting_covers then
+        self:updateItems()
+    end
 end
 
 return BookMenu
