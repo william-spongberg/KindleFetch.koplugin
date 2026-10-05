@@ -36,14 +36,8 @@ describe("Searching", function()
 
     -- KOReader carries on while Library Genesis answers, rather than being held up until it has
     it("can be called off while waiting for Library Genesis", function()
-        H.openMainMenu({ "Kindle Fetch", "Search Library Genesis" })
-        local plugin = H.plugin()
-        local dialog = H.waitFor("the search dialog", 10, function()
-            return plugin.search_box and H.isShown(plugin.search_box) and plugin.search_box
-        end)
-        dialog:setInputText(H.SEARCH_QUERY)
         local since = #H.notifications
-        H.tapButton("Search", dialog)
+        local plugin, dialog = H.startSearch(H.SEARCH_QUERY)
 
         local message = H.waitFor("the message saying it's searching", 10, function()
             for _, window in ipairs(H.windows()) do
@@ -70,6 +64,37 @@ describe("Searching", function()
         assert(not H.errorShown(), "said " .. tostring(H.errorShown()))
         for i = since + 1, #H.notifications do
             assert(not H.notifications[i]:find("No books", 1, true), "said " .. H.notifications[i])
+        end
+    end)
+
+    -- rather than only that no books were found, which is what it looks like when there are plenty of other kinds
+    it("says when the results are all in other file types or languages", function()
+        local Settings = require("settings.settings")
+        local file_types = Settings:getPreferredFileTypes()
+        -- a file type that books about Harry Potter aren't in
+        Settings:setPreferredFileTypes({ "tif" })
+
+        local ok, err = pcall(function()
+            local plugin = H.startSearch(H.SEARCH_QUERY)
+            local explanation = H.waitFor("the explanation", 180, function()
+                assert(not H.errorShown(), H.errorShown())
+                assert(not (plugin.books_menu and H.isShown(plugin.books_menu)), "found books as tif files")
+                return H.messageSaying("but none in the languages and file types chosen")
+            end)
+            assert(explanation:find("Library Genesis listed %d+ results"), explanation)
+            H.shot("search-other-file-types")
+
+            -- which is where to change what's shown
+            H.tapButton("Settings")
+            H.waitFor("the settings", 10, function()
+                return H.find(function(widget)
+                    return type(widget.text) == "string" and widget.text:find("Preferred File Types", 1, true)
+                end)
+            end)
+        end)
+        Settings:setPreferredFileTypes(file_types)
+        if not ok then
+            error(err, 0)
         end
     end)
 

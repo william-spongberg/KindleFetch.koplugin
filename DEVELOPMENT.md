@@ -70,7 +70,7 @@ Then, from the repository root:
 
 ### End-to-end tests
 
-The end-to-end tests in `e2e/` run KindleFetch in the KOReader Flatpak without a window, tapping through its menus and dialogs as a user would: searching Library Genesis, cancelling a search, loading covers and more results, downloading Jane Austen's *Pride and Prejudice* (it's in the public domain) and reading it, hiding and cancelling downloads, changing settings, and checking for updates. They run once for each emulated device in `e2e/profiles.lua`: a basic Kindle, a Kindle Paperwhite, a Kobo Aura One and an Android phone, emulating each one's screen size and resolution. They only load the repository's copy of KindleFetch, even if you've also copied it into the Flatpak.
+The end-to-end tests in `e2e/` run KindleFetch in the KOReader Flatpak without a window, tapping through its menus and dialogs as a user would: searching Library Genesis, cancelling a search, searching for a kind of file there are none of, loading covers and more results, downloading Jane Austen's *Pride and Prejudice* (it's in the public domain) and reading it, hiding and cancelling downloads, changing settings, and checking for updates. They run once for each emulated device in `e2e/profiles.lua`: a basic Kindle, a Kindle Paperwhite, a Kobo Aura One and an Android phone, emulating each one's screen size and resolution. They only load the repository's copy of KindleFetch, even if you've also copied it into the Flatpak.
 
 They use the real sites, so they need internet access, take a few minutes, and aren't run by CI:
 

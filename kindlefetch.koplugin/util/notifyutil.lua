@@ -9,6 +9,13 @@ function NotifyUtil.info(...)
     UIManager:forceRePaint()
 end
 
+-- say something in a message that stays until it's dismissed, for what mustn't be missed
+function NotifyUtil.message(text)
+    UIManager:show(InfoMessage:new {
+        text = text,
+    })
+end
+
 -- say that something went wrong, in a message that stays until it's dismissed. a notification is gone after a
 -- couple of seconds, whether or not it was read, and what went wrong may only be known after a wait
 function NotifyUtil.error(text)

@@ -146,12 +146,13 @@ describe("KindleFetch", function()
             search = function(_, query, page)
                 table.insert(searches, { query, page })
                 table.insert(trap_widgets, require("util.httputil").trap_widget or false)
-                -- books, error, and the page to carry on from (or a function to run in place of the search)
+                -- books, error, the page to carry on from and how many results were read (or a function to run in
+                -- place of the search)
                 local result = search_results[page] or { {} }
                 if type(result) == "function" then
                     return result()
                 end
-                return result[1], result[2], result[3]
+                return result[1], result[2], result[3], result[4]
             end,
             isCached = function(_, query, page)
                 return saved[query .. " " .. page] == true
@@ -195,9 +196,12 @@ describe("KindleFetch", function()
                     table.insert(self.covers_loaded, page)
                 end
                 -- like KOReader's menu, show other entries, turning to the page with the given one (2 to a page here)
+                -- (or staying on the page that's showing for a negative one)
                 function menu:switchItemTable(title, item_table, item_number)
                     self.item_table = item_table
-                    self.page = math.ceil(item_number / 2)
+                    if item_number >= 0 then
+                        self.page = math.ceil(item_number / 2)
+                    end
                 end
                 table.insert(menus, menu)
                 return menu
@@ -608,11 +612,50 @@ describe("KindleFetch", function()
             assert.are.equal(0, #menus)
         end)
 
+        -- in a message that stays, as it may come a while after the search was started
         it("says when nothing was found", function()
             search(openUI(), "dune")
 
-            assert.are.equal("No books found", helper.lastNotification())
+            assert.are.equal("No books found", helper.lastShown().text)
+            assert.is_nil(helper.lastShown().ok_callback)
             assert.are.equal(0, #menus)
+            assert.are.equal(0, #helper.state.notifications)
+        end)
+
+        -- which is why most searches that find nothing do
+        describe("when Library Genesis lists results, but none in the languages and file types chosen", function()
+            it("says so, and offers the settings", function()
+                search_results[1] = { {}, nil, nil, 37 }
+                search(openUI(), "dune")
+
+                local explanation = helper.lastShown()
+                assert.are.equal(
+                    "Library Genesis listed 37 results, but none in the languages and file types chosen in Kindle "
+                        .. "Fetch's settings.",
+                    explanation.text
+                )
+                assert.are.equal("Settings", explanation.ok_text)
+                assert.are.equal("Close", explanation.cancel_text)
+                -- there are no more results to look through
+                assert.is_nil(explanation.other_buttons)
+                assert.are.equal(0, #menus)
+
+                explanation.ok_callback()
+                assert.are.equal(1, settings_shown)
+            end)
+
+            it("offers to keep searching while there are more results to look through", function()
+                search_results[1] = { {}, nil, 6, 500 }
+                search_results[6] = { { book("Dune") }, nil, 7, 100 }
+                search(openUI(), "dune")
+
+                local keep_searching = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Keep searching", keep_searching.text)
+
+                keep_searching.callback()
+                assert.are.same({ { "dune", 1 }, { "dune", 6 } }, searches)
+                assert.are.same({ "Dune", "Load more" }, itemTexts(menus[1]))
+            end)
         end)
     end)
 
@@ -730,17 +773,40 @@ describe("KindleFetch", function()
             assert.are.same({ "dune", 2 }, searches[3])
         end)
 
-        it("says when there are no more books", function()
+        it("says when there are no more books, and takes Load more off the end of the list", function()
             search_results[2] = { {} }
             loadMore()
 
-            assert.are.equal("No more books found", helper.lastNotification())
+            assert.are.equal("No more books found", helper.lastShown().text)
             assert.are.equal(1, #menus)
+            assert.are.same({ "Dune", "Dune Messiah" }, itemTexts(menus[1]))
+            -- staying on the page that was showing
+            assert.are.equal(1, menus[1].page)
+        end)
 
-            -- and doesn't search again
+        it("doesn't search again once there are no more books", function()
+            search_results[2] = { {} }
             loadMore()
+            plugin:loadMoreBooks()
+
             assert.are.equal(2, #searches)
-            assert.are.equal("No more books found", helper.lastNotification())
+            assert.are.equal("No more books found", helper.lastShown().text)
+        end)
+
+        it("says when none of the next results could be shown, with more to look through", function()
+            search_results[2] = { {}, nil, 7, 500 }
+            loadMore()
+
+            assert.are.equal(
+                "None of the next 500 results are in the languages and file types chosen. Load more to keep looking.",
+                helper.lastShown().text
+            )
+            assert.are.same({ "Dune", "Dune Messiah", "Load more" }, itemTexts(menus[1]))
+
+            search_results[7] = { { book("Children of Dune") } }
+            loadMore()
+            assert.are.same({ "dune", 7 }, searches[3])
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune" }, itemTexts(menus[1]))
         end)
     end)
 

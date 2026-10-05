@@ -170,6 +170,7 @@ kindlefetch.koplugin/
    - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there, adding the books to the list where it was tapped
    - Results are cached (2 weeks by default, 100 entries max) to minimise requests
    - Search results are displayed in a menu
+   - When Library Genesis lists results but none are in the preferred languages and file types, the plugin says how many it listed, and offers the settings or to keep searching through the rest
 
 3. **Cover Loading**
    - Covers for the page of results showing are downloaded in the background, in parallel using curl's `--parallel` flag, with placeholders shown until they arrive

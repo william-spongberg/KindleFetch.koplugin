@@ -2,6 +2,7 @@ local Dispatcher = require("dispatcher")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local ButtonDialog = require("ui/widget/buttondialog")
+local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
 local Trapper = require("ui/trapper")
 local TextBoxWidget = require("ui/widget/textboxwidget")
@@ -257,10 +258,14 @@ function KindleFetch:performSearch()
     end
 
     LogUtil.debug("starting search for", query)
+    self:searchFrom(query, 1)
+end
 
-    -- start search
+-- search from a page of Library Genesis' results, and show the books found
+function KindleFetch:searchFrom(query, page)
     self.current_search_query = query
-    self:searchInBackground(query, 1, _("Searching Library Genesis..."), function(books, err, next_page)
+    local waiting_text = _("Searching Library Genesis...")
+    self:searchInBackground(query, page, waiting_text, function(books, err, next_page, results_read)
         self.books = books
         self.next_page = next_page
 
@@ -275,7 +280,7 @@ function KindleFetch:performSearch()
             LogUtil.info(
                 string.format("no books found for %q with the preferred languages, file types and book types", query)
             )
-            NotifyUtil.info("No books found")
+            self:explainNoBooks(query, results_read or 0, next_page)
             return
         end
 
@@ -284,14 +289,49 @@ function KindleFetch:performSearch()
     end)
 end
 
+-- say that no books were found, and why when it's known: Library Genesis may have listed plenty, all in other
+-- languages or file types than those chosen in the settings
+function KindleFetch:explainNoBooks(query, results_read, next_page)
+    if results_read == 0 then
+        NotifyUtil.message(_("No books found"))
+        return
+    end
+
+    UIManager:show(ConfirmBox:new {
+        text = string.format(
+            _(
+                "Library Genesis listed %d results, but none in the languages and file types chosen in Kindle "
+                    .. "Fetch's settings."
+            ),
+            results_read
+        ),
+        ok_text = _("Settings"),
+        ok_callback = function()
+            SettingsPage:showSettings()
+        end,
+        cancel_text = _("Close"),
+        -- there are more results to look through
+        other_buttons = next_page and {
+            {
+                {
+                    text = _("Keep searching"),
+                    callback = function()
+                        self:searchFrom(query, next_page)
+                    end,
+                },
+            },
+        },
+    })
+end
+
 function KindleFetch:search(query, page)
-    local books, err, next_page = LlgiSearch:search(query, page)
+    local books, err, next_page, results_read = LlgiSearch:search(query, page)
 
     if not books or type(books) ~= "table" then
         return nil, err
     end
 
-    return books, nil, next_page
+    return books, nil, next_page, results_read
 end
 
 -- search without holding up the rest of KOReader while Library Genesis answers, where that's possible (see
@@ -316,7 +356,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
 
         -- an error is passed on rather than left to Trapper, which would log it and leave the message up
         HttpUtil.trap_widget = message
-        local ok, books, err, next_page = pcall(self.search, self, query, page)
+        local ok, books, err, next_page, results_read = pcall(self.search, self, query, page)
         HttpUtil.trap_widget = nil
         if message then
             UIManager:close(message)
@@ -330,7 +370,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
             LogUtil.info(string.format("search for %q was called off", query))
             return
         end
-        on_done(books, err, next_page)
+        on_done(books, err, next_page, results_read)
     end)
 end
 
@@ -393,7 +433,7 @@ end
 
 function KindleFetch:loadMoreBooks()
     if not self.next_page then
-        NotifyUtil.info("No more books found")
+        NotifyUtil.message(_("No more books found"))
         return
     end
 
@@ -406,7 +446,8 @@ function KindleFetch:loadMoreBooks()
     end
 
     local query = self.current_search_query
-    self:searchInBackground(query, self.next_page, _("Loading more books..."), function(books, err, next_page)
+    local waiting_text = _("Loading more books...")
+    self:searchInBackground(query, self.next_page, waiting_text, function(books, err, next_page, results_read)
         if err then
             NotifyUtil.error(_("Loading more books failed: ") .. err)
             return
@@ -414,7 +455,22 @@ function KindleFetch:loadMoreBooks()
 
         self.next_page = next_page
         if not books or #books == 0 then
-            NotifyUtil.info("No more books found")
+            if next_page then
+                -- there are more results to look through
+                NotifyUtil.message(
+                    string.format(
+                        _(
+                            "None of the next %d results are in the languages and file types chosen. Load more to "
+                                .. "keep looking."
+                        ),
+                        results_read or 0
+                    )
+                )
+            else
+                -- take Load more off the end of the list, staying on the page that's showing
+                self.books_menu:switchItemTable(nil, self:bookMenuItems(self.books), -1)
+                NotifyUtil.message(_("No more books found"))
+            end
             return
         end
 

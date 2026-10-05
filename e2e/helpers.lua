@@ -201,7 +201,8 @@ function H.isPublicDomain(book)
 end
 
 -- search Library Genesis from KindleFetch's search dialog, returning the results menu
-function H.search(query)
+-- open the search dialog, type query and tap Search, returning KindleFetch and the dialog
+function H.startSearch(query)
     H.openMainMenu({ "Kindle Fetch", "Search Library Genesis" })
     local plugin = H.plugin()
     local dialog = H.waitFor("the search dialog", 10, function()
@@ -209,15 +210,15 @@ function H.search(query)
     end)
     dialog:setInputText(query)
 
-    local since = #H.notifications
     H.tapButton("Search", dialog)
+    return plugin, dialog
+end
+
+-- search for query, returning the menu of books once they're found
+function H.search(query)
+    local plugin = H.startSearch(query)
     return H.waitFor("search results", 120, function()
-        for i = since + 1, #H.notifications do
-            if H.notifications[i]:find("No books found", 1, true) then
-                error("search failed: " .. H.notifications[i], 0)
-            end
-        end
-        local failure = H.errorShown()
+        local failure = H.errorShown() or H.messageSaying("No books found") or H.messageSaying("but none in the")
         if failure then
             error("search failed: " .. failure, 0)
         end
@@ -347,6 +348,15 @@ local notify = Notification.notify
 function Notification:notify(text, ...)
     table.insert(H.notifications, tostring(text))
     return notify(self, text, ...)
+end
+
+-- what a message on screen says, if there's one that includes text
+function H.messageSaying(text)
+    for _, window in ipairs(H.windows()) do
+        if type(window.text) == "string" and window.text:find(text, 1, true) then
+            return window.text
+        end
+    end
 end
 
 -- what a message on screen about something going wrong says, if there is one
