@@ -515,6 +515,12 @@ local function createStubs(state)
     function stubs.Menu:onCloseWidget()
         self.close_widget_handled = true
     end
+    -- show other entries, on the page with the given one, or the page that's showing for a negative one
+    function stubs.Menu:switchItemTable(title, item_table, item_number)
+        self.title = title or self.title
+        self.item_table = item_table or self.item_table
+        self.switched_to_item = item_number
+    end
     stubs.InputContainer = widgetClass()
     stubs.geometry = {
         new = function(_, o)

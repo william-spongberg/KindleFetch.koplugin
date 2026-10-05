@@ -83,6 +83,60 @@ describe("KindleFetch", function()
         end)
     end)
 
+    -- there are pages of languages, and ticking one mustn't go back to the first page
+    it("ticks a language on a later page, staying on that page", function()
+        local Settings = require("settings.settings")
+        local languages = Settings:getPreferredLanguages()
+
+        local ok, err = pcall(function()
+            H.openMainMenu({ "Kindle Fetch", "Settings" })
+            local settings = H.waitFor("the settings", 10, function()
+                return H.find(function(widget)
+                    return widget.title == "Kindle Fetch Settings" and widget.item_table
+                end)
+            end)
+            H.tap(H.find(function(widget)
+                return type(widget.text) == "string"
+                    and widget.text:find("Preferred Languages", 1, true)
+                    and widget.onTapSelect
+            end))
+            local menu = H.waitFor("the languages", 10, function()
+                return H.find(function(widget)
+                    return widget.title == "Preferred Languages" and widget.item_table
+                end)
+            end)
+            assert(H.isShown(settings), "the settings were closed to show the languages")
+
+            menu:onGotoPage(3)
+            H.pump()
+            local unticked = H.find(function(widget)
+                return type(widget.text) == "string" and widget.text:find("^☐ ") and widget.onTapSelect
+            end, menu)
+            local language = unticked.text:gsub("^☐ ", "")
+            H.tap(unticked)
+
+            H.waitFor(language .. " to be ticked", 10, function()
+                return H.find(function(widget)
+                    return widget.text == "☑ " .. language and widget.onTapSelect
+                end, menu)
+            end)
+            H.eq(3, menu.page, "page of languages showing")
+            assert(H.isShown(menu), "the languages were closed")
+            H.shot("settings-languages")
+
+            -- saved once the languages are closed, back in the settings
+            menu:onClose()
+            H.waitFor("the settings to show the language", 10, function()
+                return not H.isShown(menu) and #Settings:getPreferredLanguages() == #languages + 1
+            end)
+            assert(H.isShown(settings), "the settings aren't showing")
+        end)
+        Settings:setPreferredLanguages(languages)
+        if not ok then
+            error(err, 0)
+        end
+    end)
+
     it("checks for updates when asked", function()
         local since = #H.notifications
         H.asDevice(function()

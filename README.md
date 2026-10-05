@@ -104,6 +104,8 @@ Downloaded books are saved to your configured download location.
 
 <img width="400" alt="How long searches are kept" src="docs/screenshots/17-settings-cache.png" />
 
+- **Clear Cache**: Forget the searches, mirrors and book covers that have been saved, e.g. if results look out of date
+
 ## How It Works
 
 ### Architecture
@@ -114,7 +116,7 @@ kindlefetch.koplugin/
 ├── _meta.lua                  # Plugin metadata and KOReader integration
 ├── settings/
 │   ├── settings.lua           # Persistent storage and management of user preferences
-│   └── settingspage.lua       # UI for configuring user preferences
+│   └── settingspage.lua       # UI for configuring user preferences, and clearing the caches
 ├── api/
 │   ├── lgliapi.lua            # Handles Library Genesis downloads with progress tracking, proxy fallback, and error recovery
 │   ├── lglisearch.lua         # Searches Library Genesis; parses HTML, filters by preferences and caches results
