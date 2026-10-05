@@ -604,6 +604,9 @@ function helper.reset()
         isFalse = function(_, key)
             return helper.state.reader_settings[key] == false
         end,
+        readSetting = function(_, key)
+            return helper.state.reader_settings[key]
+        end,
     }
 end
 
