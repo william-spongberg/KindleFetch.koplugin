@@ -144,6 +144,12 @@ describe("Downloading", function()
             H.tapButton("Cancel")
             H.waitForNotification("Download cancelled", 30, since)
             H.eq(0, #require("api.lgliapi"):getActiveDownloads(), "downloads in progress")
+
+            -- nothing of the book is left behind, where it was being downloaded to
+            local ls = io.popen("find " .. H.books_dir .. " -name '*.part'")
+            local part = ls:read("*l")
+            ls:close()
+            assert(not part, "left " .. tostring(part) .. " behind")
         end)
         CurlUtil.pretendBrowser = pretendBrowser
         if not ok then
