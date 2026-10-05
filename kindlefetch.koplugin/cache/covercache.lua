@@ -224,11 +224,15 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
         for i, md5 in ipairs(md5s) do
             downloading[md5] = nil
             if downloaded[filepaths[i]] then
-                persistent_cache:set(filepaths[i], md5)
+                persistent_cache:put(filepaths[i], md5)
                 count = count + 1
             else
                 unavailable[md5] = true
             end
+        end
+        -- once for all of them, rather than writing the cache out for each cover
+        if count > 0 then
+            persistent_cache:save()
         end
 
         -- even when none downloaded, as their placeholders then need removing

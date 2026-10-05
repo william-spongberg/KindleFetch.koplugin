@@ -115,6 +115,56 @@ describe("KindleFetchCache", function()
         assert.are.same({}, cacheFile())
     end)
 
+    it("can be cleared before it has been read", function()
+        newCache():set("value", "a")
+
+        newCache():clear()
+        assert.are.same({}, cacheFile())
+    end)
+
+    it("reads its settings file from storage once", function()
+        local opens = 0
+        local open = helper.stubs.luasettings.open
+        helper.stubs.luasettings.open = function(...)
+            opens = opens + 1
+            return open(...)
+        end
+
+        local cache = newCache()
+        cache:set("value", "a")
+        cache:set("value", "b")
+        cache:get("a")
+        cache:deleteValueFromKey("value", "b")
+
+        assert.are.equal(1, opens)
+        assert.are.equal("value", cacheFile().a.value)
+    end)
+
+    it("stores entries without saving them until asked to", function()
+        local cache = newCache()
+        cache:put("first", "a")
+        cache:put("second", "b")
+
+        assert.are.equal("first", cache:get("a"))
+        assert.is_nil(cacheFile())
+
+        cache:save()
+        assert.are.equal("first", cacheFile().a.value)
+        assert.are.equal("second", cacheFile().b.value)
+    end)
+
+    it("drops expired entries when saving, even if they aren't looked up again", function()
+        local cache = newCache { expiry = 60 }
+        cache:set("old", "a")
+
+        helper.state.time = 1000061
+        cache:set("new", "b")
+
+        assert.is_nil(cacheFile().a)
+        assert.are.equal("new", cacheFile().b.value)
+        assert.are.equal(1, cache:count())
+    end)
+
     describe("deleteValueFromKey", function()
         it("removes one value from a cached list", function()
             local cache = newCache()
@@ -189,8 +239,9 @@ describe("SearchCache", function()
         assert.is_nil(SearchCache:get("dune", 1, { "en" }, { "epub" }, { "fiction" }))
     end)
 
-    it("keeps at most 1000 searches", function()
-        assert.are.equal(1000, SearchCache.max_entries)
+    -- the whole cache is read and written at once, so it's kept small
+    it("keeps at most 100 searches", function()
+        assert.are.equal(100, SearchCache.max_entries)
     end)
 end)
 

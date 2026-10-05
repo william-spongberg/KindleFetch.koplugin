@@ -12,7 +12,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 - **Book Search + Downloads**: Search Library Genesis from your device with simple text input and download with a tap
 - **Caching**: Minimise network requests and improve performance
-  - Search results (2 week expiry by default, 1000 entries max)
+  - Search results (2 week expiry by default, 100 entries max)
   - Mirror URLs (1 week expiry by default)
   - Book covers (500 entries max)
 - **Preferences**: Filter results by preferred languages, file types, and book types
@@ -126,7 +126,7 @@ kindlefetch.koplugin/
 │   └── downloadprogress.lua   # Renders a centered progress widget with cancel and hide buttons
 ├── cache/
 │   ├── cache.lua              # Generic caching system with expiry, size limits, and timestamp-based cleanup
-│   ├── searchcache.lua        # Caches search results by query, page, and filter preferences (2 weeks by default, 1000-entry limit)
+│   ├── searchcache.lua        # Caches search results by query, page, and filter preferences (2 weeks by default, 100-entry limit)
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
 │   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions)
 ├── updater/
@@ -165,7 +165,7 @@ kindlefetch.koplugin/
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
    - HTML table is parsed to extract book metadata (title, authors, year, language, file type, MD5 hash, cover image URL), keeping books in the preferred languages and file types
    - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there
-   - Results are cached (2 weeks by default, 1000 entries max) to minimise requests
+   - Results are cached (2 weeks by default, 100 entries max) to minimise requests
    - Search results are displayed in a menu
 
 3. **Cover Loading**

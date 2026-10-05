@@ -218,6 +218,32 @@ describe("CoverCache", function()
             assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
         end)
 
+        it("writes the cache out once for all the covers that downloaded", function()
+            local flushes = 0
+            local open = helper.stubs.luasettings.open
+            helper.stubs.luasettings.open = function(...)
+                local file = open(...)
+                local flush = file.flush
+                function file:flush()
+                    flushes = flushes + 1
+                    return flush(self)
+                end
+                return file
+            end
+
+            CoverCache:downloadMultiple({
+                book("a", "https://covers.example/a.jpg"),
+                book("b", "https://covers.example/b.jpg"),
+                book("c", "https://covers.example/c.jpg"),
+            }, 6, onDone)
+            finishRun(runs[1], { true, true, true })
+            helper.runScheduled()
+
+            assert.are.same({ 3 }, results)
+            assert.are.equal(1, flushes)
+            assert.is_true(CoverCache:cacheExists("c"))
+        end)
+
         describe("full-size", function()
             it("are downloaded from the thumbnail's address without _small, and kept apart from it", function()
                 local b = book("abc", "https://libgen.example/fictioncovers/1000/abc_small.jpg")
