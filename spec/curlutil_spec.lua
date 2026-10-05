@@ -41,6 +41,9 @@ describe("CurlUtil", function()
     it("explains curl exit codes", function()
         assert.are.equal("could not resolve host", CurlUtil.getErrorMeaning(6))
         assert.are.equal("TLS certificate verification failed", CurlUtil.getErrorMeaning(60))
+        -- downloads need curl, which not every e-reader has
+        assert.are.equal("curl isn't installed on this device", CurlUtil.getErrorMeaning(127))
+        assert.are.equal("curl can't be run on this device", CurlUtil.getErrorMeaning(126))
         assert.are.equal("(curl exit code 99)", CurlUtil.getErrorMeaning(99))
     end)
 

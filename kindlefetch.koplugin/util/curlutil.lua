@@ -33,6 +33,9 @@ local CURL_ERRORS = {
     [61] = "unsupported TLS/SSL feature",
     [67] = "authentication failed",
     [78] = "requested resource was not found",
+    -- from the shell rather than from curl, when it can't run curl or can't find it
+    [126] = "curl can't be run on this device",
+    [127] = "curl isn't installed on this device",
 }
 
 local function ensureTmpDir()
