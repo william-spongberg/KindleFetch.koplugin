@@ -40,24 +40,19 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 #### Search → Kindle Fetch → Search Library Genesis
 
-<img width="350" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" />
-<img width="350" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
+<img width="350" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" /> <img width="350" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
 1. Enter a book title, author, or keyword in the search box. KOReader carries on while Library Genesis answers; tap the message saying it's searching to cancel.
 
-<img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" />
-<img width="350" alt="Message saying it's searching, which a tap cancels" src="docs/screenshots/04-searching.png" />
+<img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" /> <img width="350" alt="Message saying it's searching, which a tap cancels" src="docs/screenshots/04-searching.png" />
 
 2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download.
 
-<img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" />
-<img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" />
+<img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" /> <img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" />
 
 3. In the download prompt, optionally tap the book cover to see it full size, or tap the download path to choose another folder, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
 
-<img width="350" alt="Download prompt" src="docs/screenshots/07-download-prompt.png" />
-<img width="350" alt="Fullscreen cover" src="docs/screenshots/08-download-cover.png" />
-<img width="350" alt="Being asked before downloading over a book that's already there" src="docs/screenshots/09-download-overwrite.png" />
+<img width="350" alt="Download prompt" src="docs/screenshots/07-download-prompt.png" /> <img width="350" alt="Fullscreen cover" src="docs/screenshots/08-download-cover.png" /> <img width="350" alt="Being asked before downloading over a book that's already there" src="docs/screenshots/09-download-overwrite.png" />
 
 4. Monitor the download's progress; tap Hide to keep it downloading in the background (to see its progress again, choose **Search → Kindle Fetch → Downloads**, or the book again) or Cancel to stop it.
 
@@ -65,8 +60,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 5. Once the book has downloaded, tap Read now to open it.
 
-<img width="350" alt="Read now prompt" src="docs/screenshots/11-download-finished.png" />
-<img width="350" alt="Reading the downloaded book" src="docs/screenshots/12-reading.png" />
+<img width="350" alt="Read now prompt" src="docs/screenshots/11-download-finished.png" /> <img width="350" alt="Reading the downloaded book" src="docs/screenshots/12-reading.png" />
 
 Downloaded books are saved to your configured download location.
 
@@ -76,8 +70,7 @@ Downloaded books are saved to your configured download location.
 
 - **Show Book Covers**: Enable or disable cover image display in search results (default: enabled)
 
-<img width="350" alt="Settings" src="docs/screenshots/13-settings.png" />
-<img width="350" alt="Search results without covers" src="docs/screenshots/14-search-results-without-covers.png" />
+<img width="350" alt="Settings" src="docs/screenshots/13-settings.png" /> <img width="350" alt="Search results without covers" src="docs/screenshots/14-search-results-without-covers.png" />
 
 - **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`)
 
