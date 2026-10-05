@@ -452,6 +452,13 @@ local function createStubs(state)
             end,
         },
     }
+    -- KOReader's json, read with dkjson instead, which busted installs
+    stubs.json = {
+        decode = function(text)
+            return (require("dkjson").decode(text))
+        end,
+    }
+
     -- KOReader's timeouts for luasocket, kept in state.http_timeouts while they're set
     stubs.socketutil = {
         set_timeout = function(_, answer_timeout, total_timeout)
@@ -517,6 +524,7 @@ local MODULE_STUBS = {
     ["socket.http"] = "http",
     ["ltn12"] = "ltn12",
     ["socketutil"] = "socketutil",
+    ["json"] = "json",
     ["ui/widget/menu"] = "Menu",
     ["ui/widget/container/inputcontainer"] = "InputContainer",
     ["ui/geometry"] = "geometry",

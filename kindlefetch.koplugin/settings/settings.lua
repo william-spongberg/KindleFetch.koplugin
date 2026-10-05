@@ -607,6 +607,30 @@ function KindleFetchSettings:setLastVersion(version)
     return KindleFetchSettings:setSetting("last_version", version)
 end
 
+-- last_update_check (when the latest release was last looked up, as the time in seconds)
+function KindleFetchSettings:getLastUpdateCheck()
+    return KindleFetchSettings:getSetting("last_update_check")
+end
+function KindleFetchSettings:setLastUpdateCheck(time)
+    return KindleFetchSettings:setSetting("last_update_check", time)
+end
+
+-- skipped_version (plugin version that updating to was turned down, so it isn't offered again automatically)
+function KindleFetchSettings:getSkippedVersion()
+    return KindleFetchSettings:getSetting("skipped_version")
+end
+function KindleFetchSettings:setSkippedVersion(version)
+    return KindleFetchSettings:setSetting("skipped_version", version)
+end
+
+-- curl_update_declined (updating curl was turned down, so it isn't offered again automatically)
+function KindleFetchSettings:getCurlUpdateDeclined()
+    return KindleFetchSettings:getSetting("curl_update_declined") == true
+end
+function KindleFetchSettings:setCurlUpdateDeclined(bool)
+    return KindleFetchSettings:setSetting("curl_update_declined", bool)
+end
+
 -- download_dir
 function KindleFetchSettings:getDownloadDir()
     local settings_file = getSettingsFile()

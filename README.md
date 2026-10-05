@@ -22,7 +22,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch, in KOReader's gesture manager)
 - **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available on Kindles
-- **Automatic Plugin Updates**: Checks for new plugin releases once per session and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu)
+- **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
 - **Safe File Handling**: Automatic filename sanitisation and directory management
 
@@ -98,7 +98,7 @@ Downloaded books are saved to your configured download location.
 
 <img width="400" alt="Preferred book types" src="docs/screenshots/16-settings-book-types.png" />
 
-- **Check for Updates Automatically**: Check for plugin and curl updates once per session while connected (default: enabled)
+- **Check for Updates Automatically**: Check for plugin and curl updates at most once a day while connected (default: enabled)
 
 - **Keep Searches For / Keep Mirrors For**: How long search results (default: 14 days) and Library Genesis mirror URLs (default: 7 days) are cached
 
@@ -146,7 +146,9 @@ kindlefetch.koplugin/
 ### Workflow
 
 0. **Initialization**
-   - Unless turned off in settings, updates are checked for once per session while connected, or manually via Kindle Fetch → Check for updates
+   - Unless turned off in settings, updates are checked for at most once a day while connected, or manually via Kindle Fetch → Check for updates
+   - The latest release is looked up in the background, so KOReader can be used meanwhile
+   - A curl or plugin update that is turned down is only offered again by checking manually
    - On Kindles, curl version is checked; user is prompted to update if version is below 8.17.0
    - Plugin version is checked against GitHub releases; user is prompted to update if new version available
    - Settings are loaded from persistent storage

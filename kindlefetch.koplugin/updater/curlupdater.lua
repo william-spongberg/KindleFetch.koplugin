@@ -6,6 +6,7 @@ local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
 local PathUtil = require("util.pathutil")
+local KindleFetchSettings = require("settings.settings")
 local _ = require("gettext")
 
 -- constants
@@ -109,6 +110,8 @@ local function updateCurl()
 
     LogUtil.info("installed static curl " .. MIN_VERSION)
     NotifyUtil.info("Updated curl to v" .. MIN_VERSION)
+    -- ask again if it's ever out of date again, e.g. once a Kindle update puts the old one back
+    KindleFetchSettings:setCurlUpdateDeclined(false)
     return true
 end
 
@@ -133,6 +136,8 @@ local function promptCurlUpdate(current_version, min_version)
                     callback = function()
                         UIManager:close(confirm_dialog)
                         LogUtil.info("curl update declined")
+                        -- so it isn't offered again every day, only when asked to check for updates
+                        KindleFetchSettings:setCurlUpdateDeclined(true)
                     end,
                 },
                 {
@@ -150,8 +155,9 @@ local function promptCurlUpdate(current_version, min_version)
     UIManager:setDirty(confirm_dialog, "full")
 end
 
--- check curl is available and at least MIN_VERSION, update if necessary
-function CurlUpdater.checkVersion()
+-- check curl is available and at least MIN_VERSION, offering to update it if not (again after it was turned down
+-- only if the user asked for the check)
+function CurlUpdater.checkVersion(user_requested)
     -- installing curl relies on mntroot, so is only possible on a Kindle
     if not Device:isKindle() then
         LogUtil.debug("not running on a kindle, skipping curl version check")
@@ -182,6 +188,11 @@ function CurlUpdater.checkVersion()
     if cmp >= 0 then
         LogUtil.debug("curl is up to date")
         return true
+    end
+
+    if not user_requested and KindleFetchSettings:getCurlUpdateDeclined() then
+        LogUtil.warn("curl", current_version_str, "is older than", MIN_VERSION .. ", but updating it was turned down")
+        return false
     end
 
     LogUtil.warn("curl", current_version_str, "is older than", MIN_VERSION .. ", asking to update it")

@@ -2,7 +2,7 @@ local helper = require("helper")
 
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
-    local cancelled_downloads
+    local cancelled_downloads, curl_check_user_requested
     -- pages of results saved from earlier searches, as "query page"
     local saved
 
@@ -79,6 +79,9 @@ describe("KindleFetch", function()
             getCheckForUpdates = function()
                 return settings.check_for_updates
             end,
+            getLastUpdateCheck = function()
+                return settings.last_update_check
+            end,
             getLastVersion = function()
                 return settings.last_version
             end,
@@ -134,6 +137,7 @@ describe("KindleFetch", function()
             end,
         })
         cancelled_downloads = 0
+        curl_check_user_requested = nil
         helper.stub("api.lgliapi", {
             cancelAllDownloads = function()
                 cancelled_downloads = cancelled_downloads + 1
@@ -163,8 +167,9 @@ describe("KindleFetch", function()
             end,
         })
         helper.stub("updater.curlupdater", {
-            checkVersion = function()
+            checkVersion = function(user_requested)
                 checks.curl = checks.curl + 1
+                curl_check_user_requested = user_requested
             end,
         })
         helper.stub("updater.pluginupdater", {
@@ -290,6 +295,31 @@ describe("KindleFetch", function()
             assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
         end)
 
+        it("checks for updates automatically at most once a day", function()
+            helper.state.time = 2000000
+            settings.last_update_check = 2000000 - 24 * 60 * 60 + 1
+            openUI()
+            helper.runScheduled()
+            assert.are.same({ curl = 0, plugin = 0 }, checks)
+
+            -- KOReader has been restarted a second later
+            KindleFetch = dofile("kindlefetch.koplugin/main.lua")
+            helper.state.time = 2000001
+            openUI()
+            helper.runScheduled()
+            assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
+        end)
+
+        -- an e-reader's clock can be wrong, or be put right, between checks
+        it("checks for updates when the last check appears to be in the future", function()
+            helper.state.time = 2000000
+            settings.last_update_check = 2000000 + 7 * 24 * 60 * 60
+            openUI()
+            helper.runScheduled()
+
+            assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
+        end)
+
         it("waits for a network connection before checking for updates", function()
             helper.stubs.network.connected = false
             openUI()
@@ -333,6 +363,8 @@ describe("KindleFetch", function()
             menuItem(openUI(), "Check for updates").callback()
 
             assert.are.same({ curl = 1, plugin = 1, user_requested = true }, checks)
+            -- so updating curl is offered again, even if it was turned down before
+            assert.is_true(curl_check_user_requested)
             assert.are.equal("Checking for updates...", helper.lastNotification())
         end)
 

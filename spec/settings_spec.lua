@@ -146,6 +146,20 @@ describe("KindleFetchSettings", function()
         assert.are.equal("0.4", Settings:getLastVersion())
     end)
 
+    it("remembers when updates were last checked for, and the updates that were turned down", function()
+        assert.is_nil(Settings:getLastUpdateCheck())
+        assert.is_nil(Settings:getSkippedVersion())
+        assert.is_false(Settings:getCurlUpdateDeclined())
+
+        Settings:setLastUpdateCheck(1234567)
+        Settings:setSkippedVersion("0.5")
+        Settings:setCurlUpdateDeclined(true)
+
+        assert.are.equal(1234567, Settings:getLastUpdateCheck())
+        assert.are.equal("0.5", Settings:getSkippedVersion())
+        assert.is_true(Settings:getCurlUpdateDeclined())
+    end)
+
     describe("preferred book types", function()
         it("are converted from the ones used for Anna's Archive", function()
             helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {

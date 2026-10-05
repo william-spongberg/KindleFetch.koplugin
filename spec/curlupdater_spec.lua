@@ -53,6 +53,31 @@ describe("CurlUpdater", function()
             assert.matches("curl v7.68.0 is installed.\nMinimum required: v8.17.0", dialog.input, 1, true)
         end)
 
+        describe("once updating curl is turned down", function()
+            before_each(function()
+                installedCurl("7.68.0")
+                CurlUpdater.checkVersion()
+                helper.state.shown[1].buttons[1][1].callback()
+            end)
+
+            -- it was asked on every start before (#25)
+            it("doesn't offer it again", function()
+                assert.is_true(require("settings.settings"):getCurlUpdateDeclined())
+
+                assert.is_false(CurlUpdater.checkVersion())
+                assert.are.equal(1, #helper.state.shown)
+                assert.is_truthy(
+                    helper.logged("warn", "^curl 7.68.0 is older than 8.17.0, but updating it was turned down")
+                )
+            end)
+
+            it("offers it again when the user asks to check for updates", function()
+                CurlUpdater.checkVersion(true)
+                assert.are.equal(2, #helper.state.shown)
+                assert.are.equal("Update curl?", helper.state.shown[2].title)
+            end)
+        end)
+
         it("fails when the curl version cannot be read", function()
             helper.stubCommand("curl --version", "curl . (unknown)\n")
             assert.is_false(CurlUpdater.checkVersion())
@@ -120,6 +145,17 @@ describe("CurlUpdater", function()
             acceptUpdate()
 
             assert.are.same({ "chmod", "remount_rw", "find_backup", "install", "permissions", "remount_ro" }, commands)
+        end)
+
+        -- e.g. once a Kindle update has put the old curl back
+        it("offers to update again later, even if it was turned down before", function()
+            stubInstall()
+            require("settings.settings"):setCurlUpdateDeclined(true)
+            installedCurl("7.68.0")
+            CurlUpdater.checkVersion(true)
+            helper.lastShown().buttons[1][2].callback()
+
+            assert.is_false(require("settings.settings"):getCurlUpdateDeclined())
         end)
 
         it("does nothing when the user cancels", function()

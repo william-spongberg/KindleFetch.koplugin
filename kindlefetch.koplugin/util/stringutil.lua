@@ -87,7 +87,7 @@ function StringUtil.replaceCarriageReturns(text)
         return ""
     end
 
-    return text:gsub("\\r\\n", "\n")
+    return text:gsub("\r\n", "\n")
 end
 
 return StringUtil

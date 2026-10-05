@@ -1,6 +1,7 @@
 local Device = require("device")
 local UIManager = require("ui/uimanager")
 local InputDialog = require("ui/widget/inputdialog")
+local JSON = require("json")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
 local LogUtil = require("util.logutil")
@@ -8,6 +9,7 @@ local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
 local StringUtil = require("util.stringutil")
 local PathUtil = require("util.pathutil")
+local KindleFetchSettings = require("settings.settings")
 local _ = require("gettext")
 
 -- constants
@@ -17,31 +19,21 @@ local GITHUB_API_URL = "https://api.github.com/repos/"
 local GITHUB_URL = "https://github.com/"
 local REPO_VERSION_URL = GITHUB_API_URL .. REPO_NAME
 local REPO_DOWNLOAD_URL = GITHUB_URL .. REPO_NAME
+local POLL_INTERVAL = 0.5
+-- KOReader is in use while the latest release is looked up, so don't keep at it for long
+local CHECK_MAX_TIME = 15
 
 local PluginUpdater = {}
 
--- read latest repo version from github
-local function getUpdateInfo()
-    local cmd = "curl -s " .. REPO_VERSION_URL .. "/releases/latest"
-    local handle = io.popen(cmd)
-    if not handle then
+-- the version and release notes in github's description of the latest release
+local function parseUpdateInfo(output)
+    local ok, release = pcall(JSON.decode, output)
+    if not ok or type(release) ~= "table" or type(release.tag_name) ~= "string" then
+        -- e.g. GitHub's rate limit
+        LogUtil.warn("could not read the latest release from GitHub:", output:gsub("%s+", " "):sub(1, 300))
         return nil
     end
-
-    local output = handle:read("*a")
-    handle:close()
-
-    -- output:  "tag_name": "v0.1"
-    local tag = output:match('"tag_name"%s*:%s*"([^"]+)"')
-    if not tag then
-        -- e.g. GitHub's rate limit, or no connection
-        LogUtil.warn(
-            "could not read the latest release from GitHub:",
-            output == "" and "no response" or output:gsub("%s+", " "):sub(1, 300)
-        )
-        return nil
-    end
-    tag = tag:gsub("^v", "")
+    local tag = release.tag_name:gsub("^v", "")
 
     local version = VersionUtil.parseVersion(tag)
     if not version then
@@ -49,16 +41,52 @@ local function getUpdateInfo()
         return nil
     end
 
-    -- updates notes: "body": "[message]"
-    local body = output:match('"body"%s*:%s*"([^"]+)"')
-    if not body then
-        LogUtil.debug("failed to find body:", output)
-    end
-
     return {
         version = version,
-        notes = body,
+        -- a release without notes has null here, which isn't a string once read
+        notes = type(release.body) == "string" and release.body or nil,
     }
+end
+
+-- look up the latest release on github in the background, as KOReader is in use and it can take a while. calls
+-- callback with its version and release notes, or with nothing if it couldn't be looked up
+local function fetchUpdateInfo(callback)
+    local release_file = PathUtil.getTmpPath() .. "/latest_release.json"
+    local pid, exit_file, err =
+        CurlUtil.download(REPO_VERSION_URL .. "/releases/latest", release_file, false, true, CHECK_MAX_TIME)
+    if not pid then
+        LogUtil.warn("could not start curl to look up the latest release:", err)
+        callback(nil)
+        return
+    end
+
+    local function poll()
+        local exit_code = CurlUtil.getExitCode(exit_file)
+        if not exit_code then
+            if CurlUtil.isPidRunning(pid) then
+                UIManager:scheduleIn(POLL_INTERVAL, poll)
+                return
+            end
+            -- curl may have finished between checking for its exit code and whether it was running
+            exit_code = CurlUtil.getExitCode(exit_file)
+        end
+
+        local output = FileUtil.readFile(release_file)
+        FileUtil.removeFile(release_file)
+        if exit_code ~= 0 or not output then
+            -- e.g. GitHub's rate limit, or no connection
+            LogUtil.warn(
+                "could not look up the latest release on GitHub: curl exit code",
+                tostring(exit_code),
+                "(" .. CurlUtil.getErrorMeaning(exit_code) .. ")"
+            )
+            callback(nil)
+            return
+        end
+
+        callback(parseUpdateInfo(output))
+    end
+    UIManager:scheduleIn(POLL_INTERVAL, poll)
 end
 
 -- read installed plugin version from version.txt
@@ -226,6 +254,8 @@ local function promptPluginUpdate(plugin_path, installed_version, available_upda
                     callback = function()
                         UIManager:close(confirm_dialog)
                         LogUtil.info("KindleFetch update declined")
+                        -- so this release isn't offered again every day, only when asked to check
+                        KindleFetchSettings:setSkippedVersion(available_update.version.str)
                     end,
                 },
                 {
@@ -243,11 +273,12 @@ local function promptPluginUpdate(plugin_path, installed_version, available_upda
     UIManager:setDirty(confirm_dialog, "full")
 end
 
--- check plugin version and update if new version available, reporting the result if the user asked for the check
+-- check plugin version and offer to update if a new version is available, reporting the result if the user asked
+-- for the check. the latest release is looked up in the background, so this returns before the check is over
 function PluginUpdater.checkForUpdates(user_requested)
     if Device:isSDL() then
         LogUtil.debug("running in emulator, skipping plugin version check")
-        return true
+        return
     end
     LogUtil.debug("checking for plugin updates from", REPO_VERSION_URL)
 
@@ -259,34 +290,42 @@ function PluginUpdater.checkForUpdates(user_requested)
         installed_version = VersionUtil.parseVersion("0.0.0")
     end
 
-    local repo_update = getUpdateInfo()
-    if not repo_update then
-        LogUtil.warn("could not check for KindleFetch updates")
-        if user_requested then
-            NotifyUtil.info("Failed to fetch updates for KindleFetch")
+    fetchUpdateInfo(function(repo_update)
+        if not repo_update then
+            LogUtil.warn("could not check for KindleFetch updates")
+            if user_requested then
+                NotifyUtil.info("Failed to fetch updates for KindleFetch")
+            end
+            return
         end
-        return false
-    end
+        -- automatic checks wait a day from here
+        KindleFetchSettings:setLastUpdateCheck(os.time())
 
-    LogUtil.info(
-        "KindleFetch",
-        installed_version.str,
-        "is installed, and the latest release is",
-        repo_update.version.str
-    )
+        LogUtil.info(
+            "KindleFetch",
+            installed_version.str,
+            "is installed, and the latest release is",
+            repo_update.version.str
+        )
 
-    local cmp = VersionUtil.compareVersions(installed_version, repo_update.version)
-    if cmp >= 0 then
-        LogUtil.debug("plugin is up to date")
-        if user_requested then
-            NotifyUtil.info("KindleFetch is up to date")
+        local cmp = VersionUtil.compareVersions(installed_version, repo_update.version)
+        if cmp >= 0 then
+            LogUtil.debug("plugin is up to date")
+            if user_requested then
+                NotifyUtil.info("KindleFetch is up to date")
+            end
+            return
         end
-        return true
-    end
 
-    -- update available
-    LogUtil.info("offering to update KindleFetch to", repo_update.version.str)
-    return promptPluginUpdate(plugin_path, installed_version.str, repo_update)
+        -- update available, but not offered again once turned down, unless asked to check
+        if not user_requested and repo_update.version.str == KindleFetchSettings:getSkippedVersion() then
+            LogUtil.info("KindleFetch", repo_update.version.str, "was turned down before, so not offering it again")
+            return
+        end
+
+        LogUtil.info("offering to update KindleFetch to", repo_update.version.str)
+        promptPluginUpdate(plugin_path, installed_version.str, repo_update)
+    end)
 end
 
 return PluginUpdater

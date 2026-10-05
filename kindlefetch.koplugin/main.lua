@@ -28,6 +28,14 @@ local _ = require("gettext")
 -- so only check for updates and clear old caches once per session
 local update_check_scheduled = false
 local version_checked = false
+-- and only check for updates automatically once a day, in seconds
+local UPDATE_CHECK_INTERVAL = 24 * 60 * 60
+
+local function updateCheckDue()
+    local last_check = KindleFetchSettings:getLastUpdateCheck()
+    -- (or the clock has been put back since, as an e-reader's can be)
+    return not last_check or math.abs(os.time() - last_check) >= UPDATE_CHECK_INTERVAL
+end
 
 local function installedVersion()
     return FileUtil.readFile(PathUtil.getPluginPath() .. "/version.txt")
@@ -131,7 +139,12 @@ function KindleFetch:init()
     self.ui.menu:registerToMainMenu(self)
 
     -- if network is connected, schedule update checks after UI is ready
-    if not update_check_scheduled and KindleFetchSettings:getCheckForUpdates() and NetworkMgr:isConnected() then
+    if
+        not update_check_scheduled
+        and KindleFetchSettings:getCheckForUpdates()
+        and NetworkMgr:isConnected()
+        and updateCheckDue()
+    then
         update_check_scheduled = true
         UIManager:scheduleIn(0.1, function()
             -- check curl is at min version
@@ -145,7 +158,7 @@ end
 function KindleFetch:checkForUpdates()
     NetworkMgr:runWhenConnected(function()
         NotifyUtil.info("Checking for updates...")
-        CurlUpdater.checkVersion()
+        CurlUpdater.checkVersion(true)
         PluginUpdater.checkForUpdates(true)
     end)
 end
