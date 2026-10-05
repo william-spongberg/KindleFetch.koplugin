@@ -208,7 +208,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     }
 
     -- create and show progress widget immediately
-    local progress_widget = DownloadProgress.new(book.title, function()
+    local progress_widget = DownloadProgress.new(book.display_title or book.title, function()
         if current_pid.pid then
             CurlUtil.killPid(current_pid.pid)
         end
@@ -419,7 +419,7 @@ function LlgiAPI:getActiveDownloads()
     for id, download_info in pairs(self.active_downloads) do
         table.insert(downloads, {
             id = id,
-            title = download_info.book.title,
+            title = download_info.book.display_title or download_info.book.title,
             filepath = download_info.filepath,
             md5 = download_info.book.md5,
             widget = download_info.progress_widget,

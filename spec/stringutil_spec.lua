@@ -23,7 +23,7 @@ describe("StringUtil", function()
         "collapseDashes",
         "convertHtmlToText",
         "removeParentheses",
-        "truncate",
+        "cleanTitle",
         "cleanFileName",
         "replaceCarriageReturns",
     }) do
@@ -51,9 +51,26 @@ describe("StringUtil", function()
         assert.are.equal("Dune", StringUtil.removeParentheses("Dune (Dune Chronicles 1) [Ace, 1990]"))
     end)
 
-    it("truncates text longer than 50 characters", function()
-        assert.are.equal(string.rep("a", 50), StringUtil.truncate(string.rep("a", 50)))
-        assert.are.equal(string.rep("a", 50) .. "…", StringUtil.truncate(string.rep("a", 51)))
+    describe("cleanTitle", function()
+        it("leaves a title as it's written, unlike a file name", function()
+            assert.are.equal("Dune: Messiah / What if?", StringUtil.cleanTitle("Dune: Messiah / What if?"))
+            assert.are.equal("Dune- Messiah - What if-", StringUtil.cleanFileName("Dune: Messiah / What if?"))
+        end)
+
+        it("leaves out what's in brackets, and the space around it", function()
+            assert.are.equal("Dune", StringUtil.cleanTitle("  Dune (Dune Chronicles, Book 1) [1965] "))
+            assert.are.equal("Dune - House Atreides", StringUtil.cleanTitle("Dune - House Atreides(Boom 2020)"))
+        end)
+
+        it("keeps a title that is all in brackets", function()
+            assert.are.equal("[Untitled]", StringUtil.cleanTitle(" [Untitled] "))
+        end)
+
+        it("leaves titles in other alphabets whole", function()
+            local title =
+                "Мастер и Маргарита: роман в двух частях, с иллюстрациями"
+            assert.are.equal(title, StringUtil.cleanTitle(title))
+        end)
     end)
 
     it("makes titles safe to use as file names", function()

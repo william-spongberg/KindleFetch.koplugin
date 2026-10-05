@@ -79,6 +79,22 @@ describe("DownloadPrompt", function()
         assert.is_true(prompt.title.bold)
     end)
 
+    -- so the prompt fits on the screen whatever the book is called
+    it("shows at most 4 lines of a long title, and 2 of a long list of authors", function()
+        local prompt = newPrompt()
+        assert.is_nil(prompt.title.height)
+        assert.is_nil(prompt.author.height)
+
+        book.display_title = string.rep("A very long title ", 20)
+        book.authors = string.rep("Author, Another; ", 20)
+        prompt = newPrompt()
+        assert.are.equal(string.rep("A very long title ", 20), prompt.title.text)
+        assert.are.equal(4 * 20, prompt.title.height)
+        assert.is_true(prompt.title.height_overflow_show_ellipsis)
+        assert.are.equal(2 * 20, prompt.author.height)
+        assert.is_true(prompt.author.height_overflow_show_ellipsis)
+    end)
+
     it("leaves out missing details", function()
         book.year = nil
         book.file_size = nil

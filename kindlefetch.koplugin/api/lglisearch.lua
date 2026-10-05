@@ -76,14 +76,16 @@ local function parseBook(row, base_url)
         book.image_url = image_path:match("^https?://") and image_path or base_url .. "/" .. image_path:gsub("^/", "")
     end
 
+    -- the title to name the book's file after, and the title as it's written, for showing on screen. what shows
+    -- them shortens them to fit, as it knows how much room there is
     local raw_title = parseTitle(cells[2])
     if raw_title then
         book.title = StringUtil.cleanFileName(raw_title)
-        book.display_title = StringUtil.truncate(book.title)
+        book.display_title = StringUtil.cleanTitle(raw_title)
     end
 
     local authors = stripTags(cells[3]):gsub("[,;%s]+$", "")
-    book.authors = StringUtil.assertValidString(authors) and StringUtil.truncate(authors) or "Unknown author"
+    book.authors = StringUtil.assertValidString(authors) and authors or "Unknown author"
 
     local year = stripTags(cells[5])
     book.year = year ~= "" and year ~= "0" and year or nil

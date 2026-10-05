@@ -619,6 +619,13 @@ function helper.reset()
     end
     -- the characters TextBoxWidget uses for bold text
     local TextBoxWidget = package.loaded["ui/widget/textboxwidget"]
+    -- how many lines its text wraps over, at 10px a character as in getSize, and how tall each is
+    function TextBoxWidget:getVisLineCount()
+        return math.max(1, math.ceil(#(self.text or "") * 10 / (self.width or 1)))
+    end
+    function TextBoxWidget:getLineHeight()
+        return 20
+    end
     TextBoxWidget.PTF_HEADER = "\u{FFF1}"
     TextBoxWidget.PTF_BOLD_START = "\u{FFF2}"
     TextBoxWidget.PTF_BOLD_END = "\u{FFF3}"

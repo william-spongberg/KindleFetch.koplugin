@@ -55,17 +55,19 @@ function StringUtil.removeParentheses(text)
     return text
 end
 
-function StringUtil.truncate(text)
+-- a title as it's written, for showing on screen, without what Library Genesis adds to it in brackets (such as
+-- the series it's in)
+function StringUtil.cleanTitle(text)
     if not StringUtil.assertValidString(text) then
         return ""
     end
 
-    local limit = 50
-    if #text > limit then
-        return text:sub(1, limit) .. "…"
+    local title = StringUtil.trim(StringUtil.collapseWhitespace(StringUtil.removeParentheses(text)))
+    -- unless that's all there is of it
+    if title == "" then
+        title = StringUtil.trim(StringUtil.collapseWhitespace(text))
     end
-
-    return text
+    return title
 end
 
 function StringUtil.cleanFileName(text)

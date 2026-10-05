@@ -32,6 +32,9 @@ local COVER_SIZE = Screen:scaleBySize(192)
 -- the title and the book's details in black, the rest in greys that are still dark enough to read on e-ink (#3)
 local AUTHOR_COLOR = Blitbuffer.COLOR_GRAY_4
 local LABEL_COLOR = Blitbuffer.COLOR_GRAY_6
+-- the most lines a long title and a long list of authors can take up, so the prompt always fits on the screen
+local TITLE_MAX_LINES = 4
+local AUTHOR_MAX_LINES = 2
 local TITLE_FACE = Font:getFace("cfont", 20)
 local AUTHOR_FACE = Font:getFace("cfont", 17)
 local DETAIL_FACE = Font:getFace("cfont", 15)
@@ -292,23 +295,47 @@ function DownloadPrompt:buildDetails(width)
     return rows
 end
 
+-- text over as many lines as it needs, up to max_lines, ending in an ellipsis if there's more of it than that
+local function wrappedText(max_lines, options)
+    local function build(height)
+        return TextBoxWidget:new {
+            width = options.width,
+            face = options.face,
+            text = options.text,
+            bold = options.bold,
+            fgcolor = options.fgcolor,
+            height = height,
+            height_adjust = height and true or nil,
+            height_overflow_show_ellipsis = height and true or nil,
+        }
+    end
+
+    local widget = build()
+    if widget:getVisLineCount() > max_lines then
+        local height = widget:getLineHeight() * max_lines
+        widget:free()
+        widget = build(height)
+    end
+    return widget
+end
+
 function DownloadPrompt:buildContent()
     -- the book's details take the whole width when there's no cover
     local text_width = self.cover and CONTENT_WIDTH - COVER_SIZE - Size.padding.large or CONTENT_WIDTH
 
-    self.title = TextBoxWidget:new {
+    self.title = wrappedText(TITLE_MAX_LINES, {
         width = text_width,
         face = TITLE_FACE,
         text = self.book.display_title or "",
         bold = true,
-    }
+    })
 
-    self.author = TextBoxWidget:new {
+    self.author = wrappedText(AUTHOR_MAX_LINES, {
         width = text_width,
         face = AUTHOR_FACE,
         text = self.book.authors or "",
         fgcolor = AUTHOR_COLOR,
-    }
+    })
 
     self.details_group = self:buildDetails(text_width)
 

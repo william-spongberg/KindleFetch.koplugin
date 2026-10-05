@@ -425,7 +425,7 @@ function KindleFetch:downloadBook(book)
                         TextBoxWidget.PTF_HEADER,
                         _("Downloaded"),
                         TextBoxWidget.PTF_BOLD_START,
-                        book.title,
+                        book.display_title or book.title,
                         TextBoxWidget.PTF_BOLD_END,
                         _("Would you like to read it now?")
                     ),

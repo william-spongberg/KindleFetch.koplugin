@@ -176,19 +176,36 @@ describe("LlgiSearch", function()
             assert.is_nil(book.image_url)
         end)
 
-        it("shortens long titles and author lists for display", function()
+        -- what shows them shortens them to fit. cutting them at 50 bytes here split letters in other alphabets
+        it("keeps long titles and author lists whole", function()
+            local title =
+                "Мастер и Маргарита: роман в двух частях, с иллюстрациями и комментариями"
             results(mirrors[1], {
                 {
                     md5 = "abc",
-                    title = string.rep("Long title ", 10),
+                    title = title,
                     authors = string.rep("Author, ", 10),
                     file_type = "epub",
                 },
             })
             local book = LlgiSearch:search("dune", 1)[1]
 
-            assert.are.equal(string.rep("Long title ", 10):sub(1, 50) .. "…", book.display_title)
-            assert.are.equal(string.rep("Author, ", 10):sub(1, 50) .. "…", book.authors)
+            assert.are.equal(title, book.display_title)
+            assert.are.equal(string.rep("Author, ", 10):gsub("[,%s]+$", ""), book.authors)
+        end)
+
+        it("shows a title as it's written, while naming its file safely", function()
+            results(mirrors[1], {
+                {
+                    md5 = "abc",
+                    title = "Orwell, George: Animal farm (a fairy story)",
+                    file_type = "epub",
+                },
+            })
+            local book = LlgiSearch:search("dune", 1)[1]
+
+            assert.are.equal("Orwell, George: Animal farm", book.display_title)
+            assert.are.equal("Orwell, George- Animal farm", book.title)
         end)
 
         it("decodes html entities", function()
