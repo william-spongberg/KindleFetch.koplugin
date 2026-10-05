@@ -190,8 +190,14 @@ describe("KindleFetch", function()
         helper.stub("ui.bookmenu", {
             new = function(_, menu)
                 menu.covers_loaded = {}
+                menu.page = 1
                 function menu:loadCoversForPage(page)
                     table.insert(self.covers_loaded, page)
+                end
+                -- like KOReader's menu, show other entries, turning to the page with the given one (2 to a page here)
+                function menu:switchItemTable(title, item_table, item_number)
+                    self.item_table = item_table
+                    self.page = math.ceil(item_number / 2)
                 end
                 table.insert(menus, menu)
                 return menu
@@ -646,7 +652,7 @@ describe("KindleFetch", function()
             -- and can be asked for again
             search_results[2] = { { book("Children of Dune") } }
             loadMore()
-            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune" }, itemTexts(menus[2]))
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune" }, itemTexts(menus[1]))
         end)
 
         it("adds the next books to the list", function()
@@ -654,8 +660,31 @@ describe("KindleFetch", function()
             loadMore()
 
             assert.are.same({ { "dune", 1 }, { "dune", 2 } }, searches)
-            assert.is_true(helper.wasClosed(menus[1]))
-            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "Load more" }, itemTexts(menus[2]))
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "Load more" }, itemTexts(menus[1]))
+        end)
+
+        -- it used to show them in a new list, back at its first page
+        it("adds them to the list that's open, turning to the first of them and loading their covers", function()
+            search_results[2] = { { book("Children of Dune"), book("God Emperor of Dune") }, nil, 4 }
+            loadMore()
+
+            assert.are.equal(1, #menus)
+            assert.is_false(helper.wasClosed(menus[1]))
+            -- the third book is the first on the second page
+            assert.are.equal(2, menus[1].page)
+            assert.are.same({ 1, 2 }, menus[1].covers_loaded)
+            -- and the new books can be chosen, like the first ones
+            menus[1].item_table[3].callback()
+            assert.are.equal("Children of Dune", downloads[1].book.title)
+        end)
+
+        it("doesn't load the new books' covers when covers are turned off", function()
+            settings.show_covers = false
+            search_results[2] = { { book("Children of Dune") } }
+            loadMore()
+
+            -- only the first page's, from before they were turned off
+            assert.are.same({ 1 }, menus[1].covers_loaded)
         end)
 
         it("carries on from where the last search stopped", function()
@@ -666,7 +695,7 @@ describe("KindleFetch", function()
 
             assert.are.same({ "dune", 4 }, searches[3])
             -- the end of the results
-            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "God Emperor of Dune" }, itemTexts(menus[3]))
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "God Emperor of Dune" }, itemTexts(menus[1]))
         end)
 
         it("turns on wifi first when offline, then loads them once connected", function()

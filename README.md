@@ -167,7 +167,7 @@ kindlefetch.koplugin/
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
    - Pages are fetched with curl where there is one (on a Kindle, once it has been updated): compressed, which Library Genesis sends several times sooner, and in the background, so KOReader isn't held up and a tap on the message cancels the search. Otherwise they're fetched with KOReader's own HTTP, which holds KOReader up until they arrive
    - HTML table is parsed to extract book metadata (title, authors, year, language, file type, MD5 hash, cover image URL), keeping books in the preferred languages and file types
-   - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there
+   - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there, adding the books to the list where it was tapped
    - Results are cached (2 weeks by default, 100 entries max) to minimise requests
    - Search results are displayed in a menu
 

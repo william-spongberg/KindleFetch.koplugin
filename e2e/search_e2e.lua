@@ -104,10 +104,21 @@ describe("Searching", function()
         H.tapMenuEntry(menu, function(item)
             return item.text == "Load more"
         end)
-        local more = H.waitFor("more books", 120, function()
-            return plugin.books_menu ~= menu and H.isShown(plugin.books_menu) and plugin.books_menu
+        local last_page = menu.page
+        H.waitFor("more books", 120, function()
+            return #H.books(menu) > count
         end)
-        assert(#H.books(more) > count, "no more books were added")
+        -- added to the list that's open, which stays where it was rather than going back to its first page
+        H.eq(menu, plugin.books_menu, "the menu of books")
+        assert(H.isShown(menu), "the books are no longer showing")
+        H.eq(last_page, menu.page, "page showing")
+        local first_new = H.books(menu)[count + 1]
+        assert(
+            H.find(function(widget)
+                return widget.entry and widget.entry.book == first_new
+            end, menu),
+            "the first of the new books isn't on the page showing"
+        )
         H.shot("search-more")
     end)
 end)

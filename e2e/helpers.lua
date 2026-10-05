@@ -227,7 +227,6 @@ end
 
 -- search, tapping "Load more" until a book matching predicate is found, returning the results menu
 function H.searchUntil(query, predicate, max_pages)
-    local plugin = H.plugin()
     local menu = H.search(query)
     for _ = 2, max_pages or 3 do
         for _, book in ipairs(H.books(menu)) do
@@ -235,12 +234,16 @@ function H.searchUntil(query, predicate, max_pages)
                 return menu
             end
         end
+        local count = #H.books(menu)
         H.tapMenuEntry(menu, function(item)
             return item.text == "Load more"
         end)
-        local previous = menu
-        menu = H.waitFor("more books", 120, function()
-            return plugin.books_menu ~= previous and H.isShown(plugin.books_menu) and plugin.books_menu
+        H.waitFor("more books", 120, function()
+            local failure = H.errorShown()
+            if failure then
+                error(failure, 0)
+            end
+            return #H.books(menu) > count
         end)
     end
     return menu

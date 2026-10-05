@@ -334,7 +334,8 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
     end)
 end
 
-function KindleFetch:showBooks(books)
+-- the books as entries for the menu of results, followed by a way to load more when there are more to load
+function KindleFetch:bookMenuItems(books)
     local this = self
     local menu_items = {}
 
@@ -356,9 +357,15 @@ function KindleFetch:showBooks(books)
         })
     end
 
+    return menu_items
+end
+
+function KindleFetch:showBooks(books)
+    local this = self
+
     local menu
     menu = BookMenu:new {
-        item_table = menu_items,
+        item_table = self:bookMenuItems(books),
         covers_fullscreen = true,
         is_borderless = true,
         width = this.dimen.w,
@@ -412,15 +419,19 @@ function KindleFetch:loadMoreBooks()
         end
 
         -- append new books
+        local first_new_book = #self.books + 1
         for _, book in ipairs(books) do
             table.insert(self.books, book)
         end
 
-        -- close old menu, show new menu
-        UIManager:close(self.books_menu)
-        UIManager:setDirty(self.books_menu, "full")
-
-        self:showBooks(self.books)
+        -- add them to the menu where Load more was, turning to the page they start on (the one that was showing)
+        -- rather than going back to the first
+        local menu = self.books_menu
+        menu:switchItemTable(nil, self:bookMenuItems(self.books), first_new_book)
+        if KindleFetchSettings:getShowBookCovers() then
+            LogUtil.debug("loading covers for page", menu.page)
+            menu:loadCoversForPage(menu.page)
+        end
     end)
 end
 
