@@ -273,9 +273,6 @@ local function fetchResults(params, refresh)
     return nil, last_err or "all Library Genesis mirrors failed"
 end
 
--- search from the given page of Library Genesis' results, returning the books found, the page to carry on from
--- (or nil once there are no more results), and how many results were read to find them: most may have been in
--- other languages or file types (unknown, so nil, for books saved from an earlier search)
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
 function LlgiSearch:isCached(query, page)
     local cached = SearchCache:get(
@@ -288,6 +285,9 @@ function LlgiSearch:isCached(query, page)
     return cached ~= nil and cached.books ~= nil
 end
 
+-- search from the given page of Library Genesis' results, returning the books found, the page to carry on from
+-- (or nil once there are no more results), and how many results were read to find them: most may have been in
+-- other languages or file types (unknown, so nil, for books saved from an earlier search)
 function LlgiSearch:search(query, page)
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
