@@ -393,10 +393,18 @@ function KindleFetch:openBook(filepath)
         UIManager:close(self.search_box)
     end
 
-    if self.ui.document then
-        self.ui:switchDocument(filepath)
+    -- open it from whichever of a book or the file manager is open by now, rather than from self.ui, as the one
+    -- the download was started from may have closed since (e.g. while the download was hidden)
+    local ReaderUI = require("apps/reader/readerui")
+    if ReaderUI.instance then
+        ReaderUI.instance:switchDocument(filepath)
+        return
+    end
+    local FileManager = require("apps/filemanager/filemanager")
+    if FileManager.instance then
+        FileManager.instance:openFile(filepath)
     else
-        self.ui:openFile(filepath)
+        ReaderUI:showReader(filepath)
     end
 end
 

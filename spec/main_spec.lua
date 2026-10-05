@@ -8,6 +8,9 @@ describe("KindleFetch", function()
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
     local opened
+    -- KOReader's file manager and reader, of which one is open at a time (the file manager here, until a spec
+    -- opens a book with readBook)
+    local FileManager, ReaderUI
 
     local function openUI()
         opened = nil
@@ -16,13 +19,18 @@ describe("KindleFetch", function()
                 menu = {
                     registerToMainMenu = function() end,
                 },
-                openFile = function(_, file)
-                    opened = { "openFile", file }
-                end,
-                switchDocument = function(_, file)
-                    opened = { "switchDocument", file }
-                end,
             },
+        }
+    end
+
+    -- close the file manager and open a book, as KOReader does
+    local function readBook()
+        FileManager.instance = nil
+        ReaderUI.instance = {
+            document = {},
+            switchDocument = function(_, file)
+                opened = { "switchDocument", file }
+            end,
         }
     end
 
@@ -138,6 +146,21 @@ describe("KindleFetch", function()
         })
         cancelled_downloads = 0
         curl_check_user_requested = nil
+
+        FileManager = {
+            instance = {
+                openFile = function(_, file)
+                    opened = { "openFile", file }
+                end,
+            },
+        }
+        ReaderUI = {
+            showReader = function(_, file)
+                opened = { "showReader", file }
+            end,
+        }
+        helper.stub("apps/filemanager/filemanager", FileManager)
+        helper.stub("apps/reader/readerui", ReaderUI)
         helper.stub("api.lgliapi", {
             cancelAllDownloads = function()
                 cancelled_downloads = cancelled_downloads + 1
@@ -631,13 +654,46 @@ describe("KindleFetch", function()
         end)
 
         it("switches to the downloaded book when already reading one", function()
-            plugin.ui.document = {}
+            readBook()
             selectBook("Dune")
             downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
             helper.tick()
             helper.lastShown().buttons[1][2].callback()
 
             assert.are.same({ "switchDocument", "/mnt/us/books/Dune.epub" }, opened)
+        end)
+
+        -- the download may have been hidden, and finish after what it was started from has closed. opening the
+        -- book from there crashed KOReader when that was a book, as only the file manager can open files
+        it("opens the book from what's open by then, rather than what the download was started from", function()
+            selectBook("Dune")
+            readBook()
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+            helper.lastShown().buttons[1][2].callback()
+            assert.are.same({ "switchDocument", "/mnt/us/books/Dune.epub" }, opened)
+
+            -- and the other way round: started while reading a book that has been closed since
+            ReaderUI.instance = nil
+            FileManager.instance = {
+                openFile = function(_, file)
+                    opened = { "openFile", file }
+                end,
+            }
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+            helper.lastShown().buttons[1][2].callback()
+            assert.are.same({ "openFile", "/mnt/us/books/Dune.epub" }, opened)
+        end)
+
+        it("opens the book when neither a book nor the file manager is open", function()
+            FileManager.instance = nil
+            selectBook("Dune")
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+            helper.lastShown().buttons[1][2].callback()
+
+            assert.are.same({ "showReader", "/mnt/us/books/Dune.epub" }, opened)
         end)
 
         it("says why a download failed", function()
