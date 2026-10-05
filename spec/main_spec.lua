@@ -208,6 +208,7 @@ describe("KindleFetch", function()
                 -- like KOReader's menu, show other entries, turning to the page with the given one (2 to a page here)
                 -- (or staying on the page that's showing for a negative one)
                 function menu:switchItemTable(title, item_table, item_number)
+                    self.title = title or self.title
                     self.item_table = item_table
                     if item_number >= 0 then
                         self.page = math.ceil(item_number / 2)
@@ -654,6 +655,22 @@ describe("KindleFetch", function()
             assert.are.same({ "Dune" }, itemTexts(menus[1]))
         end)
 
+        it("says above the books what was searched for, and how many were found", function()
+            search_results[1] = { { book("Dune"), book("Dune Messiah") } }
+            search(openUI(), " dune ")
+            assert.are.equal("dune · 2 books", menus[1].title)
+            assert.is_true(menus[1].title_shrink_font_to_fit)
+
+            search_results[1] = { { book("Dune") } }
+            search(openUI(), "dune")
+            assert.are.equal("dune · 1 book", menus[2].title)
+
+            -- with more to load
+            search_results[1] = { { book("Dune") }, nil, 2 }
+            search(openUI(), "dune")
+            assert.are.equal("dune · 1+ books", menus[3].title)
+        end)
+
         it("loads covers for each page shown", function()
             search_results[1] = { { book("Dune") } }
             search(openUI(), "dune")
@@ -771,6 +788,7 @@ describe("KindleFetch", function()
 
             assert.are.same({ { "dune", 1 }, { "dune", 2 } }, searches)
             assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "Load more" }, itemTexts(menus[1]))
+            assert.are.equal("dune · 3+ books", menus[1].title)
         end)
 
         -- it used to show them in a new list, back at its first page
@@ -847,6 +865,7 @@ describe("KindleFetch", function()
             assert.are.equal("No more books found", helper.lastShown().text)
             assert.are.equal(1, #menus)
             assert.are.same({ "Dune", "Dune Messiah" }, itemTexts(menus[1]))
+            assert.are.equal("dune · 2 books", menus[1].title)
             -- staying on the page that was showing
             assert.are.equal(1, menus[1].page)
         end)

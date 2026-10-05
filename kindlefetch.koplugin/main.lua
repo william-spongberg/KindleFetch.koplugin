@@ -450,11 +450,23 @@ function KindleFetch:bookMenuItems(books)
     return menu_items
 end
 
+-- what was searched for and how many books have been found, for the top of the menu of results
+function KindleFetch:booksTitle()
+    local count = #self.books
+    -- there may be more to load
+    local found = count == 1 and not self.next_page and _("1 book")
+        or string.format(_("%d%s books"), count, self.next_page and "+" or "")
+    return string.format("%s · %s", self.current_search_query, found)
+end
+
 function KindleFetch:showBooks(books)
     local this = self
 
     local menu
     menu = BookMenu:new {
+        title = self:booksTitle(),
+        -- rather than cutting a long search short
+        title_shrink_font_to_fit = true,
         item_table = self:bookMenuItems(books),
         covers_fullscreen = true,
         is_borderless = true,
@@ -518,7 +530,7 @@ function KindleFetch:loadMoreBooks()
                 )
             else
                 -- take Load more off the end of the list, staying on the page that's showing
-                self.books_menu:switchItemTable(nil, self:bookMenuItems(self.books), -1)
+                self.books_menu:switchItemTable(self:booksTitle(), self:bookMenuItems(self.books), -1)
                 NotifyUtil.message(_("No more books found"))
             end
             return
@@ -533,7 +545,7 @@ function KindleFetch:loadMoreBooks()
         -- add them to the menu where Load more was, turning to the page they start on (the one that was showing)
         -- rather than going back to the first
         local menu = self.books_menu
-        menu:switchItemTable(nil, self:bookMenuItems(self.books), first_new_book)
+        menu:switchItemTable(self:booksTitle(), self:bookMenuItems(self.books), first_new_book)
         if KindleFetchSettings:getShowBookCovers() then
             LogUtil.debug("loading covers for page", menu.page)
             menu:loadCoversForPage(menu.page)

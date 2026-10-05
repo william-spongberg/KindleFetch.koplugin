@@ -32,6 +32,8 @@ describe("Searching", function()
             assert(preferred[book.file_type], book.title .. " is a " .. book.file_type)
         end
         H.eq("Load more", menu.item_table[#menu.item_table].text, "last entry")
+        -- what was searched for and how many books there are so far, above them
+        H.eq(H.SEARCH_QUERY .. " · " .. #books .. "+ books", menu.title, "title")
     end)
 
     -- KOReader carries on while Library Genesis answers, rather than being held up until it has
@@ -61,7 +63,8 @@ describe("Searching", function()
         assert(not (plugin.books_menu and H.isShown(plugin.books_menu)), "the books were shown all the same")
         assert(H.isShown(dialog), "the search dialog has gone")
         -- calling it off isn't an error
-        assert(not H.errorShown(), "said " .. tostring(H.errorShown()))
+        local failure = H.errorShown()
+        assert(not failure, "said " .. tostring(failure))
         for i = since + 1, #H.notifications do
             assert(not H.notifications[i]:find("No books", 1, true), "said " .. H.notifications[i])
         end

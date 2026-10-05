@@ -47,7 +47,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 <img width="400" alt="Search box" src="docs/screenshots/03-search-dialog.png" />
 
-2. Browse the results and tap a book to download. Placeholders show while the covers download.
+2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download.
 
 <img width="400" alt="Search results while covers download" src="docs/screenshots/04-search-results-loading-covers.png" />
 <img width="400" alt="Search results with covers" src="docs/screenshots/05-search-results.png" />
