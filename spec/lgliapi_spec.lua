@@ -43,8 +43,14 @@ describe("LlgiAPI", function()
         return LlgiAPI.active_downloads[book.md5].progress_widget
     end
 
-    -- simulate curl writing the book and exiting
+    -- simulate curl noting down the headers it was sent, then writing the book and exiting
     local function curlWrote(bytes, exit_code)
+        if remote_size then
+            helper.writeFile(
+                spawned[#spawned].headers_file,
+                "HTTP/2 200\r\ncontent-type: application/epub+zip\r\ncontent-length: " .. remote_size .. "\r\n\r\n"
+            )
+        end
         helper.writeFile(filepath, string.rep("x", bytes))
         if exit_code then
             helper.writeFile(spawned[#spawned].exit_file, tostring(exit_code))
@@ -70,7 +76,7 @@ describe("LlgiAPI", function()
         web = fixtures.fakeWeb(helper)
 
         CurlUtil = require("util.curlutil")
-        CurlUtil.download = function(url, path, use_proxy, background)
+        CurlUtil.download = function(url, path, use_proxy, background, _, opts)
             if not background then -- book cover
                 helper.writeFile(path, "jpeg")
                 return true
@@ -82,6 +88,7 @@ describe("LlgiAPI", function()
                 use_proxy = use_proxy,
                 pid = 1000 + #spawned,
                 exit_file = exit_file,
+                headers_file = opts.headers_file,
             })
             return spawned[#spawned].pid, exit_file
         end
@@ -90,9 +97,6 @@ describe("LlgiAPI", function()
         CurlUtil.downloadMultiple = function(urls)
             table.insert(cover_downloads, urls)
             return nil, nil, nil, "unable to launch curl"
-        end
-        CurlUtil.getRemoteFileSize = function()
-            return remote_size
         end
         CurlUtil.isPidRunning = function(pid)
             return running[pid] ~= false
@@ -214,7 +218,9 @@ describe("LlgiAPI", function()
                 use_proxy = false,
                 pid = 1000,
                 exit_file = spawned[1].exit_file,
+                headers_file = spawned[1].headers_file,
             }, spawned[1])
+            assert.is_string(spawned[1].headers_file)
         end)
 
         it("shows the download progress", function()
@@ -226,6 +232,36 @@ describe("LlgiAPI", function()
             helper.tick()
             assert.are.equal(0.5, widget.bar_widget.percentage)
             assert.are.equal("50% · 0.5 / 1.0 MB", widget.status_widget.text)
+        end)
+
+        -- rather than asking for it before downloading, and waiting for the answer
+        it("works out the book's size from the headers curl notes down as the book starts to arrive", function()
+            download()
+            local widget = progress()
+
+            helper.tick()
+            assert.are.equal("Starting download...", widget.status_widget.text)
+
+            helper.writeFile(
+                spawned[1].headers_file,
+                "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/dune\r\nContent-Length: 0\r\n\r\n"
+                    .. "HTTP/2 200\r\ncontent-length: "
+                    .. 2 * MB
+                    .. "\r\n\r\n"
+            )
+            helper.writeFile(filepath, string.rep("x", MB / 2))
+            helper.tick()
+            assert.are.equal("25% · 0.5 / 2.0 MB", widget.status_widget.text)
+            assert.is_truthy(helper.logged("info", "^the file is " .. 2 * MB .. " bytes$"))
+        end)
+
+        it("removes the headers curl noted down once the download is over", function()
+            download()
+            curlWrote(MB, 0)
+            assert.is_true(helper.exists(spawned[1].headers_file))
+
+            helper.runScheduled()
+            assert.is_false(helper.exists(spawned[1].headers_file))
         end)
 
         it("stays below 100% until curl has finished", function()
@@ -503,6 +539,7 @@ describe("LlgiAPI", function()
             assert.are.same({ spawned[1].pid }, killed)
             assert.is_true(helper.wasClosed(widget.container))
             assert.is_false(helper.exists(filepath))
+            assert.is_false(helper.exists(spawned[1].headers_file))
             assert.are.same({}, LlgiAPI:getActiveDownloads())
 
             helper.runScheduled()

@@ -21,6 +21,7 @@ local function pollDownload(
     filepath,
     pid,
     exit_file,
+    headers_file,
     download_url,
     tried_proxy,
     total_size,
@@ -38,6 +39,14 @@ local function pollDownload(
 
     current_pid.pid = pid
     local bytes_downloaded = FileUtil.getSize(filepath)
+
+    -- curl notes down the headers it's sent, which say how big the book is, before the book starts to arrive
+    if not total_size and bytes_downloaded > 0 then
+        total_size = CurlUtil.getDownloadSize(headers_file)
+        if total_size then
+            LogUtil.info("the file is", total_size, "bytes")
+        end
+    end
 
     -- cap at 99% while still in progress and under the total size
     if total_size and total_size > 0 and bytes_downloaded <= total_size then
@@ -109,7 +118,8 @@ local function pollDownload(
         -- use proxy as backup
         if not tried_proxy and os.getenv("PROXY_URL") and os.getenv("PROXY_URL") ~= "" then
             LogUtil.info("retrying the download through the proxy")
-            local new_pid, new_exit_file, spawn_err = CurlUtil.download(download_url, filepath, true, true)
+            local new_pid, new_exit_file, spawn_err =
+                CurlUtil.download(download_url, filepath, true, true, nil, { headers_file = headers_file })
             if not new_pid then
                 LogUtil.warn("could not start curl to retry through the proxy:", spawn_err)
                 FileUtil.removeFile(filepath)
@@ -122,6 +132,7 @@ local function pollDownload(
                     filepath,
                     new_pid,
                     new_exit_file,
+                    headers_file,
                     download_url,
                     true,
                     total_size,
@@ -159,6 +170,7 @@ local function pollDownload(
             filepath,
             pid,
             exit_file,
+            headers_file,
             download_url,
             tried_proxy,
             total_size,
@@ -284,16 +296,10 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
         return
     end
 
-    -- get file size
-    progress_widget:update(0, "Checking file size...")
-    UIManager:forceRePaint()
-    local total_size = CurlUtil.getRemoteFileSize(download_url)
-    if total_size then
-        LogUtil.info("the file is", total_size, "bytes")
-    end
-
-    -- start background curl downloader
-    local pid, exit_file, spawn_err = CurlUtil.download(download_url, filepath, false, true)
+    -- start background curl downloader, noting down the headers it's sent, which say how big the book is
+    local headers_file = CurlUtil.createHeadersFile()
+    local pid, exit_file, spawn_err =
+        CurlUtil.download(download_url, filepath, false, true, nil, { headers_file = headers_file })
     if not pid then
         LogUtil.warn("could not start curl to download:", spawn_err)
         progress_widget:close()
@@ -301,6 +307,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
         callback(false, spawn_err or "failed to spawn curl downloader")
         return
     end
+    LlgiAPI.active_downloads[book.md5].headers_file = headers_file
 
     current_pid.pid = pid
 
@@ -310,14 +317,16 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
             filepath,
             pid,
             exit_file,
+            headers_file,
             download_url,
             false,
-            total_size,
+            nil,
             progress_widget,
             current_pid,
             function(ok, err)
                 progress_widget:close()
                 LlgiAPI.active_downloads[book.md5] = nil -- cleanup after download finishes
+                FileUtil.removeFile(headers_file)
                 UIManager:forceRePaint()
                 callback(ok, err, filepath)
             end
@@ -376,6 +385,7 @@ function LlgiAPI:cancelAllDownloads()
         -- stops curl straight away, as there may not be another poll to stop it (e.g. when exiting)
         download_info.progress_widget:cancel()
         FileUtil.removeFile(download_info.filepath)
+        FileUtil.removeFile(download_info.headers_file)
     end
     self.active_downloads = {}
 end

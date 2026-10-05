@@ -93,24 +93,39 @@ describe("CurlUtil", function()
         end)
     end)
 
-    describe("getRemoteFileSize", function()
+    describe("getDownloadSize", function()
+        local headers_file
+
+        before_each(function()
+            headers_file = CurlUtil.createHeadersFile()
+        end)
+
+        it("is in the plugin's tmp dir, apart from other downloads' files", function()
+            assert.matches(data_dir .. "/settings/tmp/curl_download_", headers_file, 1, true)
+            assert.are_not.equal(headers_file, CurlUtil.createHeadersFile())
+            assert.is_false(helper.exists(headers_file))
+        end)
+
         it("uses the content length of the final response after redirects", function()
-            helper.stubCommand(
-                "curl -sL -I 'https://libgen.example/get.php?md5=abc'",
+            helper.writeFile(
+                headers_file,
                 "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/book\r\nContent-Length: 0\r\n\r\n"
                     .. "HTTP/2 200\r\ncontent-length: 1048576\r\n\r\n"
             )
-            assert.are.equal(1048576, CurlUtil.getRemoteFileSize("https://libgen.example/get.php?md5=abc"))
-
-            -- asks like a browser, or Library Genesis sends a small page instead of the file
-            local cmd = helper.state.popen_calls[#helper.state.popen_calls]
-            assert.matches("-A 'Mozilla/5.0'", cmd, 1, true)
-            assert.matches("-e 'https://libgen.example/'", cmd, 1, true)
+            assert.are.equal(1048576, CurlUtil.getDownloadSize(headers_file))
         end)
 
         it("returns nil when the size is unknown", function()
-            helper.stubCommand("curl -sL -I", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
-            assert.is_nil(CurlUtil.getRemoteFileSize("https://libgen.example/get.php"))
+            helper.writeFile(headers_file, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+            assert.is_nil(CurlUtil.getDownloadSize(headers_file))
+        end)
+
+        it("returns nil until curl has noted the headers down", function()
+            assert.is_nil(CurlUtil.getDownloadSize(headers_file))
+
+            -- still arriving
+            helper.writeFile(headers_file, "HTTP/2 200\r\ncontent-length: 1048576\r\n")
+            assert.is_nil(CurlUtil.getDownloadSize(headers_file))
         end)
     end)
 
@@ -191,6 +206,24 @@ describe("CurlUtil", function()
 
             CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
             assert.is_nil(helper.state.executed[#helper.state.executed]:find("--max-time", 1, true))
+        end)
+
+        -- which say how big the file is, see getDownloadSize
+        it("has curl note down the headers it's sent when asked to", function()
+            helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false, nil, {
+                headers_file = data_dir .. "/it's headers",
+            })
+            assert.matches(
+                "-D '" .. data_dir .. "/it'\\''s headers'",
+                helper.state.executed[#helper.state.executed],
+                1,
+                true
+            )
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find(" -D ", 1, true))
         end)
 
         it("fails and cleans up when curl fails", function()

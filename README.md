@@ -182,7 +182,7 @@ kindlefetch.koplugin/
    - The book's cover is fetched if it isn't cached already
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Curl fetches the ads page using the book's MD5 hash to obtain a download URL
-   - File size is determined from HTTP headers for progress calculation
+   - File size is read from the headers of the download itself for progress calculation, without a separate request
    - A curl process is spawned to download the file in the background
    - Progress widget updates every 0.5 seconds with percentage and file size information
    - On completion, file is saved to the configured download directory, and the plugin offers to open it
