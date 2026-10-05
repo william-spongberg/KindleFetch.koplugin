@@ -15,6 +15,7 @@ describe("HttpUtil", function()
         http = helper.stubs.http
         http.request = function(request)
             table.insert(requests, request)
+            request.timeouts = helper.state.http_timeouts
             local response = table.remove(responses, 1) or { "", nil, "connection refused" }
             if response[1] ~= "" then
                 request.sink(response[1])
@@ -32,7 +33,24 @@ describe("HttpUtil", function()
         assert.are.equal("Mozilla/5.0", requests[1].headers["User-Agent"])
         assert.is_true(requests[1].redirect)
         assert.is_nil(requests[1].proxy)
-        assert.are.equal(10, http.TIMEOUT)
+    end)
+
+    -- https requests ignore luasocket's own timeout, and would wait a minute for a mirror that is down
+    it("waits 10 seconds for an answer and a minute for the page, then puts KOReader's timeouts back", function()
+        respond({ "<html>results</html>", 1, 200 })
+        HttpUtil.getBody("https://libgen.example")
+
+        assert.are.same({ 10, 60 }, requests[1].timeouts)
+        assert.is_nil(helper.state.http_timeouts)
+        assert.is_nil(http.TIMEOUT)
+    end)
+
+    it("puts KOReader's timeouts back when the request fails", function()
+        respond({ "", nil, "timeout" })
+        HttpUtil.getBody("https://libgen.example")
+
+        assert.are.same({ 10, 60 }, requests[1].timeouts)
+        assert.is_nil(helper.state.http_timeouts)
     end)
 
     it("returns the HTTP status, e.g. of an error page", function()
