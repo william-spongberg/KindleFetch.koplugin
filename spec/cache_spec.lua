@@ -102,6 +102,50 @@ describe("KindleFetchCache", function()
         assert.are.equal("third", cache:get("c"))
     end)
 
+    describe("with an owner to tell about the entries it drops", function()
+        local evicted
+
+        local function newTrackedCache(opts)
+            evicted = {}
+            opts.onEvict = function(key, value)
+                table.insert(evicted, { key, value })
+            end
+            return newCache(opts)
+        end
+
+        it("tells it about entries pushed out by newer ones", function()
+            local cache = newTrackedCache { max_entries = 1 }
+            cache:set("first", "a")
+            helper.state.time = 1000001
+            cache:set("second", "b")
+
+            assert.are.same({ { "a", "first" } }, evicted)
+        end)
+
+        it("tells it about entries that expire", function()
+            local cache = newTrackedCache { expiry = 60 }
+            cache:set("first", "a")
+            cache:set("second", "b")
+            helper.state.time = 1000061
+
+            assert.is_nil(cache:get("a"))
+            table.sort(evicted, function(x, y)
+                return x[1] < y[1]
+            end)
+            assert.are.same({ { "a", "first" }, { "b", "second" } }, evicted)
+        end)
+
+        it("leaves entries it was asked to delete or clear to it", function()
+            local cache = newTrackedCache {}
+            cache:set("first", "a")
+            cache:set("second", "b")
+            cache:delete("a")
+            cache:clear()
+
+            assert.are.same({}, evicted)
+        end)
+    end)
+
     it("deletes and clears entries", function()
         local cache = newCache()
         cache:set("value", "a")

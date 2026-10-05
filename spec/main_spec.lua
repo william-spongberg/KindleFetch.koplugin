@@ -2,7 +2,7 @@ local helper = require("helper")
 
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
-    local cancelled_downloads, curl_check_user_requested
+    local cancelled_downloads, curl_check_user_requested, leftovers_removed
     -- pages of results saved from earlier searches, as "query page"
     local saved
 
@@ -185,9 +185,13 @@ describe("KindleFetch", function()
             end,
         })
         helper.stub("cache.covercache", {})
+        leftovers_removed = 0
         helper.stub("util.curlutil", {
             getVersion = function()
                 return "8.17.0"
+            end,
+            removeLeftovers = function()
+                leftovers_removed = leftovers_removed + 1
             end,
         })
         helper.stub("updater.curlupdater", {
@@ -235,6 +239,13 @@ describe("KindleFetch", function()
         end
         assert.are.equal(1, #summaries)
         assert.matches("KindleFetch 0.4 on KOReader .*, curl 8.17.0", summaries[1])
+    end)
+
+    -- KOReader may have closed while they were running
+    it("removes the files left by earlier downloads, once per session", function()
+        openUI()
+        openUI()
+        assert.are.equal(1, leftovers_removed)
     end)
 
     describe("after an update", function()

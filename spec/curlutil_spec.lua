@@ -152,6 +152,28 @@ describe("CurlUtil", function()
         end)
     end)
 
+    -- KOReader may close while downloads are running, leaving their files with nothing to remove them
+    describe("removeLeftovers", function()
+        it("removes the files left by earlier downloads", function()
+            local tmp_dir = data_dir .. "/settings/tmp/"
+            helper.writeFile(tmp_dir .. "curl_download_1784192163.exitcode", "0")
+            helper.writeFile(tmp_dir .. "curl_download_config_1784192163_2.txt", 'url = "https://covers.example"')
+            helper.writeFile(tmp_dir .. "curl_download_config_1784192163_2.txt.results", "0 a.jpg")
+            helper.writeFile(tmp_dir .. "curl_download_1784192163_3.headers", "HTTP/2 200")
+            helper.writeFile(tmp_dir .. "someone-elses.txt", "not ours")
+
+            CurlUtil.removeLeftovers()
+            assert.are.same({ "someone-elses.txt" }, helper.readDir(tmp_dir))
+            assert.is_truthy(helper.logged("info", "^removed 4 files left by earlier downloads$"))
+        end)
+
+        it("does nothing when there's nothing left", function()
+            CurlUtil.removeLeftovers()
+            assert.is_false(helper.exists(data_dir .. "/settings/tmp"))
+            assert.is_nil(helper.logged("info", "^removed"))
+        end)
+    end)
+
     describe("getProxyFlag", function()
         it("uses PROXY_URL when asked to", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"

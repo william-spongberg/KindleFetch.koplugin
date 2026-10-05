@@ -14,7 +14,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Caching**: Minimise network requests and improve performance
   - Search results (2 week expiry by default, 100 entries max)
   - Mirror URLs (1 week expiry by default)
-  - Book covers (500 entries max)
+  - Book covers (500 entries max, the oldest removed to make room)
 - **Preferences**: Filter results by preferred languages, file types, and book types
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders while they download; tap a cover in the download prompt to see it full size
 - **Download Progress**: Visual download progress bar with real-time file size information
@@ -128,7 +128,7 @@ kindlefetch.koplugin/
 │   ├── cache.lua              # Generic caching system with expiry, size limits, and timestamp-based cleanup
 │   ├── searchcache.lua        # Caches search results by query, page, and filter preferences (2 weeks by default, 100-entry limit)
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
-│   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions)
+│   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
 │   ├── curlupdater.lua        # Checks curl version and automatically installs static curl (8.17.0) if needed
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes

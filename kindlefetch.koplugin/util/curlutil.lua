@@ -47,6 +47,27 @@ local function tmpFile(name, extension)
     return string.format("%s%s_%d_%d%s", TMP_DIR, name, os.time(), tmp_files_created, extension)
 end
 
+-- remove the files left by downloads that were still running when KOReader last closed, which nothing else
+-- would. only at the start of a session, while no downloads are using them
+function CurlUtil.removeLeftovers()
+    if lfs.attributes(TMP_DIR, "mode") ~= "directory" then
+        return
+    end
+
+    local leftovers = {}
+    for file in lfs.dir(TMP_DIR) do
+        if file:find("^curl_download") then
+            table.insert(leftovers, file)
+        end
+    end
+    for _, file in ipairs(leftovers) do
+        FileUtil.removeFile(TMP_DIR .. file)
+    end
+    if #leftovers > 0 then
+        LogUtil.info("removed", #leftovers, "files left by earlier downloads")
+    end
+end
+
 function CurlUtil.shellQuote(str)
     return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
 end

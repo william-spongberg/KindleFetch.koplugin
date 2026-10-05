@@ -127,6 +127,8 @@ function KindleFetch:init()
         version_checked = true
         logEnvironment()
         clearCachesAfterUpdate()
+        -- tidy up after the last session, which may have closed with downloads still running
+        require("util.curlutil").removeLeftovers()
     end
 
     -- get screen size

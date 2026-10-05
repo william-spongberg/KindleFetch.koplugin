@@ -27,6 +27,10 @@ local persistent_cache = KindleFetchCache:new {
     makeKey = function(md5)
         return md5
     end,
+    -- remove a cover's file once newer covers push it out, or it would be left behind for good
+    onEvict = function(_, path)
+        FileUtil.removeFile(path)
+    end,
 }
 
 local function ensureCacheDir()
@@ -37,6 +41,33 @@ end
 local function hasProxy()
     local proxy_url = os.getenv("PROXY_URL")
     return proxy_url ~= nil and proxy_url ~= ""
+end
+
+-- remove the covers that older versions left behind, having forgotten them once the cache was full without
+-- removing their files. once per session, as there are only more to find after an update
+local orphans_removed = false
+local function removeOrphans()
+    if orphans_removed then
+        return
+    end
+    orphans_removed = true
+    if lfs.attributes(CACHE_DIR, "mode") ~= "directory" then
+        return
+    end
+
+    local orphans = {}
+    for file in lfs.dir(CACHE_DIR) do
+        local md5 = file:match("^(.+)%.jpg$")
+        if md5 and not downloading[md5] and not persistent_cache:get(md5) then
+            table.insert(orphans, file)
+        end
+    end
+    for _, file in ipairs(orphans) do
+        FileUtil.removeFile(CACHE_DIR .. file)
+    end
+    if #orphans > 0 then
+        LogUtil.info("removed", #orphans, "covers that were no longer in the cache")
+    end
 end
 
 function CoverCache:getPath(md5)
@@ -194,6 +225,7 @@ end
 -- can replace the placeholders. returns false when there was nothing to download.
 function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     ensureCacheDir()
+    removeOrphans()
     on_done = on_done or function() end
 
     local download_urls = {}
