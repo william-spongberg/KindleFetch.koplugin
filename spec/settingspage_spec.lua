@@ -62,6 +62,20 @@ describe("SettingsPage", function()
         assert.are.equal("Kindle Fetch Settings", lastMenu().title)
     end)
 
+    -- rounded corners aren't painted, so the top edge of KOReader's menu showed in the corners of the settings
+    it("fills the screen to its corners, as do the menus it opens", function()
+        SettingsPage:showSettings()
+        local settings = lastMenu()
+        tap("Preferred Languages")
+        local languages = lastMenu()
+
+        assert.are_not.equal(settings, languages)
+        for _, menu in ipairs({ settings, languages }) do
+            assert.is_true(menu.covers_fullscreen)
+            assert.is_false(menu.is_popout)
+        end
+    end)
+
     it("toggles book covers", function()
         SettingsPage:showSettings()
         tap("Show Book Covers")

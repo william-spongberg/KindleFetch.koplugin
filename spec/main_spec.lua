@@ -671,6 +671,15 @@ describe("KindleFetch", function()
             assert.are.equal("dune · 1+ books", menus[3].title)
         end)
 
+        -- rounded corners aren't painted, and show what was on screen before
+        it("fills the screen with the books, to its corners", function()
+            search_results[1] = { { book("Dune") } }
+            search(openUI(), "dune")
+
+            assert.is_true(menus[1].covers_fullscreen)
+            assert.is_false(menus[1].is_popout)
+        end)
+
         it("loads covers for each page shown", function()
             search_results[1] = { { book("Dune") } }
             search(openUI(), "dune")

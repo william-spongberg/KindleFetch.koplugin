@@ -470,6 +470,8 @@ function KindleFetch:showBooks(books)
         item_table = self:bookMenuItems(books),
         covers_fullscreen = true,
         is_borderless = true,
+        -- with square corners: rounded ones aren't painted, and show what was on screen before
+        is_popout = false,
         width = this.dimen.w,
         height = this.dimen.h,
         items_max_lines = true,

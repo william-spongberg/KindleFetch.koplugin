@@ -23,6 +23,9 @@ function SettingsPage:newMenu(title, item_table, onClose)
         item_table = item_table,
         covers_fullscreen = true,
         is_borderless = true,
+        -- with square corners: rounded ones aren't painted, and show what was on screen before, such as the top
+        -- edge of KOReader's menu
+        is_popout = false,
         width = self.dimen.w,
         height = self.dimen.h,
         onClose = onClose,
