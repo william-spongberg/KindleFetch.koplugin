@@ -134,7 +134,7 @@ kindlefetch.koplugin/
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes
 └── util/
     ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
-    ├── httputil.lua           # HTTP requests with timeout, proxy support, and automatic fallback
+    ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback
     ├── fileutil.lua           # File operations (size, creation, deletion, validation) and directory checks
     ├── stringutil.lua         # String utilities (trimming, validation, emoji removal, HTML entity conversion)
     ├── logutil.lua            # Logger wrapper

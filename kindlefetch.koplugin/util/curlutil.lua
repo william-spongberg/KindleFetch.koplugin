@@ -2,10 +2,15 @@ local NotifyUtil = require("util.notifyutil")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
+local VersionUtil = require("util.versionutil")
 local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
+local Device = require("device")
 
 local CurlUtil = {}
+
+-- the oldest curl known to connect to Library Genesis from a Kindle, whose own curl is too old to
+CurlUtil.MIN_VERSION = "8.17.0"
 
 -- constants
 local TMP_DIR = DataStorage:getSettingsDir() .. "/tmp/"
@@ -109,8 +114,9 @@ function CurlUtil.killPid(pid)
     os.execute(string.format("kill %d 2>/dev/null", pid))
 end
 
--- the installed curl's version, e.g. "8.17.0", or nil if curl isn't there
-function CurlUtil.getVersion()
+-- how the installed curl describes itself, e.g. "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0
+-- OpenSSL/3.5.4 zlib/1.3.1", or nil if curl isn't there
+local function describeCurl()
     local pipe = io.popen("curl --version 2>/dev/null", "r")
     if not pipe then
         return nil
@@ -119,8 +125,43 @@ function CurlUtil.getVersion()
     local output = pipe:read("*l")
     pipe:close()
 
+    return output
+end
+
+-- the installed curl's version, e.g. "8.17.0", or nil if curl isn't there
+function CurlUtil.getVersion()
+    local description = describeCurl()
     -- "curl X.Y.Z (platform) ..."
-    return output and output:match("^curl%s+([%d%.]+)")
+    return description and description:match("^curl%s+([%d%.]+)")
+end
+
+-- whether curl can fetch web pages (see fetchCommand), and ask for them compressed. worked out once per session,
+-- as it means running curl
+local can_fetch, can_decompress
+local function checkCurl()
+    if can_fetch ~= nil then
+        return
+    end
+
+    local description = describeCurl()
+    local version = VersionUtil.parseVersion(description and description:match("^curl%s+([%d%.]+)"))
+    -- on a Kindle, only once it has been updated, as the curl it comes with can't connect to Library Genesis
+    can_fetch = version ~= nil
+        and (
+            not Device:isKindle()
+            or VersionUtil.compareVersions(version, VersionUtil.parseVersion(CurlUtil.MIN_VERSION)) >= 0
+        )
+    can_decompress = description ~= nil and description:find("zlib", 1, true) ~= nil
+    LogUtil.info(
+        "fetching pages with",
+        can_fetch and "curl" or "KOReader, as curl is missing or too old,",
+        can_fetch and can_decompress and "compressed" or "uncompressed"
+    )
+end
+
+function CurlUtil.canFetch()
+    checkCurl()
+    return can_fetch
 end
 
 function CurlUtil.getErrorMeaning(exit_code)
@@ -160,6 +201,14 @@ function CurlUtil.getDownloadSize(headers_file)
     f:close()
 
     return CurlUtil.parseContentLength(headers or "")
+end
+
+-- file a page is fetched into, see fetchCommand
+function CurlUtil.createPageFile()
+    local page_file = tmpFile("curl_download", ".page")
+    FileUtil.removeFile(page_file)
+
+    return page_file
 end
 
 function CurlUtil.createExitFile()
@@ -249,6 +298,28 @@ end
 
 function CurlUtil.applyProxy(curl_cmd)
     return string.format("%s %s", curl_cmd, CurlUtil.getProxyFlag(true))
+end
+
+-- a command that has curl fetch a web page into page_file, then print the HTTP status it ended with (000 when the
+-- site didn't answer) and curl's own exit code, e.g. "200 0". unlike a download, a page with an error status is
+-- kept, as what it says is of use. answer_timeout and page_timeout are how long, in seconds, the site can take to
+-- answer and then to send the whole page
+function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_timeout)
+    checkCurl()
+
+    local cmd = string.format("curl -sL -o %s %s", CurlUtil.shellQuote(page_file), CurlUtil.shellQuote(url))
+    if can_decompress then
+        -- a page of search results is a tenth of the size compressed, and Library Genesis sends them slowly
+        cmd = cmd .. " --compressed"
+    end
+    cmd = CurlUtil.pretendBrowser(cmd)
+    cmd = CurlUtil.setReferer(cmd, url)
+    cmd = string.format("%s --connect-timeout %d --max-time %d", cmd, answer_timeout, page_timeout)
+    if use_proxy then
+        cmd = CurlUtil.applyProxy(cmd)
+    end
+
+    return string.format('(%s -w %s; echo " $?") 2>/dev/null', cmd, CurlUtil.shellQuote("%{http_code}"))
 end
 
 -- file downloadMultiple has curl write each transfer's result to
