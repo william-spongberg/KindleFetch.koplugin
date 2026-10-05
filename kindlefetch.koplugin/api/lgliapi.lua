@@ -18,6 +18,14 @@ LlgiAPI.active_downloads = {}
 local DOWNLOAD_POLL_INTERVAL = 0.5
 -- a download that hasn't received anything for this many seconds is given up on, rather than waited on forever
 local DOWNLOAD_STALL_TIME = 30
+local BUSY_ERROR = "Library Genesis is too busy to send books right now, try again in a few minutes"
+
+-- whether a mirror's download page says its database is refusing connections, as it does while it's very busy.
+-- the mirrors share the database, so they all say so at once
+local function isBusy(html)
+    return html:find("Could not connect to the database", 1, true) ~= nil
+        or html:find("max_user_connections", 1, true) ~= nil
+end
 
 -- part_path is where curl is downloading the book to, see _startDownload
 local function pollDownload(
@@ -251,6 +259,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     local unanswered = {}
     local answered = false
     local mirror_failed = false
+    local busy = false
     for _, url in ipairs(base_urls) do
         -- load ads page (to get key for download page)
         local ads_page = string.format("%s/ads.php?md5=%s", url, book.md5)
@@ -274,6 +283,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
                     html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
                 )
                 last_err = "no Library Genesis download link found"
+                busy = busy or isBusy(html)
             end
         elseif status then
             -- it answered with an error
@@ -305,7 +315,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
             return LlgiAPI:_startDownload(book, filepath, callback, true)
         end
 
-        callback(false, last_err or "all Library Genesis mirrors failed")
+        callback(false, busy and BUSY_ERROR or last_err or "all Library Genesis mirrors failed")
         return
     end
 

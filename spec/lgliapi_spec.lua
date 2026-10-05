@@ -476,6 +476,34 @@ describe("LlgiAPI", function()
             assert.are.equal(1, web.scrapes)
         end)
 
+        -- as every mirror did at once while this was written, their shared database refusing connections
+        it("says when Library Genesis is too busy to send the book", function()
+            local busy_page = "<html><body>Could not connect to the database 3306. User 'libgen_get' has exceeded the "
+                .. "'max_user_connections' resource (current value: 80) <a href=''>Report an error</a>.</body></html>"
+            for _, mirror in ipairs(mirrors) do
+                web.pages[adsUrl(mirror)] = busy_page
+            end
+
+            download()
+            assert.are.same({
+                {
+                    ok = false,
+                    err = "Library Genesis is too busy to send books right now, try again in a few minutes",
+                },
+            }, results)
+            -- the mirrors themselves are fine
+            assert.are.same(mirrors, UrlApi:getLibgenUrls())
+            assert.are.equal(1, web.scrapes)
+        end)
+
+        it("downloads from a mirror that isn't too busy", function()
+            web.pages[adsUrl(mirrors[1])] = "<html>Could not connect to the database 3306.</html>"
+            hasBook(mirrors[2])
+
+            download()
+            assert.are.equal(getUrl(mirrors[2]), spawned[1].url)
+        end)
+
         it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()
             web.wikipedia_down = true
 
