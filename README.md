@@ -40,31 +40,33 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 #### Search → Kindle Fetch → Search Library Genesis
 
-<img width="400" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" />
-<img width="400" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
+<img width="350" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" />
+<img width="350" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
 1. Enter a book title, author, or keyword in the search box. KOReader carries on while Library Genesis answers; tap the message saying it's searching to cancel.
 
-<img width="400" alt="Search box" src="docs/screenshots/03-search-dialog.png" />
+<img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" />
+<img width="350" alt="Message saying it's searching, which a tap cancels" src="docs/screenshots/04-searching.png" />
 
 2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download.
 
-<img width="400" alt="Search results while covers download" src="docs/screenshots/04-search-results-loading-covers.png" />
-<img width="400" alt="Search results with covers" src="docs/screenshots/05-search-results.png" />
+<img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" />
+<img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" />
 
 3. In the download prompt, optionally tap the book cover to see it full size, or tap the download path to choose another folder, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
 
-<img width="400" alt="Download prompt" src="docs/screenshots/06-download-prompt.png" />
-<img width="400" alt="Fullscreen cover" src="docs/screenshots/07-download-cover.png" />
+<img width="350" alt="Download prompt" src="docs/screenshots/07-download-prompt.png" />
+<img width="350" alt="Fullscreen cover" src="docs/screenshots/08-download-cover.png" />
+<img width="350" alt="Being asked before downloading over a book that's already there" src="docs/screenshots/09-download-overwrite.png" />
 
 4. Monitor the download's progress; tap Hide to keep it downloading in the background (to see its progress again, choose **Search → Kindle Fetch → Downloads**, or the book again) or Cancel to stop it.
 
-<img width="400" alt="Download progress" src="docs/screenshots/08-download-progress.png" />
+<img width="350" alt="Download progress" src="docs/screenshots/10-download-progress.png" />
 
 5. Once the book has downloaded, tap Read now to open it.
 
-<img width="400" alt="Read now prompt" src="docs/screenshots/09-download-finished.png" />
-<img width="400" alt="Reading the downloaded book" src="docs/screenshots/10-reading.png" />
+<img width="350" alt="Read now prompt" src="docs/screenshots/11-download-finished.png" />
+<img width="350" alt="Reading the downloaded book" src="docs/screenshots/12-reading.png" />
 
 Downloaded books are saved to your configured download location.
 
@@ -74,16 +76,16 @@ Downloaded books are saved to your configured download location.
 
 - **Show Book Covers**: Enable or disable cover image display in search results (default: enabled)
 
-<img width="400" alt="Settings" src="docs/screenshots/11-settings.png" />
-<img width="400" alt="Search results without covers" src="docs/screenshots/12-search-results-without-covers.png" />
+<img width="350" alt="Settings" src="docs/screenshots/13-settings.png" />
+<img width="350" alt="Search results without covers" src="docs/screenshots/14-search-results-without-covers.png" />
 
 - **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`)
 
-<img width="400" alt="Choosing the download folder" src="docs/screenshots/13-settings-download-folder.png" />
+<img width="350" alt="Choosing the download folder" src="docs/screenshots/15-settings-download-folder.png" />
 
 - **Preferred Languages**: Choose which languages to prioritise in search results (default: English)
 
-<img width="400" alt="Preferred languages" src="docs/screenshots/14-settings-languages.png" />
+<img width="350" alt="Preferred languages" src="docs/screenshots/16-settings-languages.png" />
 
 - **Preferred File Types**: Select desired formats across five categories, from those KOReader can open (default: all of them):
   - Ebooks: EPUB, MOBI, AZW, FB2, PRC
@@ -92,17 +94,21 @@ Downloaded books are saved to your configured download location.
   - Images: JPG, TIF, PDB
   - Web: CHM, HTM, HTML, HTMLZ
 
-<img width="400" alt="Preferred file types" src="docs/screenshots/15-settings-file-types.png" />
+<img width="350" alt="Preferred file types" src="docs/screenshots/17-settings-file-types.png" />
 
 - **Preferred Book Types**: Filter by fiction, non-fiction, comics, magazines, scientific articles, or standards (default: all of them)
 
-<img width="400" alt="Preferred book types" src="docs/screenshots/16-settings-book-types.png" />
+<img width="350" alt="Preferred book types" src="docs/screenshots/18-settings-book-types.png" />
+
+When a search finds books, but none in the languages and file types chosen, Kindle Fetch says how many Library Genesis listed, and offers to open the settings or to keep searching through the rest.
+
+<img width="350" alt="Being told that none of the results are in the languages and file types chosen" src="docs/screenshots/19-search-none-chosen.png" />
 
 - **Check for Updates Automatically**: Check for plugin and curl updates at most once a day while connected (default: enabled)
 
 - **Keep Searches For / Keep Mirrors For**: How long search results (default: 14 days) and Library Genesis mirror URLs (default: 7 days) are cached
 
-<img width="400" alt="How long searches are kept" src="docs/screenshots/17-settings-cache.png" />
+<img width="350" alt="How long searches are kept" src="docs/screenshots/20-settings-cache.png" />
 
 - **Clear Cache**: Forget the searches, mirrors and book covers that have been saved, e.g. if results look out of date
 
