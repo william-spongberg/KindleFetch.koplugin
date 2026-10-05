@@ -8,9 +8,27 @@ describe("KindleFetchSettings", function()
     end
 
     local function setReaderHomeDir(path)
-        helper.state.settings_files[data_dir .. "/settings/../settings.reader.lua"] = {
-            home_dir = path,
+        helper.state.reader_settings.home_dir = path
+    end
+
+    -- count how often the settings file is read from and written to storage
+    local function countFileAccess()
+        local count = {
+            opens = 0,
+            flushes = 0,
         }
+        local open = helper.stubs.luasettings.open
+        helper.stubs.luasettings.open = function(...)
+            count.opens = count.opens + 1
+            local file = open(...)
+            local flush = file.flush
+            function file:flush()
+                count.flushes = count.flushes + 1
+                return flush(self)
+            end
+            return file
+        end
+        return count
     end
 
     before_each(function()
@@ -126,6 +144,20 @@ describe("KindleFetchSettings", function()
         assert.is_nil(Settings:getLastVersion())
         Settings:setLastVersion("0.4")
         assert.are.equal("0.4", Settings:getLastVersion())
+    end)
+
+    it("remembers when updates were last checked for, and the updates that were turned down", function()
+        assert.is_nil(Settings:getLastUpdateCheck())
+        assert.is_nil(Settings:getSkippedVersion())
+        assert.is_false(Settings:getCurlUpdateDeclined())
+
+        Settings:setLastUpdateCheck(1234567)
+        Settings:setSkippedVersion("0.5")
+        Settings:setCurlUpdateDeclined(true)
+
+        assert.are.equal(1234567, Settings:getLastUpdateCheck())
+        assert.are.equal("0.5", Settings:getSkippedVersion())
+        assert.is_true(Settings:getCurlUpdateDeclined())
     end)
 
     describe("preferred book types", function()
@@ -252,5 +284,49 @@ describe("KindleFetchSettings", function()
             assert.is_true(pluginSettings().show_book_covers)
             assert.is_true(pluginSettings().check_for_updates)
         end)
+
+        -- it runs every time the file manager or a book is opened
+        it("only writes the settings file when something changed", function()
+            local count = countFileAccess()
+
+            Settings:load()
+            assert.are.equal(1, count.flushes)
+
+            Settings:load()
+            Settings:load()
+            assert.are.equal(1, count.flushes)
+        end)
+
+        it("writes the settings file again once a saved setting is out of date", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                preferred_file_types = { "epub", "azw3" },
+            }
+            local count = countFileAccess()
+
+            Settings:load()
+            assert.are.equal(1, count.flushes)
+            assert.are.same({ "epub" }, pluginSettings().preferred_file_types)
+        end)
+
+        it("leaves a download folder that has gone missing as it was saved", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                download_dir = data_dir .. "/missing",
+            }
+            Settings:load()
+            assert.are.equal(data_dir .. "/missing", pluginSettings().download_dir)
+        end)
+    end)
+
+    it("reads the settings file from storage once", function()
+        local count = countFileAccess()
+
+        Settings:getShowBookCovers()
+        Settings:getPreferredLanguages()
+        Settings:getDownloadDir()
+        Settings:setShowBookCovers(false)
+        Settings:getShowBookCovers()
+
+        assert.are.equal(1, count.opens)
+        assert.are.equal(1, count.flushes)
     end)
 end)

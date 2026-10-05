@@ -130,7 +130,7 @@ describe("CoverCache", function()
         end)
 
         it("agrees with cacheExists for covers dropped from the cache", function()
-            -- older covers are dropped from the cache once it is full, but their files stay behind
+            -- older versions dropped covers from the cache once it was full, but left their files behind
             helper.writeFile(covers_dir .. "abc.jpg", "jpeg")
 
             assert.is_nil(CoverCache:get("abc"))
@@ -216,6 +216,74 @@ describe("CoverCache", function()
             assert.are.equal(covers_dir .. "new.jpg", CoverCache:get("new"))
             -- so every open search result can show them
             assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
+        end)
+
+        -- the cache holds 500 covers
+        it("removes the file of a cover pushed out of the cache by newer ones", function()
+            local covers = {}
+            for i = 1, 500 do
+                covers["old" .. i] = {
+                    timestamp = i,
+                    value = covers_dir .. "old" .. i .. ".jpg",
+                }
+            end
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_covercache.lua"] = covers
+            helper.writeFile(covers_dir .. "old1.jpg", "jpeg")
+            helper.writeFile(covers_dir .. "old2.jpg", "jpeg")
+
+            CoverCache:downloadMultiple({ book("new", "https://covers.example/new.jpg") }, 6, onDone)
+            finishRun(runs[1], { true })
+            helper.runScheduled()
+
+            assert.is_true(CoverCache:cacheExists("new"))
+            assert.is_false(helper.exists(covers_dir .. "old1.jpg"))
+            assert.is_true(helper.exists(covers_dir .. "old2.jpg"))
+        end)
+
+        -- older versions forgot covers once the cache was full, without removing their files
+        it("removes covers left behind without being in the cache, once per session", function()
+            fixtures.cacheCover(helper, "cached")
+            helper.writeFile(covers_dir .. "orphan.jpg", "jpeg")
+            helper.writeFile(covers_dir .. "orphan_full.jpg", "jpeg")
+            helper.writeFile(covers_dir .. "notes.txt", "not a cover")
+
+            CoverCache:downloadMultiple({ book("new", "https://covers.example/new.jpg") }, 6, onDone)
+            assert.is_false(helper.exists(covers_dir .. "orphan.jpg"))
+            assert.is_false(helper.exists(covers_dir .. "orphan_full.jpg"))
+            assert.is_true(helper.exists(covers_dir .. "cached.jpg"))
+            assert.is_true(helper.exists(covers_dir .. "notes.txt"))
+            assert.is_truthy(helper.logged("info", "^removed 2 covers that were no longer in the cache$"))
+
+            -- there are no more to find until the plugin is next updated, so it doesn't look again
+            helper.writeFile(covers_dir .. "later.jpg", "jpeg")
+            CoverCache:downloadMultiple({ book("another", "https://covers.example/another.jpg") }, 6, onDone)
+            assert.is_true(helper.exists(covers_dir .. "later.jpg"))
+        end)
+
+        it("writes the cache out once for all the covers that downloaded", function()
+            local flushes = 0
+            local open = helper.stubs.luasettings.open
+            helper.stubs.luasettings.open = function(...)
+                local file = open(...)
+                local flush = file.flush
+                function file:flush()
+                    flushes = flushes + 1
+                    return flush(self)
+                end
+                return file
+            end
+
+            CoverCache:downloadMultiple({
+                book("a", "https://covers.example/a.jpg"),
+                book("b", "https://covers.example/b.jpg"),
+                book("c", "https://covers.example/c.jpg"),
+            }, 6, onDone)
+            finishRun(runs[1], { true, true, true })
+            helper.runScheduled()
+
+            assert.are.same({ 3 }, results)
+            assert.are.equal(1, flushes)
+            assert.is_true(CoverCache:cacheExists("c"))
         end)
 
         describe("full-size", function()

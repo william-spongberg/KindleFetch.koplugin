@@ -12,9 +12,9 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 - **Book Search + Downloads**: Search Library Genesis from your device with simple text input and download with a tap
 - **Caching**: Minimise network requests and improve performance
-  - Search results (2 week expiry by default, 1000 entries max)
+  - Search results (2 week expiry by default, 100 entries max)
   - Mirror URLs (1 week expiry by default)
-  - Book covers (500 entries max)
+  - Book covers (500 entries max, the oldest removed to make room)
 - **Preferences**: Filter results by preferred languages, file types, and book types
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders while they download; tap a cover in the download prompt to see it full size
 - **Download Progress**: Visual download progress bar with real-time file size information
@@ -22,9 +22,9 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch, in KOReader's gesture manager)
 - **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available on Kindles
-- **Automatic Plugin Updates**: Checks for new plugin releases once per session and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu)
+- **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
-- **Safe File Handling**: Automatic filename sanitisation and directory management
+- **Safe File Handling**: Automatic filename sanitisation and directory management, asking before downloading over a book that's already there
 
 ## Installation
 
@@ -52,7 +52,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 <img width="400" alt="Search results while covers download" src="docs/screenshots/04-search-results-loading-covers.png" />
 <img width="400" alt="Search results with covers" src="docs/screenshots/05-search-results.png" />
 
-3. In the download prompt, optionally tap the book cover to see it full size, or tap the download path to choose another folder, then tap Download.
+3. In the download prompt, optionally tap the book cover to see it full size, or tap the download path to choose another folder, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
 
 <img width="400" alt="Download prompt" src="docs/screenshots/06-download-prompt.png" />
 <img width="400" alt="Fullscreen cover" src="docs/screenshots/07-download-cover.png" />
@@ -98,7 +98,7 @@ Downloaded books are saved to your configured download location.
 
 <img width="400" alt="Preferred book types" src="docs/screenshots/16-settings-book-types.png" />
 
-- **Check for Updates Automatically**: Check for plugin and curl updates once per session while connected (default: enabled)
+- **Check for Updates Automatically**: Check for plugin and curl updates at most once a day while connected (default: enabled)
 
 - **Keep Searches For / Keep Mirrors For**: How long search results (default: 14 days) and Library Genesis mirror URLs (default: 7 days) are cached
 
@@ -126,9 +126,9 @@ kindlefetch.koplugin/
 │   └── downloadprogress.lua   # Renders a centered progress widget with cancel and hide buttons
 ├── cache/
 │   ├── cache.lua              # Generic caching system with expiry, size limits, and timestamp-based cleanup
-│   ├── searchcache.lua        # Caches search results by query, page, and filter preferences (2 weeks by default, 1000-entry limit)
+│   ├── searchcache.lua        # Caches search results by query, page, and filter preferences (2 weeks by default, 100-entry limit)
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
-│   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions)
+│   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
 │   ├── curlupdater.lua        # Checks curl version and automatically installs static curl (8.17.0) if needed
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes
@@ -146,7 +146,9 @@ kindlefetch.koplugin/
 ### Workflow
 
 0. **Initialization**
-   - Unless turned off in settings, updates are checked for once per session while connected, or manually via Kindle Fetch → Check for updates
+   - Unless turned off in settings, updates are checked for at most once a day while connected, or manually via Kindle Fetch → Check for updates
+   - The latest release is looked up in the background, so KOReader can be used meanwhile
+   - A curl or plugin update that is turned down is only offered again by checking manually
    - On Kindles, curl version is checked; user is prompted to update if version is below 8.17.0
    - Plugin version is checked against GitHub releases; user is prompted to update if new version available
    - Settings are loaded from persistent storage
@@ -165,7 +167,7 @@ kindlefetch.koplugin/
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
    - HTML table is parsed to extract book metadata (title, authors, year, language, file type, MD5 hash, cover image URL), keeping books in the preferred languages and file types
    - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there
-   - Results are cached (2 weeks by default, 1000 entries max) to minimise requests
+   - Results are cached (2 weeks by default, 100 entries max) to minimise requests
    - Search results are displayed in a menu
 
 3. **Cover Loading**
@@ -177,18 +179,22 @@ kindlefetch.koplugin/
 
 4. **Download Phase** (`LlgiAPI`)
    - User selects a book and optionally changes the save location via DownloadPrompt
+   - If a file of that name is already there, the plugin asks whether to overwrite it or read the existing book
    - The book's cover is fetched if it isn't cached already
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Curl fetches the ads page using the book's MD5 hash to obtain a download URL
-   - File size is determined from HTTP headers for progress calculation
-   - A curl process is spawned to download the file in the background
+   - File size is read from the headers of the download itself for progress calculation, without a separate request
+   - A curl process is spawned to download the file in the background, to a `.part` file next to where the book will be saved, so half a book never shows up in your library
+   - A download that receives nothing for 30 seconds is retried, then given up on
    - Progress widget updates every 0.5 seconds with percentage and file size information
-   - On completion, file is saved to the configured download directory, and the plugin offers to open it
+   - On completion, the file is moved into the configured download directory, and the plugin offers to open it
 
 5. **Error Handling & Resilience**
    - Wi-Fi is turned on before searching if it's off
    - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or corrupted downloads are detected and deleted
    - Failed mirrors are removed from cache; if all cached URLs fail they are re-scraped from Wikipedia
+   - If Wikipedia answers without listing any mirrors (e.g. once its page has been rearranged), the mirrors known when the plugin was released are used
+   - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything
    - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes
    - Curl exit codes are mapped to human-readable error messages and the user is notified
 

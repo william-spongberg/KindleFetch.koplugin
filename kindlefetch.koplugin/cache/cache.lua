@@ -12,6 +12,8 @@ function KindleFetchCache:new(opts)
         makeKey = opts.makeKey or function(key)
             return key
         end,
+        -- optionally called with the key and value of an entry that has expired or been pushed out by newer ones
+        onEvict = opts.onEvict,
         cache = nil,
     }
 
@@ -20,8 +22,16 @@ function KindleFetchCache:new(opts)
     return obj
 end
 
+-- opened once and kept, rather than reading the whole file again every time the cache is saved
 function KindleFetchCache:getCacheFile()
-    return LuaSettings:open(DataStorage:getSettingsDir() .. "/" .. self.filename)
+    if not self.file then
+        self.file = LuaSettings:open(DataStorage:getSettingsDir() .. "/" .. self.filename)
+    end
+    return self.file
+end
+
+function KindleFetchCache:getExpiry()
+    return type(self.expiry) == "function" and self.expiry() or self.expiry
 end
 
 function KindleFetchCache:count()
@@ -40,6 +50,15 @@ function KindleFetchCache:delete(key)
     self.cache[key] = nil
 end
 
+-- delete an entry that has expired, or been pushed out by newer ones, letting the cache's owner clean up after it
+function KindleFetchCache:evict(key)
+    local entry = self.cache[key]
+    self:delete(key)
+    if entry and self.onEvict then
+        self.onEvict(key, entry.value)
+    end
+end
+
 function KindleFetchCache:removeOldest()
     local oldest_key
     local oldest_timestamp
@@ -56,7 +75,7 @@ function KindleFetchCache:removeOldest()
 
     -- delete oldest entry, if exists
     if oldest_key then
-        self:delete(oldest_key)
+        self:evict(oldest_key)
     end
 end
 
@@ -72,6 +91,19 @@ function KindleFetchCache:load()
 end
 
 function KindleFetchCache:save()
+    self:load()
+
+    -- drop expired entries, which would otherwise stay until they're looked up again
+    local expiry = self:getExpiry()
+    if expiry then
+        local now = os.time()
+        for key, entry in pairs(self.cache) do
+            if entry.timestamp and now - entry.timestamp > expiry then
+                self:evict(key)
+            end
+        end
+    end
+
     if self.max_entries then
         -- remove entries if past cache limit
         while self:count() > self.max_entries do
@@ -97,11 +129,11 @@ function KindleFetchCache:get(...)
     end
 
     local age = os.time() - entry.timestamp
-    local expiry = type(self.expiry) == "function" and self.expiry() or self.expiry
+    local expiry = self:getExpiry()
     if expiry and age > expiry then
         LogUtil.debug("cache expired for key:", key, "age:", age, "seconds")
 
-        self:delete(key)
+        self:evict(key)
         self:save()
         return nil
     end
@@ -110,7 +142,8 @@ function KindleFetchCache:get(...)
     return entry.value
 end
 
-function KindleFetchCache:set(value, ...)
+-- store an entry without saving the cache, so that several can be stored and then saved together
+function KindleFetchCache:put(value, ...)
     self:load()
 
     local key = self.makeKey(...)
@@ -121,6 +154,10 @@ function KindleFetchCache:set(value, ...)
     }
 
     LogUtil.debug("stored cache entry:", key, "with", value)
+end
+
+function KindleFetchCache:set(value, ...)
+    self:put(value, ...)
     self:save()
 end
 

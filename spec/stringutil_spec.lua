@@ -23,7 +23,7 @@ describe("StringUtil", function()
         "collapseDashes",
         "convertHtmlToText",
         "removeParentheses",
-        "truncate",
+        "cleanTitle",
         "cleanFileName",
         "replaceCarriageReturns",
     }) do
@@ -51,9 +51,50 @@ describe("StringUtil", function()
         assert.are.equal("Dune", StringUtil.removeParentheses("Dune (Dune Chronicles 1) [Ace, 1990]"))
     end)
 
-    it("truncates text longer than 50 characters", function()
-        assert.are.equal(string.rep("a", 50), StringUtil.truncate(string.rep("a", 50)))
-        assert.are.equal(string.rep("a", 50) .. "…", StringUtil.truncate(string.rep("a", 51)))
+    describe("cleanTitle", function()
+        it("leaves a title as it's written, unlike a file name", function()
+            assert.are.equal("Dune: Messiah / What if?", StringUtil.cleanTitle("Dune: Messiah / What if?"))
+            assert.are.equal("Dune- Messiah - What if-", StringUtil.cleanFileName("Dune: Messiah / What if?"))
+        end)
+
+        it("leaves out what's in brackets, and the space around it", function()
+            assert.are.equal("Dune", StringUtil.cleanTitle("  Dune (Dune Chronicles, Book 1) [1965] "))
+            assert.are.equal("Dune - House Atreides", StringUtil.cleanTitle("Dune - House Atreides(Boom 2020)"))
+        end)
+
+        it("keeps a title that is all in brackets", function()
+            assert.are.equal("[Untitled]", StringUtil.cleanTitle(" [Untitled] "))
+        end)
+
+        it("leaves titles in other alphabets whole", function()
+            local title =
+                "Мастер и Маргарита: роман в двух частях, с иллюстрациями"
+            assert.are.equal(title, StringUtil.cleanTitle(title))
+        end)
+    end)
+
+    -- an address is written to curl's config file, where a line break or quote would add options of its own
+    describe("isSafeUrl", function()
+        it("accepts web addresses", function()
+            assert.is_true(StringUtil.isSafeUrl("https://libgen.example/fictioncovers/2509000/abc_small.jpg"))
+            assert.is_true(StringUtil.isSafeUrl("http://covers.example/a%20b.jpg?size=small&v=2#top"))
+        end)
+
+        it("refuses addresses with line breaks, spaces, quotes or backslashes in them", function()
+            assert.is_false(StringUtil.isSafeUrl("https://covers.example/a.jpg\noutput = /mnt/us/koreader/reader.lua"))
+            assert.is_false(StringUtil.isSafeUrl("https://covers.example/a.jpg\r"))
+            assert.is_false(StringUtil.isSafeUrl("https://covers.example/a b.jpg"))
+            assert.is_false(StringUtil.isSafeUrl('https://covers.example/a.jpg"'))
+            assert.is_false(StringUtil.isSafeUrl("https://covers.example/a.jpg\\"))
+        end)
+
+        it("refuses anything that isn't a web address", function()
+            assert.is_false(StringUtil.isSafeUrl("file:///etc/passwd"))
+            assert.is_false(StringUtil.isSafeUrl("covers.example/a.jpg"))
+            assert.is_false(StringUtil.isSafeUrl("https://"))
+            assert.is_false(StringUtil.isSafeUrl(""))
+            assert.is_false(StringUtil.isSafeUrl(nil))
+        end)
     end)
 
     it("makes titles safe to use as file names", function()
@@ -63,7 +104,7 @@ describe("StringUtil", function()
         assert.are.equal("Mr. Mercedes", StringUtil.cleanFileName("Mr. Mercedes"))
     end)
 
-    it("turns escaped line breaks from the github api into new lines", function()
-        assert.are.equal("line 1\nline 2", StringUtil.replaceCarriageReturns("line 1\\r\\nline 2"))
+    it("turns the line breaks in github's release notes into new lines", function()
+        assert.are.equal("line 1\nline 2\n", StringUtil.replaceCarriageReturns("line 1\r\nline 2\r\n"))
     end)
 end)

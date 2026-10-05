@@ -2,12 +2,15 @@ local helper = require("helper")
 
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
-    local cancelled_downloads
+    local cancelled_downloads, curl_check_user_requested, leftovers_removed
     -- pages of results saved from earlier searches, as "query page"
     local saved
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
     local opened
+    -- KOReader's file manager and reader, of which one is open at a time (the file manager here, until a spec
+    -- opens a book with readBook)
+    local FileManager, ReaderUI
 
     local function openUI()
         opened = nil
@@ -16,13 +19,18 @@ describe("KindleFetch", function()
                 menu = {
                     registerToMainMenu = function() end,
                 },
-                openFile = function(_, file)
-                    opened = { "openFile", file }
-                end,
-                switchDocument = function(_, file)
-                    opened = { "switchDocument", file }
-                end,
             },
+        }
+    end
+
+    -- close the file manager and open a book, as KOReader does
+    local function readBook()
+        FileManager.instance = nil
+        ReaderUI.instance = {
+            document = {},
+            switchDocument = function(_, file)
+                opened = { "switchDocument", file }
+            end,
         }
     end
 
@@ -79,6 +87,9 @@ describe("KindleFetch", function()
             getCheckForUpdates = function()
                 return settings.check_for_updates
             end,
+            getLastUpdateCheck = function()
+                return settings.last_update_check
+            end,
             getLastVersion = function()
                 return settings.last_version
             end,
@@ -134,15 +145,32 @@ describe("KindleFetch", function()
             end,
         })
         cancelled_downloads = 0
+        curl_check_user_requested = nil
+
+        FileManager = {
+            instance = {
+                openFile = function(_, file)
+                    opened = { "openFile", file }
+                end,
+            },
+        }
+        ReaderUI = {
+            showReader = function(_, file)
+                opened = { "showReader", file }
+            end,
+        }
+        helper.stub("apps/filemanager/filemanager", FileManager)
+        helper.stub("apps/reader/readerui", ReaderUI)
         helper.stub("api.lgliapi", {
             cancelAllDownloads = function()
                 cancelled_downloads = cancelled_downloads + 1
             end,
-            downloadBook = function(_, download_book, filepath, callback)
+            downloadBook = function(_, download_book, filepath, callback, open_existing)
                 table.insert(downloads, {
                     book = download_book,
                     filepath = filepath,
                     callback = callback,
+                    open_existing = open_existing,
                 })
             end,
         })
@@ -157,14 +185,19 @@ describe("KindleFetch", function()
             end,
         })
         helper.stub("cache.covercache", {})
+        leftovers_removed = 0
         helper.stub("util.curlutil", {
             getVersion = function()
                 return "8.17.0"
             end,
+            removeLeftovers = function()
+                leftovers_removed = leftovers_removed + 1
+            end,
         })
         helper.stub("updater.curlupdater", {
-            checkVersion = function()
+            checkVersion = function(user_requested)
                 checks.curl = checks.curl + 1
+                curl_check_user_requested = user_requested
             end,
         })
         helper.stub("updater.pluginupdater", {
@@ -206,6 +239,13 @@ describe("KindleFetch", function()
         end
         assert.are.equal(1, #summaries)
         assert.matches("KindleFetch 0.4 on KOReader .*, curl 8.17.0", summaries[1])
+    end)
+
+    -- KOReader may have closed while they were running
+    it("removes the files left by earlier downloads, once per session", function()
+        openUI()
+        openUI()
+        assert.are.equal(1, leftovers_removed)
     end)
 
     describe("after an update", function()
@@ -290,6 +330,31 @@ describe("KindleFetch", function()
             assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
         end)
 
+        it("checks for updates automatically at most once a day", function()
+            helper.state.time = 2000000
+            settings.last_update_check = 2000000 - 24 * 60 * 60 + 1
+            openUI()
+            helper.runScheduled()
+            assert.are.same({ curl = 0, plugin = 0 }, checks)
+
+            -- KOReader has been restarted a second later
+            KindleFetch = dofile("kindlefetch.koplugin/main.lua")
+            helper.state.time = 2000001
+            openUI()
+            helper.runScheduled()
+            assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
+        end)
+
+        -- an e-reader's clock can be wrong, or be put right, between checks
+        it("checks for updates when the last check appears to be in the future", function()
+            helper.state.time = 2000000
+            settings.last_update_check = 2000000 + 7 * 24 * 60 * 60
+            openUI()
+            helper.runScheduled()
+
+            assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
+        end)
+
         it("waits for a network connection before checking for updates", function()
             helper.stubs.network.connected = false
             openUI()
@@ -333,6 +398,8 @@ describe("KindleFetch", function()
             menuItem(openUI(), "Check for updates").callback()
 
             assert.are.same({ curl = 1, plugin = 1, user_requested = true }, checks)
+            -- so updating curl is offered again, even if it was turned down before
+            assert.is_true(curl_check_user_requested)
             assert.are.equal("Checking for updates...", helper.lastNotification())
         end)
 
@@ -587,6 +654,16 @@ describe("KindleFetch", function()
             assert.is_true(helper.wasClosed(plugin.search_box))
         end)
 
+        -- chosen when asked whether to download over it
+        it("opens a book that's already there, in place of downloading it again", function()
+            selectBook("Dune")
+            downloads[1].open_existing("/mnt/us/documents/Dune.epub")
+
+            assert.are.same({ "openFile", "/mnt/us/documents/Dune.epub" }, opened)
+            assert.is_true(helper.wasClosed(menus[1]))
+            assert.is_true(helper.wasClosed(plugin.search_box))
+        end)
+
         it("closes the offer to read the book when cancelled", function()
             selectBook("Dune")
             downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
@@ -599,13 +676,46 @@ describe("KindleFetch", function()
         end)
 
         it("switches to the downloaded book when already reading one", function()
-            plugin.ui.document = {}
+            readBook()
             selectBook("Dune")
             downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
             helper.tick()
             helper.lastShown().buttons[1][2].callback()
 
             assert.are.same({ "switchDocument", "/mnt/us/books/Dune.epub" }, opened)
+        end)
+
+        -- the download may have been hidden, and finish after what it was started from has closed. opening the
+        -- book from there crashed KOReader when that was a book, as only the file manager can open files
+        it("opens the book from what's open by then, rather than what the download was started from", function()
+            selectBook("Dune")
+            readBook()
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+            helper.lastShown().buttons[1][2].callback()
+            assert.are.same({ "switchDocument", "/mnt/us/books/Dune.epub" }, opened)
+
+            -- and the other way round: started while reading a book that has been closed since
+            ReaderUI.instance = nil
+            FileManager.instance = {
+                openFile = function(_, file)
+                    opened = { "openFile", file }
+                end,
+            }
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+            helper.lastShown().buttons[1][2].callback()
+            assert.are.same({ "openFile", "/mnt/us/books/Dune.epub" }, opened)
+        end)
+
+        it("opens the book when neither a book nor the file manager is open", function()
+            FileManager.instance = nil
+            selectBook("Dune")
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+            helper.lastShown().buttons[1][2].callback()
+
+            assert.are.same({ "showReader", "/mnt/us/books/Dune.epub" }, opened)
         end)
 
         it("says why a download failed", function()

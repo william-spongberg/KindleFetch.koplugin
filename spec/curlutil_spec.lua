@@ -41,6 +41,9 @@ describe("CurlUtil", function()
     it("explains curl exit codes", function()
         assert.are.equal("could not resolve host", CurlUtil.getErrorMeaning(6))
         assert.are.equal("TLS certificate verification failed", CurlUtil.getErrorMeaning(60))
+        -- downloads need curl, which not every e-reader has
+        assert.are.equal("curl isn't installed on this device", CurlUtil.getErrorMeaning(127))
+        assert.are.equal("curl can't be run on this device", CurlUtil.getErrorMeaning(126))
         assert.are.equal("(curl exit code 99)", CurlUtil.getErrorMeaning(99))
     end)
 
@@ -93,24 +96,39 @@ describe("CurlUtil", function()
         end)
     end)
 
-    describe("getRemoteFileSize", function()
+    describe("getDownloadSize", function()
+        local headers_file
+
+        before_each(function()
+            headers_file = CurlUtil.createHeadersFile()
+        end)
+
+        it("is in the plugin's tmp dir, apart from other downloads' files", function()
+            assert.matches(data_dir .. "/settings/tmp/curl_download_", headers_file, 1, true)
+            assert.are_not.equal(headers_file, CurlUtil.createHeadersFile())
+            assert.is_false(helper.exists(headers_file))
+        end)
+
         it("uses the content length of the final response after redirects", function()
-            helper.stubCommand(
-                "curl -sL -I 'https://libgen.example/get.php?md5=abc'",
+            helper.writeFile(
+                headers_file,
                 "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/book\r\nContent-Length: 0\r\n\r\n"
                     .. "HTTP/2 200\r\ncontent-length: 1048576\r\n\r\n"
             )
-            assert.are.equal(1048576, CurlUtil.getRemoteFileSize("https://libgen.example/get.php?md5=abc"))
-
-            -- asks like a browser, or Library Genesis sends a small page instead of the file
-            local cmd = helper.state.popen_calls[#helper.state.popen_calls]
-            assert.matches("-A 'Mozilla/5.0'", cmd, 1, true)
-            assert.matches("-e 'https://libgen.example/'", cmd, 1, true)
+            assert.are.equal(1048576, CurlUtil.getDownloadSize(headers_file))
         end)
 
         it("returns nil when the size is unknown", function()
-            helper.stubCommand("curl -sL -I", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
-            assert.is_nil(CurlUtil.getRemoteFileSize("https://libgen.example/get.php"))
+            helper.writeFile(headers_file, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+            assert.is_nil(CurlUtil.getDownloadSize(headers_file))
+        end)
+
+        it("returns nil until curl has noted the headers down", function()
+            assert.is_nil(CurlUtil.getDownloadSize(headers_file))
+
+            -- still arriving
+            helper.writeFile(headers_file, "HTTP/2 200\r\ncontent-length: 1048576\r\n")
+            assert.is_nil(CurlUtil.getDownloadSize(headers_file))
         end)
     end)
 
@@ -134,6 +152,28 @@ describe("CurlUtil", function()
             helper.writeFile(exit_file, "22\n")
             assert.are.equal(22, CurlUtil.getExitCode(exit_file))
             assert.is_false(helper.exists(exit_file))
+        end)
+    end)
+
+    -- KOReader may close while downloads are running, leaving their files with nothing to remove them
+    describe("removeLeftovers", function()
+        it("removes the files left by earlier downloads", function()
+            local tmp_dir = data_dir .. "/settings/tmp/"
+            helper.writeFile(tmp_dir .. "curl_download_1784192163.exitcode", "0")
+            helper.writeFile(tmp_dir .. "curl_download_config_1784192163_2.txt", 'url = "https://covers.example"')
+            helper.writeFile(tmp_dir .. "curl_download_config_1784192163_2.txt.results", "0 a.jpg")
+            helper.writeFile(tmp_dir .. "curl_download_1784192163_3.headers", "HTTP/2 200")
+            helper.writeFile(tmp_dir .. "someone-elses.txt", "not ours")
+
+            CurlUtil.removeLeftovers()
+            assert.are.same({ "someone-elses.txt" }, helper.readDir(tmp_dir))
+            assert.is_truthy(helper.logged("info", "^removed 4 files left by earlier downloads$"))
+        end)
+
+        it("does nothing when there's nothing left", function()
+            CurlUtil.removeLeftovers()
+            assert.is_false(helper.exists(data_dir .. "/settings/tmp"))
+            assert.is_nil(helper.logged("info", "^removed"))
         end)
     end)
 
@@ -191,6 +231,34 @@ describe("CurlUtil", function()
 
             CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
             assert.is_nil(helper.state.executed[#helper.state.executed]:find("--max-time", 1, true))
+        end)
+
+        -- which say how big the file is, see getDownloadSize
+        it("has curl note down the headers it's sent when asked to", function()
+            helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false, nil, {
+                headers_file = data_dir .. "/it's headers",
+            })
+            assert.matches(
+                "-D '" .. data_dir .. "/it'\\''s headers'",
+                helper.state.executed[#helper.state.executed],
+                1,
+                true
+            )
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find(" -D ", 1, true))
+        end)
+
+        it("gives up on a download once nothing has arrived for a while, when asked to", function()
+            helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false, nil, { stall_time = 30 })
+            assert.matches("--speed-limit 1 --speed-time 30", helper.state.executed[#helper.state.executed], 1, true)
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find("--speed-time", 1, true))
         end)
 
         it("fails and cleans up when curl fails", function()
@@ -280,6 +348,25 @@ describe("CurlUtil", function()
             assert.matches("-w '%{exitcode} %{filename_effective}\\n'", cmd, 1, true)
             assert.matches("-e 'https://covers.example/'", cmd, 1, true)
             assert.matches("--retry 2", cmd, 1, true)
+        end)
+
+        -- anything else in the file is read by curl as an option, such as where to save a file
+        it("only writes addresses and where to save them to curl's config file", function()
+            helper.stubCommand("& echo $!", "4242\n")
+            urls[2] =
+                "https://covers.example/b.jpg\noutput = /mnt/us/koreader/patches/2-evil.lua\nurl = https://evil.example"
+            urls[3] = 'https://covers.example/c.jpg"\n'
+            paths[1] = data_dir .. '/a "quoted" back\\slash.jpg'
+
+            local _, _, config_file = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
+            assert.are.equal(
+                'url = "https://covers.example/a.jpg"\n'
+                    .. 'output = "'
+                    .. data_dir
+                    .. '/a \\"quoted\\" back\\\\slash.jpg"\n',
+                helper.readFile(config_file)
+            )
+            assert.is_truthy(helper.logged("warn", "^left out a download whose address can't be used"))
         end)
 
         it("removes the curl config file afterwards", function()

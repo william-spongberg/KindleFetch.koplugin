@@ -1,22 +1,30 @@
 local http = require("socket.http")
-local ltn12 = require("ltn12")
+local socketutil = require("socketutil")
 local LogUtil = require("util.logutil")
 
 local HttpUtil = {}
 
+-- constants
+-- how long a site can take to answer, and then to send the whole page, in seconds. pages of search results are
+-- large and Library Genesis sends them slowly, so the second is generous
+local ANSWER_TIMEOUT = 10
+local PAGE_TIMEOUT = 60
+
 function HttpUtil.requestBody(request_url, proxy_url)
-    http.TIMEOUT = 10
+    -- set through KOReader, as https requests ignore luasocket's own timeout and wait a minute instead
+    socketutil:set_timeout(ANSWER_TIMEOUT, PAGE_TIMEOUT)
 
     local response_body = {}
     local ok, status = http.request {
         url = request_url,
         proxy = proxy_url,
-        sink = ltn12.sink.table(response_body),
+        sink = socketutil.table_sink(response_body),
         headers = {
             ["User-Agent"] = "Mozilla/5.0",
         },
         redirect = true,
     }
+    socketutil:reset_timeout()
 
     -- status is the HTTP status code, or what went wrong if there wasn't a response
     local body = table.concat(response_body)

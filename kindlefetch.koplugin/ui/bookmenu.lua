@@ -103,17 +103,23 @@ function BookMenu:createBookItemWidget(book)
         cover_widget = CoverPlaceholder.new(math.floor(COVER_SIZE * 2 / 3), COVER_SIZE)
     end
 
-    -- title
-    local title_widget = TextBoxWidget:new {
-        width = self.dimen.w,
+    -- the room there is for text beside the cover
+    local text_width = (self.inner_dimen or self.dimen).w - 2 * Size.padding.default - Size.padding.large
+    if cover_widget then
+        text_width = text_width - math.floor(COVER_SIZE * 2 / 3)
+    end
+
+    -- title, on one line, ending in an ellipsis if there isn't room for it all
+    local title_widget = TextWidget:new {
+        max_width = text_width,
         face = Font:getFace("cfont", 18),
         text = book.display_title or "",
         bold = true,
     }
 
-    -- authors
-    local author_widget = TextBoxWidget:new {
-        width = self.dimen.w,
+    -- authors, likewise
+    local author_widget = TextWidget:new {
+        max_width = text_width,
         face = Font:getFace("cfont", 15),
         text = book.authors or "",
         fgcolor = Blitbuffer.COLOR_BLACK,
@@ -127,8 +133,9 @@ function BookMenu:createBookItemWidget(book)
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
-    -- main content group
+    -- main content group, left-aligned as the title and authors are only as wide as their text
     local content_group = VerticalGroup:new {
+        align = "left",
         title_widget,
         VerticalSpan:new {
             width = Size.padding.small,
@@ -320,9 +327,9 @@ function BookMenu:loadCoversForPage(current_page)
 end
 
 -- redraw with covers once they have downloaded, even if another search started downloading them
+-- (updateItems refreshes the screen itself, without the flash of a full refresh each time covers arrive)
 function BookMenu:onKindleFetchCoversDownloaded()
     self:updateItems()
-    UIManager:setDirty(self, "full")
 end
 
 return BookMenu

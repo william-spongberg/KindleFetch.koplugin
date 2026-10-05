@@ -26,6 +26,19 @@ describe("Downloading", function()
         return book.file_type == "epub" and H.isPublicDomain(book)
     end
 
+    -- tap Download in the prompt, and download over the book if an earlier test has left it there. returns
+    -- whether it was asked to
+    local function confirmDownload()
+        H.tapButton("Download")
+        if H.poll(2, function()
+            return H.findButton("Overwrite")
+        end) then
+            H.tapButton("Overwrite")
+            return true
+        end
+        return false
+    end
+
     it("falls back to another mirror when one fails", function()
         local menu = H.searchUntil(H.BOOK_QUERY, isEpubToDownload)
         local book = epubs(menu)[1]
@@ -35,7 +48,7 @@ describe("Downloading", function()
         H.waitFor("the download prompt", 60, function()
             return H.findButton("Download")
         end)
-        H.tapButton("Download")
+        confirmDownload()
         H.waitFor("the download to finish", 300, function()
             return H.findButton("Read now")
         end)
@@ -57,7 +70,7 @@ describe("Downloading", function()
             return H.findButton("Download")
         end)
         H.shot("download-prompt")
-        H.tapButton("Download")
+        confirmDownload()
 
         H.waitFor("the download to finish", 300, function()
             return H.findButton("Read now")
@@ -93,7 +106,7 @@ describe("Downloading", function()
         H.waitFor("the download prompt", 60, function()
             return H.findButton("Download")
         end)
-        H.tapButton("Download")
+        confirmDownload()
         H.waitFor("the download progress", 60, isDownloadShowing)
         H.shot("download-progress")
 

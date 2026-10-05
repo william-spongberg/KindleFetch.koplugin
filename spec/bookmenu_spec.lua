@@ -160,6 +160,31 @@ describe("BookMenu", function()
             assert.are.equal("1990 · English [en] · Book (fiction) · epub · 1.2MB", info)
         end)
 
+        -- cutting them off after 50 bytes split letters in other alphabets, and didn't fit every screen
+        it("shorten the title and authors to the room there is beside the cover", function()
+            local menu = newMenu(1)
+            local long = book(1, {
+                display_title = string.rep("Мастер и Маргарита ", 10),
+                authors = string.rep("Булгаков, Михаил; ", 10),
+            })
+
+            -- 580px wide, less the padding around the book and beside the cover, and the cover (or its placeholder)
+            local content = menu:createBookItemWidget(long)[1]
+            content = content[#content]
+            assert.are.equal(string.rep("Мастер и Маргарита ", 10), content[1].text)
+            assert.are.equal(494, content[1].max_width)
+            assert.are.equal(494, content[3].max_width)
+            -- each line is only as wide as its text, so they'd be centred otherwise
+            assert.are.equal("left", content.align)
+
+            -- with more room when the book has no cover
+            long.image_url = nil
+            content = menu:createBookItemWidget(long)[1]
+            content = content[#content]
+            assert.are.equal(560, content[1].max_width)
+            assert.are.equal(560, content[3].max_width)
+        end)
+
         -- gray text is hard to read on e-ink screens (#3)
         it("show authors and details in black", function()
             local menu = newMenu(1)
@@ -298,10 +323,14 @@ describe("BookMenu", function()
         it("redraws the page showing once covers have downloaded", function()
             local menu = newMenu(11)
             menu.page = 3
+            helper.state.refreshes = {}
             menu:onKindleFetchCoversDownloaded()
 
             assert.are.equal(2, #menu.item_group)
             assert.are.equal("md5-11", menu.item_group[1].entry.book.md5)
+            -- once, and without the flash of a full refresh
+            assert.are.equal(1, #helper.state.refreshes)
+            assert.are.equal("ui", helper.state.refreshes[1][1])
         end)
 
         it("does nothing when every cover is there", function()

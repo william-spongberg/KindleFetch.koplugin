@@ -7,7 +7,8 @@ return KindleFetchCache:new {
     expiry = function()
         return KindleFetchSettings:getSearchCacheExpiryDays() * 24 * 60 * 60
     end,
-    max_entries = 1000,
+    -- each search is around 25KB, and the whole cache is read and written at once
+    max_entries = 100,
 
     makeKey = function(...)
         LogUtil.debug("data for makeKey:", ...)

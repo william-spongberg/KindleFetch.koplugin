@@ -33,6 +33,33 @@ describe("DownloadProgress", function()
         assert.are.equal("25% · 1.0 / 4.0 MB", widget.status_widget.text)
     end)
 
+    -- an e-ink screen is slow to refresh, and a download updates its progress twice a second
+    it("only refreshes the part of the screen it takes up", function()
+        widget.frame.dimen = { x = 100, y = 300, w = 400, h = 200 }
+        widget:show()
+        widget:update(0.5, "50%")
+        widget:close()
+
+        assert.are.same({
+            { "ui", widget.frame.dimen },
+            { "ui", widget.frame.dimen },
+            { "ui", widget.frame.dimen },
+        }, helper.state.refreshes)
+    end)
+
+    it("doesn't refresh the screen while the progress stays the same", function()
+        widget:show()
+        widget:update(0.5, "50% · 1.0 / 2.0 MB")
+        local refreshes = #helper.state.refreshes
+
+        widget:update(0.5, "50% · 1.0 / 2.0 MB")
+        widget:update(0.5)
+        assert.are.equal(refreshes, #helper.state.refreshes)
+
+        widget:update(0.5, "50% · 1.1 / 2.0 MB")
+        assert.are.equal(refreshes + 1, #helper.state.refreshes)
+    end)
+
     it("can be hidden while the download continues, and shown again", function()
         widget:show()
         local hidden_container = widget.container

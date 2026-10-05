@@ -322,9 +322,13 @@ local function createStubs(state)
         close = function(_, widget)
             table.insert(state.closed, widget)
         end,
-        setDirty = function(_, _, refresh)
+        -- every refresh asked for is kept, as its type and the region of the screen it covers (none for all of it)
+        setDirty = function(_, _, refresh, region)
             if type(refresh) == "function" then
                 state.refresh = { refresh() }
+                table.insert(state.refreshes, state.refresh)
+            else
+                table.insert(state.refreshes, { refresh, region })
             end
         end,
         forceRePaint = function() end,
@@ -452,6 +456,25 @@ local function createStubs(state)
             end,
         },
     }
+    -- KOReader's json, read with dkjson instead, which busted installs
+    stubs.json = {
+        decode = function(text)
+            return (require("dkjson").decode(text))
+        end,
+    }
+
+    -- KOReader's timeouts for luasocket, kept in state.http_timeouts while they're set
+    stubs.socketutil = {
+        set_timeout = function(_, answer_timeout, total_timeout)
+            state.http_timeouts = { answer_timeout, total_timeout }
+        end,
+        reset_timeout = function()
+            state.http_timeouts = nil
+        end,
+        table_sink = function(t)
+            return stubs.ltn12.sink.table(t)
+        end,
+    }
 
     -- widgets
     stubs.Menu = widgetClass()
@@ -504,6 +527,8 @@ local MODULE_STUBS = {
     ["ui/widget/container/widgetcontainer"] = "widgetcontainer",
     ["socket.http"] = "http",
     ["ltn12"] = "ltn12",
+    ["socketutil"] = "socketutil",
+    ["json"] = "json",
     ["ui/widget/menu"] = "Menu",
     ["ui/widget/container/inputcontainer"] = "InputContainer",
     ["ui/geometry"] = "geometry",
@@ -576,6 +601,7 @@ function helper.reset()
         popen_calls = {},
         shown = {},
         closed = {},
+        refreshes = {},
         scheduled = {},
         broadcasts = {},
         notifications = {},
@@ -593,6 +619,13 @@ function helper.reset()
     end
     -- the characters TextBoxWidget uses for bold text
     local TextBoxWidget = package.loaded["ui/widget/textboxwidget"]
+    -- how many lines its text wraps over, at 10px a character as in getSize, and how tall each is
+    function TextBoxWidget:getVisLineCount()
+        return math.max(1, math.ceil(#(self.text or "") * 10 / (self.width or 1)))
+    end
+    function TextBoxWidget:getLineHeight()
+        return 20
+    end
     TextBoxWidget.PTF_HEADER = "\u{FFF1}"
     TextBoxWidget.PTF_BOLD_START = "\u{FFF2}"
     TextBoxWidget.PTF_BOLD_END = "\u{FFF3}"
@@ -603,6 +636,9 @@ function helper.reset()
     G_reader_settings = {
         isFalse = function(_, key)
             return helper.state.reader_settings[key] == false
+        end,
+        readSetting = function(_, key)
+            return helper.state.reader_settings[key]
         end,
     }
 end
@@ -625,8 +661,8 @@ function helper.useLiveHttp()
         table.insert(http.requests, request.url)
         local response = live_responses[request.url]
         if not response then
-            -- like luasocket, TIMEOUT limits each wait for data rather than the whole transfer
-            local timeout = http.TIMEOUT or 60
+            -- like luasocket, the timeout the plugin sets limits each wait for data rather than the whole transfer
+            local timeout = helper.state.http_timeouts and helper.state.http_timeouts[1] or 60
             local cmd = string.format(
                 "curl -sL --connect-timeout %d --speed-time %d --speed-limit 1 --max-time 120 -A %s "
                     .. "-w '\\n%%{http_code} %%{exitcode}' %s",

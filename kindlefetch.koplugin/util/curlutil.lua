@@ -1,6 +1,7 @@
 local NotifyUtil = require("util.notifyutil")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
+local StringUtil = require("util.stringutil")
 local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
 
@@ -32,6 +33,9 @@ local CURL_ERRORS = {
     [61] = "unsupported TLS/SSL feature",
     [67] = "authentication failed",
     [78] = "requested resource was not found",
+    -- from the shell rather than from curl, when it can't run curl or can't find it
+    [126] = "curl can't be run on this device",
+    [127] = "curl isn't installed on this device",
 }
 
 local function ensureTmpDir()
@@ -45,6 +49,27 @@ local function tmpFile(name, extension)
     ensureTmpDir()
     tmp_files_created = tmp_files_created + 1
     return string.format("%s%s_%d_%d%s", TMP_DIR, name, os.time(), tmp_files_created, extension)
+end
+
+-- remove the files left by downloads that were still running when KOReader last closed, which nothing else
+-- would. only at the start of a session, while no downloads are using them
+function CurlUtil.removeLeftovers()
+    if lfs.attributes(TMP_DIR, "mode") ~= "directory" then
+        return
+    end
+
+    local leftovers = {}
+    for file in lfs.dir(TMP_DIR) do
+        if file:find("^curl_download") then
+            table.insert(leftovers, file)
+        end
+    end
+    for _, file in ipairs(leftovers) do
+        FileUtil.removeFile(TMP_DIR .. file)
+    end
+    if #leftovers > 0 then
+        LogUtil.info("removed", #leftovers, "files left by earlier downloads")
+    end
 end
 
 function CurlUtil.shellQuote(str)
@@ -102,24 +127,9 @@ function CurlUtil.getErrorMeaning(exit_code)
     return CURL_ERRORS[exit_code] or "(curl exit code " .. tostring(exit_code) .. ")"
 end
 
-function CurlUtil.getRemoteFileSize(url)
-    -- ask like the download will, as Library Genesis sends a small page instead of the file otherwise
-    local cmd = string.format("curl -sL -I %s", CurlUtil.shellQuote(url))
-    cmd = CurlUtil.setReferer(CurlUtil.pretendBrowser(cmd), url)
-
-    local pipe = io.popen(cmd, "r")
-    if not pipe then
-        return nil
-    end
-
-    local headers = pipe:read("*a")
-    pipe:close()
-
-    if not headers then
-        return nil
-    end
-
-    -- get content length from first 200 response
+-- the size of the file a site is sending, from the headers of its responses (one after another when redirected)
+function CurlUtil.parseContentLength(headers)
+    -- get content length from the last response that has one, i.e. the file's rather than a redirect's
     local file_size = nil
     for block in headers:gmatch("HTTP[/%d%.]+.-\r?\n\r?\n") do
         local size = block:match("[Cc]ontent%-[Ll]ength:%s*(%d+)")
@@ -127,20 +137,29 @@ function CurlUtil.getRemoteFileSize(url)
             file_size = tonumber(size)
         end
     end
-
-    if not file_size then
-        local statuses = {}
-        for status in headers:gmatch("(HTTP[/%d%.]+ %d+)") do
-            table.insert(statuses, status)
-        end
-        LogUtil.warn(
-            "no file size from",
-            LogUtil.site(url),
-            "responses:",
-            #statuses > 0 and table.concat(statuses, ", ") or "none"
-        )
-    end
     return file_size
+end
+
+-- file a download can have curl note the headers it's sent down in (see download's opts)
+function CurlUtil.createHeadersFile()
+    local headers_file = tmpFile("curl_download", ".headers")
+    FileUtil.removeFile(headers_file)
+
+    return headers_file
+end
+
+-- how big the file being downloaded is, going by the headers curl has noted down, or nil if the site hasn't said.
+-- they're complete by the time the file itself starts to arrive, so asking for the size separately first, and
+-- waiting for the answer, isn't needed
+function CurlUtil.getDownloadSize(headers_file)
+    local f = io.open(headers_file, "r")
+    if not f then
+        return nil
+    end
+    local headers = f:read("*a")
+    f:close()
+
+    return CurlUtil.parseContentLength(headers or "")
 end
 
 function CurlUtil.createExitFile()
@@ -215,6 +234,15 @@ function CurlUtil.setTimeout(curl_cmd, seconds)
     return string.format("%s --connect-timeout %d", curl_cmd, seconds)
 end
 
+-- give up once nothing has arrived for this many seconds
+function CurlUtil.abortWhenStalled(curl_cmd, seconds)
+    return string.format("%s --speed-limit 1 --speed-time %d", curl_cmd, seconds)
+end
+
+function CurlUtil.dumpHeaders(curl_cmd, headers_file)
+    return string.format("%s -D %s", curl_cmd, CurlUtil.shellQuote(headers_file))
+end
+
 function CurlUtil.enableParallel(curl_cmd, max_parallel)
     return string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
 end
@@ -277,8 +305,12 @@ function CurlUtil.getCMD(download_url, filepath, exit_file, use_proxy)
     return cmd
 end
 
--- max_time optionally limits how long each attempt (and retrying) can take, in seconds
-function CurlUtil.download(download_url, filepath, use_proxy, background, max_time)
+-- max_time optionally limits how long each attempt (and retrying) can take, in seconds.
+-- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize), and
+-- opts.stall_time gives up on a download once nothing has arrived for that many seconds
+function CurlUtil.download(download_url, filepath, use_proxy, background, max_time, opts)
+    opts = opts or {}
+
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, download_url)
@@ -286,6 +318,12 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
     cmd = CurlUtil.setTimeout(cmd, 15)
     if max_time then
         cmd = string.format("%s --max-time %d --retry-max-time %d", cmd, max_time, max_time)
+    end
+    if opts.headers_file then
+        cmd = CurlUtil.dumpHeaders(cmd, opts.headers_file)
+    end
+    if opts.stall_time then
+        cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)
@@ -351,9 +389,18 @@ function CurlUtil.downloadMultiple(
     local config_file = tmpFile("curl_download_config", ".txt")
     local f = io.open(config_file, "w")
 
+    -- backslashes and quotes mean something inside the quotes of curl's config file
+    local function quote(value)
+        return (value:gsub("\\", "\\\\"):gsub('"', '\\"'))
+    end
     for i, download_url in ipairs(download_urls) do
-        f:write(string.format('url = "%s"\n', download_url:gsub('"', '\\"')))
-        f:write(string.format('output = "%s"\n', filepaths[i]:gsub('"', '\\"')))
+        -- an address with a line break in it would add lines of its own to the config file, so leave it out
+        if StringUtil.isSafeUrl(download_url) and not filepaths[i]:find("%c") then
+            f:write(string.format('url = "%s"\n', quote(download_url)))
+            f:write(string.format('output = "%s"\n', quote(filepaths[i])))
+        else
+            LogUtil.warn("left out a download whose address can't be used:", download_url)
+        end
     end
     f:close()
 

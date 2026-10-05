@@ -55,17 +55,26 @@ function StringUtil.removeParentheses(text)
     return text
 end
 
-function StringUtil.truncate(text)
+-- a title as it's written, for showing on screen, without what Library Genesis adds to it in brackets (such as
+-- the series it's in)
+function StringUtil.cleanTitle(text)
     if not StringUtil.assertValidString(text) then
         return ""
     end
 
-    local limit = 50
-    if #text > limit then
-        return text:sub(1, limit) .. "…"
+    local title = StringUtil.trim(StringUtil.collapseWhitespace(StringUtil.removeParentheses(text)))
+    -- unless that's all there is of it
+    if title == "" then
+        title = StringUtil.trim(StringUtil.collapseWhitespace(text))
     end
+    return title
+end
 
-    return text
+-- whether text is a web address that can be passed on as it is. mirrors are looked up on a page anyone can edit,
+-- so what a mirror sends can't be trusted: a line break or quote in an address written to curl's config file
+-- would add options of the mirror's own, such as where on the device to save a file
+function StringUtil.isSafeUrl(text)
+    return type(text) == "string" and text:find('^https?://[^%c%s"\\]+$') ~= nil
 end
 
 function StringUtil.cleanFileName(text)
@@ -87,7 +96,7 @@ function StringUtil.replaceCarriageReturns(text)
         return ""
     end
 
-    return text:gsub("\\r\\n", "\n")
+    return text:gsub("\r\n", "\n")
 end
 
 return StringUtil

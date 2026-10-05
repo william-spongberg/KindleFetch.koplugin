@@ -28,6 +28,14 @@ local _ = require("gettext")
 -- so only check for updates and clear old caches once per session
 local update_check_scheduled = false
 local version_checked = false
+-- and only check for updates automatically once a day, in seconds
+local UPDATE_CHECK_INTERVAL = 24 * 60 * 60
+
+local function updateCheckDue()
+    local last_check = KindleFetchSettings:getLastUpdateCheck()
+    -- (or the clock has been put back since, as an e-reader's can be)
+    return not last_check or math.abs(os.time() - last_check) >= UPDATE_CHECK_INTERVAL
+end
 
 local function installedVersion()
     return FileUtil.readFile(PathUtil.getPluginPath() .. "/version.txt")
@@ -119,6 +127,8 @@ function KindleFetch:init()
         version_checked = true
         logEnvironment()
         clearCachesAfterUpdate()
+        -- tidy up after the last session, which may have closed with downloads still running
+        require("util.curlutil").removeLeftovers()
     end
 
     -- get screen size
@@ -131,7 +141,12 @@ function KindleFetch:init()
     self.ui.menu:registerToMainMenu(self)
 
     -- if network is connected, schedule update checks after UI is ready
-    if not update_check_scheduled and KindleFetchSettings:getCheckForUpdates() and NetworkMgr:isConnected() then
+    if
+        not update_check_scheduled
+        and KindleFetchSettings:getCheckForUpdates()
+        and NetworkMgr:isConnected()
+        and updateCheckDue()
+    then
         update_check_scheduled = true
         UIManager:scheduleIn(0.1, function()
             -- check curl is at min version
@@ -145,7 +160,7 @@ end
 function KindleFetch:checkForUpdates()
     NetworkMgr:runWhenConnected(function()
         NotifyUtil.info("Checking for updates...")
-        CurlUpdater.checkVersion()
+        CurlUpdater.checkVersion(true)
         PluginUpdater.checkForUpdates(true)
     end)
 end
@@ -190,7 +205,6 @@ function KindleFetch:setupUI()
                     text = "Cancel",
                     callback = function()
                         UIManager:close(this.search_box)
-                        UIManager:setDirty(this.search_box, "ui")
                     end,
                 },
                 {
@@ -203,7 +217,6 @@ function KindleFetch:setupUI()
         },
     }
     UIManager:show(self.search_box)
-    UIManager:setDirty(self.search_box, "ui")
 end
 
 function KindleFetch:performSearch()
@@ -382,10 +395,18 @@ function KindleFetch:openBook(filepath)
         UIManager:close(self.search_box)
     end
 
-    if self.ui.document then
-        self.ui:switchDocument(filepath)
+    -- open it from whichever of a book or the file manager is open by now, rather than from self.ui, as the one
+    -- the download was started from may have closed since (e.g. while the download was hidden)
+    local ReaderUI = require("apps/reader/readerui")
+    if ReaderUI.instance then
+        ReaderUI.instance:switchDocument(filepath)
+        return
+    end
+    local FileManager = require("apps/filemanager/filemanager")
+    if FileManager.instance then
+        FileManager.instance:openFile(filepath)
     else
-        self.ui:openFile(filepath)
+        ReaderUI:showReader(filepath)
     end
 end
 
@@ -404,7 +425,7 @@ function KindleFetch:downloadBook(book)
                         TextBoxWidget.PTF_HEADER,
                         _("Downloaded"),
                         TextBoxWidget.PTF_BOLD_START,
-                        book.title,
+                        book.display_title or book.title,
                         TextBoxWidget.PTF_BOLD_END,
                         _("Would you like to read it now?")
                     ),
@@ -438,6 +459,9 @@ function KindleFetch:downloadBook(book)
             LogUtil.warn("download failed for", book.title, err)
             NotifyUtil.info(err and ("Download failed: " .. err) or "Download failed")
         end
+    end, function(existing_filepath)
+        -- the book is already there, and was chosen to be read rather than downloaded again
+        self:openBook(existing_filepath)
     end)
 end
 

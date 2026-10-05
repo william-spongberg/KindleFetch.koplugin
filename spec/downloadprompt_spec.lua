@@ -79,6 +79,22 @@ describe("DownloadPrompt", function()
         assert.is_true(prompt.title.bold)
     end)
 
+    -- so the prompt fits on the screen whatever the book is called
+    it("shows at most 4 lines of a long title, and 2 of a long list of authors", function()
+        local prompt = newPrompt()
+        assert.is_nil(prompt.title.height)
+        assert.is_nil(prompt.author.height)
+
+        book.display_title = string.rep("A very long title ", 20)
+        book.authors = string.rep("Author, Another; ", 20)
+        prompt = newPrompt()
+        assert.are.equal(string.rep("A very long title ", 20), prompt.title.text)
+        assert.are.equal(4 * 20, prompt.title.height)
+        assert.is_true(prompt.title.height_overflow_show_ellipsis)
+        assert.are.equal(2 * 20, prompt.author.height)
+        assert.is_true(prompt.author.height_overflow_show_ellipsis)
+    end)
+
     it("leaves out missing details", function()
         book.year = nil
         book.file_size = nil
@@ -96,6 +112,19 @@ describe("DownloadPrompt", function()
 
         prompt:close()
         assert.is_true(helper.wasClosed(prompt.outer_container))
+    end)
+
+    -- as KOReader's own dialogs do, rather than flashing the whole screen each time
+    it("only refreshes the part of the screen it takes up when shown and closed", function()
+        local prompt = newPrompt()
+        prompt.frame.dimen = { x = 50, y = 200, w = 500, h = 400 }
+
+        prompt:show()
+        assert.are.same({ "ui", prompt.frame.dimen }, helper.state.refreshes[#helper.state.refreshes])
+
+        helper.state.refreshes = {}
+        prompt:close()
+        assert.are.same({ { "ui", prompt.frame.dimen } }, helper.state.refreshes)
     end)
 
     it("downloads to the chosen path when confirmed", function()

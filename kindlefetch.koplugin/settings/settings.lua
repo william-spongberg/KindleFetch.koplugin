@@ -487,19 +487,58 @@ local OLD_BOOK_TYPES = {
     standards_document = "standards",
 }
 
+-- opened once and kept, as reading the file from storage for every setting is slow on an e-reader
+local cached_file
 local function getSettingsFile()
-    return LuaSettings:open(DataStorage:getSettingsDir() .. "/kindlefetch_settings.lua")
+    if not cached_file then
+        cached_file = LuaSettings:open(DataStorage:getSettingsDir() .. "/kindlefetch_settings.lua")
+    end
+    return cached_file
 end
 
+local function sameSetting(a, b)
+    if type(a) ~= "table" or type(b) ~= "table" then
+        return a == b
+    end
+    if #a ~= #b then
+        return false
+    end
+    for i, value in ipairs(a) do
+        if value ~= b[i] then
+            return false
+        end
+    end
+    return true
+end
+
+-- fill in the settings that aren't saved yet, or were saved by an older version. this runs every time the file
+-- manager or a book is opened, so the file is only written when something changed
 function KindleFetchSettings:load()
-    self:setDownloadDir(self:getDownloadDir())
-    self:setShowBookCovers(self:getShowBookCovers())
-    self:setCheckForUpdates(self:getCheckForUpdates())
-    self:setSearchCacheExpiryDays(self:getSearchCacheExpiryDays())
-    self:setMirrorCacheExpiryDays(self:getMirrorCacheExpiryDays())
-    self:setPreferredLanguages(self:getPreferredLanguages())
-    self:setPreferredFileTypes(self:getPreferredFileTypes())
-    self:setPreferredBookTypes(self:getPreferredBookTypes())
+    local settings_file = getSettingsFile()
+    local changed = false
+    local function fill(name, value)
+        if not sameSetting(settings_file:readSetting(name), value) then
+            settings_file:saveSetting(name, value)
+            changed = true
+        end
+    end
+
+    local download_dir = self:getDownloadDir()
+    if FileUtil.isValidDirectory(download_dir) then
+        fill("download_dir", download_dir)
+    end
+    fill("show_book_covers", self:getShowBookCovers())
+    fill("check_for_updates", self:getCheckForUpdates())
+    fill("search_cache_expiry_days", self:getSearchCacheExpiryDays())
+    fill("mirror_cache_expiry_days", self:getMirrorCacheExpiryDays())
+    fill("preferred_languages", self:getPreferredLanguages())
+    fill("preferred_file_types", self:getPreferredFileTypes())
+    fill("preferred_book_types", self:getPreferredBookTypes())
+
+    if changed then
+        settings_file:flush()
+        LogUtil.debug("saved the settings that were missing or out of date")
+    end
 end
 
 -- util
@@ -568,14 +607,37 @@ function KindleFetchSettings:setLastVersion(version)
     return KindleFetchSettings:setSetting("last_version", version)
 end
 
+-- last_update_check (when the latest release was last looked up, as the time in seconds)
+function KindleFetchSettings:getLastUpdateCheck()
+    return KindleFetchSettings:getSetting("last_update_check")
+end
+function KindleFetchSettings:setLastUpdateCheck(time)
+    return KindleFetchSettings:setSetting("last_update_check", time)
+end
+
+-- skipped_version (plugin version that updating to was turned down, so it isn't offered again automatically)
+function KindleFetchSettings:getSkippedVersion()
+    return KindleFetchSettings:getSetting("skipped_version")
+end
+function KindleFetchSettings:setSkippedVersion(version)
+    return KindleFetchSettings:setSetting("skipped_version", version)
+end
+
+-- curl_update_declined (updating curl was turned down, so it isn't offered again automatically)
+function KindleFetchSettings:getCurlUpdateDeclined()
+    return KindleFetchSettings:getSetting("curl_update_declined") == true
+end
+function KindleFetchSettings:setCurlUpdateDeclined(bool)
+    return KindleFetchSettings:setSetting("curl_update_declined", bool)
+end
+
 -- download_dir
 function KindleFetchSettings:getDownloadDir()
     local settings_file = getSettingsFile()
     local download_dir = settings_file:readSetting("download_dir")
 
     if not StringUtil.assertValidString(download_dir) then
-        local settings = LuaSettings:open(DataStorage:getSettingsDir() .. "/../settings.reader.lua")
-        download_dir = settings:readSetting("home_dir") or ""
+        download_dir = G_reader_settings:readSetting("home_dir") or ""
 
         if download_dir == "" then
             download_dir = "/mnt/us/documents"

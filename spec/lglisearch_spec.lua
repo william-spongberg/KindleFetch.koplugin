@@ -156,6 +156,31 @@ describe("LlgiSearch", function()
             assert.are.equal("https://covers.example/abc.jpg", LlgiSearch:search("dune", 1)[1].image_url)
         end)
 
+        -- covers are downloaded by writing their addresses to a file of options for curl. a mirror could send an
+        -- address with a line break in it, and add options of its own, such as where to save a file
+        it("leaves out a cover whose address isn't just an address", function()
+            results(mirrors[1], {
+                {
+                    md5 = "abc",
+                    cover = "https://covers.example/abc.jpg&#10;output = /mnt/us/koreader/patches/2-evil.lua",
+                    title = "Dune",
+                    file_type = "epub",
+                },
+                {
+                    md5 = "def",
+                    cover = "/covers/def.jpg\noutput = /mnt/us/koreader/patches/2-evil.lua",
+                    title = "Dune Messiah",
+                    file_type = "epub",
+                },
+            })
+            local books = LlgiSearch:search("dune", 1)
+
+            assert.are.equal(2, #books)
+            assert.is_nil(books[1].image_url)
+            assert.is_nil(books[2].image_url)
+            assert.is_truthy(helper.logged("warn", "^left out a cover whose address can't be used"))
+        end)
+
         it("fills in missing details", function()
             results(mirrors[1], {
                 {
@@ -176,19 +201,36 @@ describe("LlgiSearch", function()
             assert.is_nil(book.image_url)
         end)
 
-        it("shortens long titles and author lists for display", function()
+        -- what shows them shortens them to fit. cutting them at 50 bytes here split letters in other alphabets
+        it("keeps long titles and author lists whole", function()
+            local title =
+                "Мастер и Маргарита: роман в двух частях, с иллюстрациями и комментариями"
             results(mirrors[1], {
                 {
                     md5 = "abc",
-                    title = string.rep("Long title ", 10),
+                    title = title,
                     authors = string.rep("Author, ", 10),
                     file_type = "epub",
                 },
             })
             local book = LlgiSearch:search("dune", 1)[1]
 
-            assert.are.equal(string.rep("Long title ", 10):sub(1, 50) .. "…", book.display_title)
-            assert.are.equal(string.rep("Author, ", 10):sub(1, 50) .. "…", book.authors)
+            assert.are.equal(title, book.display_title)
+            assert.are.equal(string.rep("Author, ", 10):gsub("[,%s]+$", ""), book.authors)
+        end)
+
+        it("shows a title as it's written, while naming its file safely", function()
+            results(mirrors[1], {
+                {
+                    md5 = "abc",
+                    title = "Orwell, George: Animal farm (a fairy story)",
+                    file_type = "epub",
+                },
+            })
+            local book = LlgiSearch:search("dune", 1)[1]
+
+            assert.are.equal("Orwell, George: Animal farm", book.display_title)
+            assert.are.equal("Orwell, George- Animal farm", book.title)
         end)
 
         it("decodes html entities", function()
