@@ -20,7 +20,7 @@ describe("LlgiAPI", function()
         web.pages[adsUrl(mirror)] = fixtures.libgenAds(book.md5)
     end
 
-    local saved_filepath
+    local saved_filepath, opened_existing
 
     local function onResult(ok, err, path)
         table.insert(results, {
@@ -30,10 +30,14 @@ describe("LlgiAPI", function()
         saved_filepath = path
     end
 
+    local function onOpenExisting(path)
+        opened_existing = path
+    end
+
     -- ask to download the book, then confirm the download prompt
     local function download()
         local shown = #prompts
-        LlgiAPI:downloadBook(book, filepath, onResult)
+        LlgiAPI:downloadBook(book, filepath, onResult, onOpenExisting)
         if #prompts > shown then
             prompts[#prompts].on_download(prompts[#prompts].filepath)
         end
@@ -72,6 +76,7 @@ describe("LlgiAPI", function()
         }
 
         prompts, spawned, running, killed, results = {}, {}, {}, {}, {}
+        opened_existing = nil
         remote_size = MB
         web = fixtures.fakeWeb(helper)
 
@@ -182,6 +187,60 @@ describe("LlgiAPI", function()
             helper.runScheduled()
             assert.are.same({ { ok = true } }, results)
             assert.are.equal(data_dir .. "/Books/Dune.epub", saved_filepath)
+        end)
+
+        describe("when the book is already there", function()
+            local confirm
+
+            before_each(function()
+                helper.writeFile(filepath, "another edition of Dune")
+                download()
+                confirm = helper.lastShown()
+            end)
+
+            -- rather than downloading over what may be another edition with the same title
+            it("asks before downloading over it", function()
+                assert.are.equal(filepath .. " already exists.", confirm.text)
+                assert.are.equal("Overwrite", confirm.ok_text)
+                assert.are.equal(0, #spawned)
+                assert.are.equal("another edition of Dune", helper.readFile(filepath))
+            end)
+
+            it("downloads over it once told to", function()
+                confirm.ok_callback()
+                assert.are.equal(1, #spawned)
+
+                curlWrote(MB, 0)
+                helper.runScheduled()
+                assert.are.same({ { ok = true } }, results)
+                assert.are.equal(MB, #helper.readFile(filepath))
+            end)
+
+            it("can open it instead", function()
+                local read_existing = confirm.other_buttons[1][1]
+                assert.are.equal("Read existing book", read_existing.text)
+
+                read_existing.callback()
+                assert.are.equal(filepath, opened_existing)
+                assert.are.equal(0, #spawned)
+                assert.are.same({}, results)
+            end)
+
+            it("only offers to open it when it can be", function()
+                LlgiAPI:downloadBook(book, filepath, onResult)
+                prompts[#prompts].on_download(filepath)
+
+                assert.are.equal("Overwrite", helper.lastShown().ok_text)
+                assert.is_nil(helper.lastShown().other_buttons)
+            end)
+
+            it("doesn't ask when another folder is chosen in the prompt", function()
+                LlgiAPI:downloadBook(book, filepath, onResult, onOpenExisting)
+                prompts[#prompts].on_download(data_dir .. "/Books/Dune.epub")
+
+                assert.is_nil(helper.lastShown().ok_text)
+                assert.are.equal(data_dir .. "/Books/Dune.epub", spawned[1].path)
+            end)
         end)
 
         it("shows the progress again when a book that is already downloading is chosen", function()

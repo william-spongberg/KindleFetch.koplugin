@@ -457,6 +457,9 @@ function KindleFetch:downloadBook(book)
             LogUtil.warn("download failed for", book.title, err)
             NotifyUtil.info(err and ("Download failed: " .. err) or "Download failed")
         end
+    end, function(existing_filepath)
+        -- the book is already there, and was chosen to be read rather than downloaded again
+        self:openBook(existing_filepath)
     end)
 end
 

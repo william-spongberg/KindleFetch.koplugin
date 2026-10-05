@@ -1,5 +1,6 @@
 local UIManager = require("ui/uimanager")
 local NetworkMgr = require("ui/network/manager")
+local ConfirmBox = require("ui/widget/confirmbox")
 local LogUtil = require("util.logutil")
 local DownloadProgress = require("ui.downloadprogress")
 local DownloadPrompt = require("ui.downloadprompt")
@@ -334,7 +335,9 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     end)
 end
 
-function LlgiAPI:downloadBook(book, filepath, callback)
+-- open_existing is optionally called with the path of a book that's already there, when asked to read that one
+-- rather than download over it
+function LlgiAPI:downloadBook(book, filepath, callback, open_existing)
     callback = callback or function() end
 
     -- show the progress of a book that is already downloading, in case it was hidden
@@ -357,10 +360,36 @@ function LlgiAPI:downloadBook(book, filepath, callback)
 
     -- show download prompt to let user choose folder and confirm
     local prompt = DownloadPrompt.new(book, filepath, function(confirmed_filepath)
-        -- turning on wifi first if need be, as KOReader is set up to (it says so itself if it can't connect)
-        NetworkMgr:runWhenConnected(function()
-            self:_startDownload(book, confirmed_filepath, callback, false)
-        end)
+        local function start()
+            -- turning on wifi first if need be, as KOReader is set up to (it says so itself if it can't connect)
+            NetworkMgr:runWhenConnected(function()
+                self:_startDownload(book, confirmed_filepath, callback, false)
+            end)
+        end
+
+        if not FileUtil.isValidFile(confirmed_filepath) then
+            start()
+            return
+        end
+
+        -- ask before downloading over a book that's already there, which may be another edition with the same
+        -- title, as KOReader does for the books it downloads
+        LogUtil.info("asking before downloading over", confirmed_filepath)
+        UIManager:show(ConfirmBox:new {
+            text = string.format(_("%s already exists."), confirmed_filepath),
+            ok_text = _("Overwrite"),
+            ok_callback = start,
+            other_buttons = open_existing and {
+                {
+                    {
+                        text = _("Read existing book"),
+                        callback = function()
+                            open_existing(confirmed_filepath)
+                        end,
+                    },
+                },
+            },
+        })
     end)
 
     prompt:show()

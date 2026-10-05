@@ -24,7 +24,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available on Kindles
 - **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
-- **Safe File Handling**: Automatic filename sanitisation and directory management
+- **Safe File Handling**: Automatic filename sanitisation and directory management, asking before downloading over a book that's already there
 
 ## Installation
 
@@ -52,7 +52,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 <img width="400" alt="Search results while covers download" src="docs/screenshots/04-search-results-loading-covers.png" />
 <img width="400" alt="Search results with covers" src="docs/screenshots/05-search-results.png" />
 
-3. In the download prompt, optionally tap the book cover to see it full size, or tap the download path to choose another folder, then tap Download.
+3. In the download prompt, optionally tap the book cover to see it full size, or tap the download path to choose another folder, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
 
 <img width="400" alt="Download prompt" src="docs/screenshots/06-download-prompt.png" />
 <img width="400" alt="Fullscreen cover" src="docs/screenshots/07-download-cover.png" />
@@ -179,6 +179,7 @@ kindlefetch.koplugin/
 
 4. **Download Phase** (`LlgiAPI`)
    - User selects a book and optionally changes the save location via DownloadPrompt
+   - If a file of that name is already there, the plugin asks whether to overwrite it or read the existing book
    - The book's cover is fetched if it isn't cached already
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Curl fetches the ads page using the book's MD5 hash to obtain a download URL

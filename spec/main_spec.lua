@@ -165,11 +165,12 @@ describe("KindleFetch", function()
             cancelAllDownloads = function()
                 cancelled_downloads = cancelled_downloads + 1
             end,
-            downloadBook = function(_, download_book, filepath, callback)
+            downloadBook = function(_, download_book, filepath, callback, open_existing)
                 table.insert(downloads, {
                     book = download_book,
                     filepath = filepath,
                     callback = callback,
+                    open_existing = open_existing,
                 })
             end,
         })
@@ -638,6 +639,16 @@ describe("KindleFetch", function()
             assert.is_true(helper.wasClosed(dialog))
             assert.are.same({ "openFile", "/mnt/us/books/Dune.epub" }, opened)
             -- closing the search box too, which would otherwise show again once the book is closed
+            assert.is_true(helper.wasClosed(menus[1]))
+            assert.is_true(helper.wasClosed(plugin.search_box))
+        end)
+
+        -- chosen when asked whether to download over it
+        it("opens a book that's already there, in place of downloading it again", function()
+            selectBook("Dune")
+            downloads[1].open_existing("/mnt/us/documents/Dune.epub")
+
+            assert.are.same({ "openFile", "/mnt/us/documents/Dune.epub" }, opened)
             assert.is_true(helper.wasClosed(menus[1]))
             assert.is_true(helper.wasClosed(plugin.search_box))
         end)
