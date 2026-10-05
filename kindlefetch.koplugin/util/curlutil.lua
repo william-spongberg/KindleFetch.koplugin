@@ -203,6 +203,23 @@ function CurlUtil.getDownloadSize(headers_file)
     return CurlUtil.parseContentLength(headers or "")
 end
 
+-- the HTTP status the site ended up answering a download with, going by the headers curl has noted down, e.g. 503
+-- when curl gave up because of it, or nil if it hasn't answered
+function CurlUtil.getDownloadStatus(headers_file)
+    local f = io.open(headers_file, "r")
+    if not f then
+        return nil
+    end
+    local headers = f:read("*a")
+    f:close()
+
+    local last_status
+    for status in (headers or ""):gmatch("HTTP[/%d%.]+ (%d%d%d)") do
+        last_status = tonumber(status)
+    end
+    return last_status
+end
+
 -- file a page is fetched into, see fetchCommand
 function CurlUtil.createPageFile()
     local page_file = tmpFile("curl_download", ".page")

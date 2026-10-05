@@ -193,6 +193,18 @@ describe("CurlUtil", function()
             assert.is_nil(CurlUtil.getDownloadSize(headers_file))
         end)
 
+        -- which is why curl gave up, when it gives up because of the site's answer
+        it("says which HTTP status the site ended up answering with", function()
+            assert.is_nil(CurlUtil.getDownloadStatus(headers_file))
+
+            helper.writeFile(
+                headers_file,
+                "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/book\r\n\r\n"
+                    .. "HTTP/2 503 \r\ncontent-length: 212\r\n\r\n"
+            )
+            assert.are.equal(503, CurlUtil.getDownloadStatus(headers_file))
+        end)
+
         it("returns nil until curl has noted the headers down", function()
             assert.is_nil(CurlUtil.getDownloadSize(headers_file))
 

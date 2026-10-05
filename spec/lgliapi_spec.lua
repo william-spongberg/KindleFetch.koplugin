@@ -569,6 +569,31 @@ describe("LlgiAPI", function()
             )
         end)
 
+        -- as happened while this was written: the mirrors linked to the book, then answered with an error
+        it("says Library Genesis is too busy when its servers fail to send the book", function()
+            download()
+            helper.writeFile(spawned[1].headers_file, "HTTP/2 503 \r\ncontent-length: 212\r\n\r\n")
+            helper.writeFile(spawned[1].exit_file, "22")
+            helper.runScheduled()
+
+            assert.are.same({
+                {
+                    ok = false,
+                    err = "Library Genesis is too busy to send books right now, try again in a few minutes",
+                },
+            }, results)
+            assert.matches("curl exit code 22 %(HTTP error response, HTTP 503%)", helper.logged("warn", "failed after"))
+        end)
+
+        it("says which HTTP error stopped the download when it isn't Library Genesis' servers failing", function()
+            download()
+            helper.writeFile(spawned[1].headers_file, "HTTP/2 404 \r\ncontent-length: 9\r\n\r\n")
+            helper.writeFile(spawned[1].exit_file, "22")
+            helper.runScheduled()
+
+            assert.are.same({ { ok = false, err = "HTTP error response (HTTP 404)" } }, results)
+        end)
+
         it("fails when the downloaded file is empty", function()
             download()
 

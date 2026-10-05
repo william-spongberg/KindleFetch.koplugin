@@ -115,15 +115,21 @@ local function pollDownload(
             return
         end
 
+        -- the error the mirror answered with, when that's why curl gave up
+        local http_status = exit_code == 22 and CurlUtil.getDownloadStatus(headers_file) or nil
+        if http_status and http_status < 400 then
+            http_status = nil
+        end
         LogUtil.warn(
             string.format(
-                "download of %q from %s%s failed after %ds: curl exit code %d (%s), %d of %s bytes",
+                "download of %q from %s%s failed after %ds: curl exit code %d (%s%s), %d of %s bytes",
                 book.title,
                 LogUtil.site(download_url),
                 tried_proxy and " through the proxy" or "",
                 seconds,
                 exit_code,
                 exit_code == 0 and "empty file" or CurlUtil.getErrorMeaning(exit_code),
+                http_status and ", HTTP " .. http_status or "",
                 final_size or 0,
                 tostring(total_size or "unknown")
             )
@@ -161,7 +167,12 @@ local function pollDownload(
         end
 
         FileUtil.removeFile(part_path)
-        callback(false, exit_code == 0 and "download produced empty file" or CurlUtil.getErrorMeaning(exit_code))
+        local err = exit_code == 0 and "download produced empty file" or CurlUtil.getErrorMeaning(exit_code)
+        if http_status then
+            -- its servers failing, as they do while very busy, rather than e.g. the book not being there
+            err = http_status >= 500 and BUSY_ERROR or string.format("%s (HTTP %d)", err, http_status)
+        end
+        callback(false, err)
         return
     end
 
