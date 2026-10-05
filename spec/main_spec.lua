@@ -438,6 +438,16 @@ describe("KindleFetch", function()
             assert.are.equal(0, #searches)
         end)
 
+        it("starts from the keyboard's enter key as well as the Search button", function()
+            local plugin = openUI()
+            plugin:setupUI()
+
+            local search_button = plugin.search_box.buttons[1][2]
+            assert.are.equal("Search", search_button.text)
+            assert.is_true(search_button.is_enter_default)
+            assert.is_nil(plugin.search_box.buttons[1][1].is_enter_default)
+        end)
+
         it("needs a search term", function()
             local plugin = openUI()
             search(plugin, "   ")

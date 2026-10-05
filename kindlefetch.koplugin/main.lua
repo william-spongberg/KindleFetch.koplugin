@@ -212,6 +212,8 @@ function KindleFetch:setupUI()
                 },
                 {
                     text = "Search",
+                    -- so the keyboard's enter key searches too
+                    is_enter_default = true,
                     callback = function()
                         this:performSearch()
                     end,
