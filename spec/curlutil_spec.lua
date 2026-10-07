@@ -51,7 +51,34 @@ describe("CurlUtil", function()
         helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
         assert.are.equal("8.17.0", CurlUtil.getVersion())
         helper.stubCommand("curl --version", "")
+        CurlUtil.forgetVersion()
         assert.is_nil(CurlUtil.getVersion())
+    end)
+
+    -- it's asked for when KOReader starts, before searching, and before offering to update curl
+    it("only starts curl to ask its version once per session", function()
+        helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
+        CurlUtil.getVersion()
+        CurlUtil.canFetch()
+        CurlUtil.getVersion()
+        assert.are.equal(1, #helper.state.popen_calls)
+
+        -- or once it isn't there
+        helper.stubCommand("curl --version", "")
+        CurlUtil.forgetVersion()
+        CurlUtil.getVersion()
+        CurlUtil.canFetch()
+        assert.are.equal(2, #helper.state.popen_calls)
+    end)
+
+    it("asks again once told to forget, e.g. after curl has been updated", function()
+        helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
+        assert.is_false(CurlUtil.canFetch())
+
+        helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 zlib\n")
+        CurlUtil.forgetVersion()
+        assert.are.equal("8.17.0", CurlUtil.getVersion())
+        assert.is_true(CurlUtil.canFetch())
     end)
 
     -- pages are fetched with curl where it's up to it, as it asks for them compressed and can wait in the background

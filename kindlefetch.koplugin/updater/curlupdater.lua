@@ -109,6 +109,8 @@ local function updateCurl()
     end
 
     LogUtil.info("installed static curl " .. MIN_VERSION)
+    -- so searches use the new curl straight away, rather than once KOReader has restarted
+    CurlUtil.forgetVersion()
     NotifyUtil.info("Updated curl to v" .. MIN_VERSION)
     -- ask again if it's ever out of date again, e.g. once a Kindle update puts the old one back
     KindleFetchSettings:setCurlUpdateDeclined(false)

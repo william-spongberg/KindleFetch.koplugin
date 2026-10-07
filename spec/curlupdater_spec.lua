@@ -212,6 +212,19 @@ describe("CurlUpdater", function()
             assert.are.equal("Failed to remount root as read-only", helper.lastError())
         end)
 
+        -- so searches use it straight away, rather than KOReader's own HTTP until KOReader restarts
+        it("looks up curl's version again once it has installed the new one", function()
+            stubInstall()
+            acceptUpdate()
+
+            helper.stubCommand(
+                "curl --version",
+                "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1\n"
+            )
+            assert.is_true(CurlUtil.canFetch())
+            assert.are.equal("8.17.0", CurlUtil.getVersion())
+        end)
+
         it("carries on when the installed curl's permissions cannot be set", function()
             stubInstall({ permissions = true })
             acceptUpdate()

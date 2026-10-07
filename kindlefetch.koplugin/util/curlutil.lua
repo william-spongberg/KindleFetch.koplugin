@@ -115,17 +115,20 @@ function CurlUtil.killPid(pid)
 end
 
 -- how the installed curl describes itself, e.g. "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0
--- OpenSSL/3.5.4 zlib/1.3.1", or nil if curl isn't there
+-- OpenSSL/3.5.4 zlib/1.3.1", or nil if curl isn't there. looked up once per session (see forgetVersion), as it
+-- means starting curl, and several things ask
+local curl_description
 local function describeCurl()
-    local pipe = io.popen("curl --version 2>/dev/null", "r")
-    if not pipe then
-        return nil
+    if curl_description == nil then
+        local pipe = io.popen("curl --version 2>/dev/null", "r")
+        local output = pipe and pipe:read("*l")
+        if pipe then
+            pipe:close()
+        end
+        -- false when curl isn't there, so it isn't looked for again
+        curl_description = output or false
     end
-
-    local output = pipe:read("*l")
-    pipe:close()
-
-    return output
+    return curl_description or nil
 end
 
 -- the installed curl's version, e.g. "8.17.0", or nil if curl isn't there
@@ -162,6 +165,12 @@ end
 function CurlUtil.canFetch()
     checkCurl()
     return can_fetch
+end
+
+-- look curl up again when it's next needed, e.g. once a newer one has been installed
+function CurlUtil.forgetVersion()
+    curl_description = nil
+    can_fetch, can_decompress = nil, nil
 end
 
 function CurlUtil.getErrorMeaning(exit_code)
