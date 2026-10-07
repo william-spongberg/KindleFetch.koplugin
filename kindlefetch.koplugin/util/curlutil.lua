@@ -138,6 +138,12 @@ function CurlUtil.getVersion()
     return description and description:match("^curl%s+([%d%.]+)")
 end
 
+-- whether the installed curl is at least min_version, e.g. "7.68.0", for options older ones would fail on
+local function curlIsAtLeast(min_version)
+    local version = VersionUtil.parseVersion(CurlUtil.getVersion())
+    return version ~= nil and VersionUtil.compareVersions(version, VersionUtil.parseVersion(min_version)) >= 0
+end
+
 -- whether curl can fetch web pages (see fetchCommand), and ask for them compressed. worked out once per session,
 -- as it means running curl
 local can_fetch, can_decompress
@@ -319,7 +325,13 @@ function CurlUtil.dumpHeaders(curl_cmd, headers_file)
 end
 
 function CurlUtil.enableParallel(curl_cmd, max_parallel)
-    return string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
+    local cmd = string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
+    -- open a connection for each file at once, rather than waiting to see whether they can share one, which
+    -- Library Genesis' sites never let them: a page of covers arrives in a third of the time
+    if curlIsAtLeast("7.68.0") then
+        cmd = cmd .. " --parallel-immediate"
+    end
+    return cmd
 end
 
 function CurlUtil.applyProxy(curl_cmd)

@@ -459,6 +459,27 @@ describe("CurlUtil", function()
             assert.matches("--retry 2", cmd, 1, true)
         end)
 
+        -- rather than waiting to see whether they can share one connection, which Library Genesis never allows
+        it("opens a connection for every file at once, where curl can", function()
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }))
+            local function command()
+                CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15)
+                return helper.state.executed[#helper.state.executed]
+            end
+
+            helper.stubCommand("curl --version", "curl 7.68.0 (x86_64-pc-linux-gnu) libcurl/7.68.0\n")
+            assert.matches("--parallel --parallel-max 4 --parallel-immediate", command(), 1, true)
+
+            -- older curls stop at options they don't know
+            helper.stubCommand("curl --version", "curl 7.67.0 (x86_64-pc-linux-gnu) libcurl/7.67.0\n")
+            CurlUtil.forgetVersion()
+            assert.is_nil(command():find("--parallel-immediate", 1, true))
+
+            helper.stubCommand("curl --version", "")
+            CurlUtil.forgetVersion()
+            assert.is_nil(command():find("--parallel-immediate", 1, true))
+        end)
+
         -- anything else in the file is read by curl as an option, such as where to save a file
         it("only writes addresses and where to save them to curl's config file", function()
             helper.stubCommand("& echo $!", "4242\n")

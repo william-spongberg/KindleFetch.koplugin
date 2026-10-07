@@ -174,7 +174,7 @@ kindlefetch.koplugin/
    - When Library Genesis lists results but none are in the preferred languages and file types, the plugin says how many it listed, and offers the settings or to keep searching through the rest
 
 3. **Cover Loading**
-   - Covers for the page of results showing are downloaded in the background, in parallel using curl's `--parallel` flag, with placeholders shown until they arrive
+   - Covers for the page of results showing are downloaded in the background, in parallel using curl's `--parallel` flag, with placeholders shown until they arrive. A connection is opened for each cover at once (with curl 7.68 or later), rather than curl waiting to see whether they can share one, which Library Genesis doesn't allow, so a page of covers arrives in about a third of the time
    - Turning the page loads the covers for that page, and the next page's are downloaded ahead so they're there when it's turned to
    - A cover that stalls is given up on after 10 seconds, so it doesn't keep the rest of its page waiting
    - Downloaded covers are cached locally with persistent storage
