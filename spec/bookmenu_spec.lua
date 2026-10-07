@@ -288,6 +288,31 @@ describe("BookMenu", function()
         end)
     end)
 
+    describe("redrawing as covers arrive", function()
+        -- covers arrive several times a page, and each redraw refreshes the screen
+        it("doesn't redraw the page until one of its own covers has downloaded, or been given up on", function()
+            local menu = newMenu(11)
+            menu:updateItems()
+            helper.state.refreshes = {}
+
+            cacheCover("md5-6")
+            menu:onKindleFetchCoversDownloaded()
+            assert.are.equal(0, #helper.state.refreshes)
+
+            cacheCover("md5-2")
+            menu:onKindleFetchCoversDownloaded()
+            assert.are.equal(1, #helper.state.refreshes)
+
+            -- its placeholder is taken away
+            require("util.curlutil").downloadMultiple = function()
+                return nil, nil, nil, "unable to launch curl"
+            end
+            CoverCache:downloadMultiple({ menu.item_table[3].book }, 1)
+            menu:onKindleFetchCoversDownloaded()
+            assert.are.equal(2, #helper.state.refreshes)
+        end)
+    end)
+
     describe("loadCoversForPage", function()
         local requested
 
@@ -391,6 +416,7 @@ describe("BookMenu", function()
             menu.page = 3
             menu:updateItems()
             helper.state.refreshes = {}
+            cacheCover("md5-11")
             menu:onKindleFetchCoversDownloaded()
 
             assert.are.equal(2, #menu.item_group)
@@ -398,6 +424,10 @@ describe("BookMenu", function()
             -- once, and without the flash of a full refresh
             assert.are.equal(1, #helper.state.refreshes)
             assert.are.equal("ui", helper.state.refreshes[1][1])
+
+            -- and not again, once they're all there
+            menu:onKindleFetchCoversDownloaded()
+            assert.are.equal(1, #helper.state.refreshes)
         end)
 
         -- such as the next page's, which are downloaded ahead of it being turned to

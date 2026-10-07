@@ -432,7 +432,7 @@ describe("CurlUtil", function()
                         table.insert(results, transfer_exit_codes[i] .. " " .. output)
                     end
                 end
-                helper.writeFile(cmd:match("%-w '[^']*' > '([^']+)'"), table.concat(results, "\n"))
+                helper.writeFile(cmd:match("%-w '[^']*' 2?> '([^']+)'"), table.concat(results, "\n"))
                 helper.writeFile(cmd:match("echo %$%? > '([^']+)'"), tostring(exit_code or 0))
             end
         end
@@ -480,6 +480,26 @@ describe("CurlUtil", function()
             assert.is_nil(command():find("--parallel-immediate", 1, true))
         end)
 
+        -- so covers can be shown as they arrive, rather than once the slowest has
+        it("writes each file's result as soon as it has downloaded, where curl can", function()
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }, 0, { 0, 0, 0 }))
+            local function command()
+                CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15)
+                return helper.state.executed[#helper.state.executed]
+            end
+
+            -- its stderr isn't buffered, unlike its stdout
+            helper.stubCommand("curl --version", "curl 7.63.0 (x86_64-pc-linux-gnu) libcurl/7.63.0\n")
+            assert.matches("-w '%{stderr}%{exitcode} %{filename_effective}\\n' 2> '", command(), 1, true)
+            assert.is_true(helper.exists(paths[3]))
+
+            -- older curls can only write them out together, once they've all finished
+            helper.stubCommand("curl --version", "curl 7.62.0 (x86_64-pc-linux-gnu) libcurl/7.62.0\n")
+            CurlUtil.forgetVersion()
+            assert.matches("-w '%{exitcode} %{filename_effective}\\n' > '", command(), 1, true)
+            assert.is_true(helper.exists(paths[3]))
+        end)
+
         -- anything else in the file is read by curl as an option, such as where to save a file
         it("only writes addresses and where to save them to curl's config file", function()
             helper.stubCommand("& echo $!", "4242\n")
@@ -499,7 +519,7 @@ describe("CurlUtil", function()
             assert.is_truthy(helper.logged("warn", "^left out a download whose address can't be used"))
         end)
 
-        -- the files are shown once they've all finished, so one that has stalled would keep the rest waiting
+        -- the next page's covers are fetched once these have finished, and older curls only say once they all have
         it("gives up on a file once nothing of it has arrived for a while, when asked to", function()
             helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }))
 

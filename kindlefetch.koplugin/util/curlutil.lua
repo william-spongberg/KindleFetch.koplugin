@@ -534,13 +534,20 @@ function CurlUtil.downloadMultiple(
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)
     end
-    -- write each file's result, as some may download when others fail
-    cmd = string.format(
-        "%s -w %s > %s",
-        cmd,
-        CurlUtil.shellQuote("%{exitcode} %{filename_effective}\\n"),
-        CurlUtil.shellQuote(results_file)
-    )
+    -- write each file's result, as some may download when others fail. where curl can, to its stderr, which isn't
+    -- buffered like its stdout, so each file's result is there as soon as it has downloaded (and been written out
+    -- in full), rather than once they all have
+    local write_out = "%{exitcode} %{filename_effective}\\n"
+    if curlIsAtLeast("7.63.0") then
+        cmd = string.format(
+            "%s -w %s 2> %s",
+            cmd,
+            CurlUtil.shellQuote("%{stderr}" .. write_out),
+            CurlUtil.shellQuote(results_file)
+        )
+    else
+        cmd = string.format("%s -w %s > %s", cmd, CurlUtil.shellQuote(write_out), CurlUtil.shellQuote(results_file))
+    end
 
     local exit_file = CurlUtil.createExitFile()
     cmd = CurlUtil.saveExitCode(cmd, exit_file)

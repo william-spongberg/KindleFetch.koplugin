@@ -210,6 +210,23 @@ describe("DownloadPrompt", function()
             assert.are.equal(prompt.cover, prompt.header[1])
         end)
 
+        -- which arrive several times a second while the search results behind it load theirs
+        it("isn't redrawn when other books' covers arrive", function()
+            book.image_url = "https://covers.example/dune.jpg"
+            local prompt = newPrompt()
+            prompt:show()
+            helper.state.refreshes = {}
+
+            fixtures.cacheCover(helper, "another-book")
+            prompt.outer_container:onKindleFetchCoversDownloaded()
+            assert.are.equal(0, #helper.state.refreshes)
+
+            cacheCover()
+            prompt.outer_container:onKindleFetchCoversDownloaded()
+            assert.are.equal(1, #helper.state.refreshes)
+            assert.are.equal(prompt.cover_container, prompt.cover)
+        end)
+
         it("is taken away when it couldn't be downloaded", function()
             book.image_url = "https://covers.example/dune.jpg"
             local prompt = newPrompt()

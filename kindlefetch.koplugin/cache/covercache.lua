@@ -12,10 +12,14 @@ local CoverCache = {}
 -- constants
 local CACHE_DIR = DataStorage:getSettingsDir() .. "/kindlefetch_covers/"
 local POLL_INTERVAL = 0.5
+-- covers are shown as they arrive, but at most once in this many polls (a second), as each time the screen is
+-- refreshed
+local PROGRESS_POLLS = 2
 -- the cover is fetched before the download prompt shows, so don't wait long for it
 local COVER_MAX_TIME = 10
--- a cover that nothing has arrived of for this many seconds is given up on. the covers on a page are shown once
--- they have all finished, so one that has stalled would otherwise keep the rest waiting for as long as they can take
+-- a cover that nothing has arrived of for this many seconds is given up on, rather than keeping its placeholder
+-- showing, and the next page's covers from being fetched ahead, for as long as it can take (and with a curl too old
+-- to say as each cover arrives, keeping the rest of its page waiting)
 local COVER_STALL_TIME = 10
 
 -- md5s of covers being downloaded, so they aren't downloaded twice at once
@@ -165,14 +169,28 @@ function CoverCache:download(md5, url)
     return nil
 end
 
--- download curl's background downloads into the cover cache once it has finished, calling on_done with
--- the paths that downloaded
-local function pollDownloads(pid, exit_file, config_file, filepaths, on_done)
+-- the paths that have downloaded, going by curl's results so far and its exit code once it has one
+local function downloadedPaths(results, filepaths, exit_code)
+    local downloaded = {}
+    for _, path in ipairs(filepaths) do
+        if CurlUtil.isTransferComplete(results, path, exit_code) then
+            table.insert(downloaded, path)
+        end
+    end
+    return downloaded
+end
+
+-- wait for curl's background downloads to finish, calling on_progress with the paths that have downloaded so far
+-- while it's still going (where curl says as each finishes, see CurlUtil.downloadMultiple), and on_done with the
+-- paths that downloaded once it has finished
+local function pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
+    local results_file = CurlUtil.getResultsFile(config_file)
     local exit_code = CurlUtil.getExitCode(exit_file)
     if not exit_code then
         if CurlUtil.isPidRunning(pid) then
+            on_progress(downloadedPaths(CurlUtil.getTransferResults(results_file), filepaths))
             UIManager:scheduleIn(POLL_INTERVAL, function()
-                pollDownloads(pid, exit_file, config_file, filepaths, on_done)
+                pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
             end)
             return
         end
@@ -180,17 +198,18 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_done)
         exit_code = CurlUtil.getExitCode(exit_file)
     end
 
-    local results_file = CurlUtil.getResultsFile(config_file)
     local results = CurlUtil.getTransferResults(results_file)
     FileUtil.removeFile(config_file)
     FileUtil.removeFile(results_file)
 
     -- keep the covers that downloaded, removing any partial files left by ones that failed
-    local downloaded = {}
+    local downloaded = downloadedPaths(results, filepaths, exit_code)
+    local kept = {}
+    for _, path in ipairs(downloaded) do
+        kept[path] = true
+    end
     for _, path in ipairs(filepaths) do
-        if CurlUtil.isTransferComplete(results, path, exit_code) then
-            table.insert(downloaded, path)
-        else
+        if not kept[path] then
             FileUtil.removeFile(path)
         end
     end
@@ -209,7 +228,7 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_done)
     on_done(downloaded)
 end
 
-local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs, on_done)
+local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs, on_progress, on_done)
     local pid, exit_file, config_file, err =
         CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, true, parallel_jobs, false, 15, {
             stall_time = COVER_STALL_TIME,
@@ -221,13 +240,14 @@ local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs
     end
 
     UIManager:scheduleIn(POLL_INTERVAL, function()
-        pollDownloads(pid, exit_file, config_file, filepaths, on_done)
+        pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
     end)
 end
 
 -- download missing covers in the background, calling on_done with the number downloaded once finished, and
 -- letting open search results and download prompts know with a KindleFetchCoversDownloaded event, so they
--- can replace the placeholders. returns false when there was nothing to download.
+-- can replace the placeholders: as covers arrive, rather than once the slowest has, and once they've all
+-- finished. returns false when there was nothing to download.
 function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     ensureCacheDir()
     removeOrphans()
@@ -251,19 +271,43 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
         return false
     end
 
-    local function finish(downloaded_paths)
-        local downloaded = {}
-        for _, path in ipairs(downloaded_paths) do
-            downloaded[path] = true
-        end
+    local md5_of = {}
+    for i, path in ipairs(filepaths) do
+        md5_of[path] = md5s[i]
+    end
 
-        local count = 0
+    -- the covers that have arrived, as they're added to the cache (in memory, until they've all finished)
+    local kept = {}
+    local count = 0
+    local function keep(paths)
+        local added = 0
+        for _, path in ipairs(paths) do
+            if md5_of[path] and not kept[path] then
+                kept[path] = true
+                downloading[md5_of[path]] = nil
+                persistent_cache:put(path, md5_of[path])
+                added = added + 1
+            end
+        end
+        count = count + added
+        return added
+    end
+
+    -- show the covers that have arrived while others are still coming
+    local polls_since_shown = PROGRESS_POLLS
+    local function onProgress(downloaded_paths)
+        polls_since_shown = polls_since_shown + 1
+        if polls_since_shown >= PROGRESS_POLLS and keep(downloaded_paths) > 0 then
+            polls_since_shown = 0
+            UIManager:broadcastEvent(Event:new("KindleFetchCoversDownloaded"))
+        end
+    end
+
+    local function finish(downloaded_paths)
+        keep(downloaded_paths)
         for i, md5 in ipairs(md5s) do
-            downloading[md5] = nil
-            if downloaded[filepaths[i]] then
-                persistent_cache:put(filepaths[i], md5)
-                count = count + 1
-            else
+            if not kept[filepaths[i]] then
+                downloading[md5] = nil
                 unavailable[md5] = true
             end
         end
@@ -277,7 +321,7 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
         on_done(count)
     end
 
-    startDownloads(download_urls, filepaths, false, parallel_jobs, function(downloaded_paths)
+    startDownloads(download_urls, filepaths, false, parallel_jobs, onProgress, function(downloaded_paths)
         if #downloaded_paths == #filepaths or not hasProxy() then
             finish(downloaded_paths)
             return
@@ -298,7 +342,7 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
         end
 
         LogUtil.debug("retrying", #retry_urls, "cover downloads through proxy")
-        startDownloads(retry_urls, retry_paths, true, parallel_jobs, function(retried_paths)
+        startDownloads(retry_urls, retry_paths, true, parallel_jobs, onProgress, function(retried_paths)
             for _, path in ipairs(retried_paths) do
                 table.insert(downloaded_paths, path)
             end

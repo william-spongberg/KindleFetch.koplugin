@@ -72,9 +72,12 @@ function DownloadPrompt.new(book, filepath, on_download)
         end
         return false
     end
-    -- show the cover once it has downloaded, or take its placeholder away if it couldn't be
+    -- show the cover once it has downloaded, or take its placeholder away if it couldn't be, but not for other
+    -- books' covers, which can arrive several times a second while search results are open
     function self.outer_container.onKindleFetchCoversDownloaded()
-        parent_ref:refreshCover()
+        if parent_ref:coverState() ~= parent_ref.cover_state then
+            parent_ref:refreshCover()
+        end
     end
 
     self:buildCover()
@@ -149,10 +152,21 @@ function DownloadPrompt:coverFile()
     return CoverCache:getFullSize(self.book) or CoverCache:get(self.book.md5)
 end
 
+-- which of its covers the book has, and which are still coming, to tell when that has changed
+function DownloadPrompt:coverState()
+    return string.format(
+        "%s|%s|%s",
+        tostring(self:coverFile()),
+        tostring(CoverCache:isComing(self.book)),
+        tostring(CoverCache:isFullSizeComing(self.book))
+    )
+end
+
 -- the book's cover (which can be tapped to show it fullscreen), a placeholder while it downloads, or nothing
 function DownloadPrompt:buildCover()
     self.cover = nil
     self.cover_container = nil
+    self.cover_state = self:coverState()
 
     local cover_file = self:coverFile()
     if cover_file then
