@@ -733,6 +733,18 @@ describe("LlgiAPI", function()
             )
         end)
 
+        -- rather than that the TLS connection failed, which doesn't say what to do about it
+        it("says when a Kindle's curl is too old to download the book, and how to update it", function()
+            helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0\n")
+            CurlUtil.forgetVersion()
+            download()
+            curlWrote(0, 35)
+            helper.runScheduled()
+
+            assert.are.same({ { ok = false, err = CurlUtil.OUTDATED_ERROR } }, results)
+            assert.matches("Check for updates", CurlUtil.OUTDATED_ERROR, 1, true)
+        end)
+
         -- as happened while this was written: the mirrors linked to the book, then answered with an error
         it("says Library Genesis is too busy when its servers fail to send the book", function()
             download()

@@ -120,7 +120,9 @@ end
 -- prompt for curl update
 local function promptCurlUpdate(current_version, min_version)
     local message = string.format(
-        "curl v%s is installed.\nMinimum required: v%s\n\nUpdate curl now? This will avoid potential TLS issues.",
+        "curl v%s is installed.\nMinimum required: v%s\n\nUntil curl is updated, Kindle Fetch can't download books "
+            .. "or their covers from Library Genesis, and searches are slower and can't be called off.\n\n"
+            .. "Update curl now?",
         current_version,
         min_version
     )

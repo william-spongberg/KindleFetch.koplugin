@@ -51,6 +51,8 @@ describe("CurlUpdater", function()
             local dialog = helper.state.shown[1]
             assert.are.equal("Update curl?", dialog.title)
             assert.matches("curl v7.68.0 is installed.\nMinimum required: v8.17.0", dialog.input, 1, true)
+            -- saying what it's needed for
+            assert.matches("can't download books", dialog.input, 1, true)
         end)
 
         describe("once updating curl is turned down", function()

@@ -48,6 +48,28 @@ describe("CurlUtil", function()
         assert.are.equal("(curl exit code 99)", CurlUtil.getErrorMeaning(99))
     end)
 
+    -- a Kindle's own curl can't connect to Library Genesis, so says the TLS connection failed
+    it("explains that a Kindle's curl is too old, and how to update it, when that's why it couldn't connect", function()
+        helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
+        assert.is_true(CurlUtil.isOutdated())
+        assert.are.equal(CurlUtil.OUTDATED_ERROR, CurlUtil.explainExitCode(35))
+        assert.are.equal(CurlUtil.OUTDATED_ERROR, CurlUtil.explainExitCode(60))
+        -- which isn't why it couldn't when it was offline
+        assert.are.equal("could not resolve host", CurlUtil.explainExitCode(6))
+
+        helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
+        CurlUtil.forgetVersion()
+        assert.is_false(CurlUtil.isOutdated())
+        assert.are.equal("TLS/SSL connection failed", CurlUtil.explainExitCode(35))
+
+        -- other devices' curls aren't updated, and connect whatever their version
+        helper.stubs.device.kindle = false
+        helper.stubCommand("curl --version", "curl 7.68.0 (x86_64-pc-linux-gnu) libcurl/7.68.0\n")
+        CurlUtil.forgetVersion()
+        assert.is_false(CurlUtil.isOutdated())
+        assert.are.equal("TLS/SSL connection failed", CurlUtil.explainExitCode(35))
+    end)
+
     it("reads curl's version", function()
         helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
         assert.are.equal("8.17.0", CurlUtil.getVersion())

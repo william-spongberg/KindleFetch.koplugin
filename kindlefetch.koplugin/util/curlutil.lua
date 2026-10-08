@@ -184,6 +184,25 @@ function CurlUtil.getErrorMeaning(exit_code)
     return CURL_ERRORS[exit_code] or "(curl exit code " .. tostring(exit_code) .. ")"
 end
 
+-- what a Kindle's own curl fails with when connecting to Library Genesis, which it's too old to
+local TLS_ERRORS = { [35] = true, [51] = true, [58] = true, [59] = true, [60] = true, [77] = true, [83] = true }
+CurlUtil.OUTDATED_ERROR = "this Kindle's curl is too old to download from Library Genesis. Update it from "
+    .. "Search → Kindle Fetch → Check for updates"
+
+-- whether this is a Kindle whose curl is older than the oldest known to connect to Library Genesis
+function CurlUtil.isOutdated()
+    return Device:isKindle() and CurlUtil.getVersion() ~= nil and not curlIsAtLeast(CurlUtil.MIN_VERSION)
+end
+
+-- what went wrong for curl to exit with exit_code, for saying so: on a Kindle whose curl is too old to connect to
+-- Library Genesis, that and how to update it, rather than that the TLS connection failed
+function CurlUtil.explainExitCode(exit_code)
+    if TLS_ERRORS[exit_code] and CurlUtil.isOutdated() then
+        return CurlUtil.OUTDATED_ERROR
+    end
+    return CurlUtil.getErrorMeaning(exit_code)
+end
+
 -- the size of the file a site is sending, from the headers of its responses (one after another when redirected,
 -- or when curl has carried on from where a download stopped)
 function CurlUtil.parseContentLength(headers)

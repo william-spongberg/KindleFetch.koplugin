@@ -187,7 +187,7 @@ local function pollDownload(transfer)
         end
 
         FileUtil.removeFile(part_path)
-        local err = exit_code == 0 and "download produced empty file" or CurlUtil.getErrorMeaning(exit_code)
+        local err = exit_code == 0 and "download produced empty file" or CurlUtil.explainExitCode(exit_code)
         if http_status then
             -- its servers failing, as they do while very busy, rather than e.g. the book not being there
             err = http_status >= 500 and BUSY_ERROR or string.format("%s (HTTP %d)", err, http_status)
