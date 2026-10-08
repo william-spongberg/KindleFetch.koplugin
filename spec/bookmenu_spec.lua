@@ -174,6 +174,8 @@ describe("BookMenu", function()
             assert.are.equal(string.rep("Мастер и Маргарита ", 10), content[1].text)
             assert.are.equal(494, content[1].max_width)
             assert.are.equal(494, content[3].max_width)
+            -- and the details wrap in that room, rather than running off the edge of the screen
+            assert.are.equal(494, content[5].width)
             -- each line is only as wide as its text, so they'd be centred otherwise
             assert.are.equal("left", content.align)
 
@@ -183,6 +185,7 @@ describe("BookMenu", function()
             content = content[#content]
             assert.are.equal(560, content[1].max_width)
             assert.are.equal(560, content[3].max_width)
+            assert.are.equal(560, content[5].width)
         end)
 
         -- gray text is hard to read on e-ink screens (#3)

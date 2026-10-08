@@ -143,8 +143,9 @@ function BookMenu:createBookItemWidget(book)
             TextBoxWidget.PTF_BOLD_END
         )
     end
+    -- wrapping in the room beside the cover, rather than running off the edge of the screen
     local details_widget = TextBoxWidget:new {
-        width = self.dimen.w,
+        width = text_width,
         face = Font:getFace("cfont", 14),
         text = details,
         fgcolor = Blitbuffer.COLOR_BLACK,
