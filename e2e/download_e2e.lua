@@ -64,12 +64,14 @@ describe("Downloading", function()
             return H.findButton("Read now")
         end)
 
-        -- the one that doesn't exist is forgotten, and the one that answered is kept, as it may just not have the book
+        -- the one that doesn't exist is forgotten, and the one that answered is kept, as it may just not have the book,
+        -- behind the one that gave the download link, which is asked first from now on
         local mirrors = require("api.urlapi"):getLibgenUrls()
         for _, mirror in ipairs(mirrors) do
             assert(mirror ~= broken[1], broken[1] .. " is still one of the mirrors")
         end
-        H.eq(broken[2], mirrors[1], "first mirror")
+        assert(mirrors[1]:find("^https://libgen%."), mirrors[1] .. " is asked first")
+        H.eq(broken[2], mirrors[2], "second mirror")
     end)
 
     it("downloads a book and opens it", function()

@@ -53,6 +53,17 @@ describe("UrlApi", function()
             assert.are.equal(urls[2], remaining[1])
         end)
 
+        it("can have the one that last worked tried first, without being looked up again any sooner", function()
+            local urls = UrlApi:getLibgenUrls()
+            UrlApi:preferLibgenUrl(urls[#urls])
+
+            local reordered = UrlApi:getLibgenUrls()
+            assert.are.equal(urls[#urls], reordered[1])
+            assert.are.equal(urls[1], reordered[2])
+            assert.are.equal(#urls, #reordered)
+            assert.are.equal(1, #http.requests)
+        end)
+
         it("are scraped again once every cached mirror has failed", function()
             local urls = UrlApi:getLibgenUrls()
 

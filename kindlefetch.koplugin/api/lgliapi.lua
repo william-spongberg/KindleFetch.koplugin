@@ -220,7 +220,7 @@ local function findDownloadLink(book, retrying)
     end
 
     -- try each libgen url
-    local download_url
+    local download_url, found_on
     local last_err
     -- mirrors that didn't answer at all, which may be down, or the device may be offline
     local unanswered = {}
@@ -243,6 +243,7 @@ local function findDownloadLink(book, retrying)
 
             if download_path and download_path ~= "" then
                 download_url = url .. "/" .. download_path:gsub("^/", "")
+                found_on = url
 
                 LogUtil.info("found the download link on", LogUtil.site(url))
 
@@ -277,6 +278,7 @@ local function findDownloadLink(book, retrying)
     end
 
     if download_url then
+        UrlApi:preferLibgenUrl(found_on)
         return download_url
     end
     return nil, busy and BUSY_ERROR or last_err or "all Library Genesis mirrors failed", mirror_failed

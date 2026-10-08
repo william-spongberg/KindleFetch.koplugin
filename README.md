@@ -197,6 +197,7 @@ kindlefetch.koplugin/
    - Wi-Fi is turned on before searching if it's off
    - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or corrupted downloads are detected and deleted
    - Failed mirrors are removed from cache; if all cached URLs fail they are re-scraped from Wikipedia
+   - The mirror that last answered a search or gave a download link is tried first from then on, rather than asking the ones before it, which may be too busy, every time
    - If Wikipedia answers without listing any mirrors (e.g. once its page has been rearranged), the mirrors known when the plugin was released are used
    - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything
    - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes

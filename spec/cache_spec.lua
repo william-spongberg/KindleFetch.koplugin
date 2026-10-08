@@ -245,6 +245,46 @@ describe("KindleFetchCache", function()
             assert.are.equal("https://a.example", cache:get("mirror"))
         end)
     end)
+
+    -- so the mirror that last worked is tried first
+    describe("moveValueToFront", function()
+        it("puts one value first in a cached list, keeping when it was cached", function()
+            local cache = newCache { expiry = 60 }
+            cache:set({ "https://a.example", "https://b.example", "https://c.example" }, "mirrors")
+            helper.state.time = 1000030
+
+            cache:moveValueToFront("https://c.example", "mirrors")
+            assert.are.same({ "https://c.example", "https://a.example", "https://b.example" }, cache:get("mirrors"))
+            assert.are.same(
+                { "https://c.example", "https://a.example", "https://b.example" },
+                cacheFile().mirrors.value
+            )
+            -- it expires when it would have
+            assert.are.equal(1000000, cacheFile().mirrors.timestamp)
+        end)
+
+        it("does not change lists already returned by get", function()
+            local cache = newCache()
+            cache:set({ "https://a.example", "https://b.example" }, "mirrors")
+            local mirrors = cache:get("mirrors")
+
+            cache:moveValueToFront("https://b.example", "mirrors")
+            assert.are.same({ "https://a.example", "https://b.example" }, mirrors)
+        end)
+
+        it("leaves the list alone when the value is already first, or isn't in it", function()
+            local cache = newCache()
+            cache:set({ "https://a.example", "https://b.example" }, "mirrors")
+            helper.state.settings_files[data_dir .. "/settings/test_cache.lua"] = nil
+
+            cache:moveValueToFront("https://a.example", "mirrors")
+            cache:moveValueToFront("https://z.example", "mirrors")
+            cache:moveValueToFront("https://a.example", "missing")
+            assert.are.same({ "https://a.example", "https://b.example" }, cache:get("mirrors"))
+            -- without writing the cache out
+            assert.is_nil(cacheFile())
+        end)
+    end)
 end)
 
 describe("SearchCache", function()

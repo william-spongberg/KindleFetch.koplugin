@@ -222,6 +222,7 @@ local function fetchResults(params, refresh)
             for _, unanswered_url in ipairs(unanswered) do
                 UrlApi:deleteLibgenUrl(unanswered_url)
             end
+            UrlApi:preferLibgenUrl(url)
             return html, nil, url
         end
 

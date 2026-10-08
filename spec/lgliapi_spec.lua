@@ -531,7 +531,27 @@ describe("LlgiAPI", function()
 
             download()
             assert.are.equal(getUrl(mirrors[2]), spawned[1].url)
-            assert.are.same(mirrors, UrlApi:getLibgenUrls())
+            local reordered = { mirrors[2], mirrors[1] }
+            for i = 3, #mirrors do
+                table.insert(reordered, mirrors[i])
+            end
+            assert.are.same(reordered, UrlApi:getLibgenUrls())
+        end)
+
+        -- rather than asking the ones before it every time, which may be too busy for a while
+        it("asks the mirror that last gave a download link first", function()
+            web.pages[adsUrl(mirrors[1])] = "<html><body>Could not connect to the database 3306. User 'libgen_get' "
+                .. "has exceeded the 'max_user_connections' resource (current value: 80)</body></html>"
+            hasBook(mirrors[2])
+            download()
+            curlWrote(MB, 0)
+            helper.runScheduled()
+
+            web.fetched = {}
+            os.remove(filepath)
+            download()
+            assert.are.same({ adsUrl(mirrors[2]) }, web.fetched)
+            assert.are.equal(getUrl(mirrors[2]), spawned[2].url)
         end)
 
         it("scrapes the mirrors again when every mirror fails", function()

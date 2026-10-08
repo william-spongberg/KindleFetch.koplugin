@@ -523,6 +523,20 @@ describe("LlgiSearch", function()
             assert.are.same(remaining, require("api.urlapi"):getLibgenUrls())
         end)
 
+        -- rather than asking the ones before it every time, which may be blocking searches for a while
+        it("asks the mirror that last answered first", function()
+            web.pages[searchUrl(mirrors[1])] =
+                "<html><head><title>DDoS-Guard</title></head><body>Checking your browser</body></html>"
+            results(mirrors[2], { fixtures.DUNE })
+            assert.are.equal(1, #LlgiSearch:search("dune", 1))
+            assert.are.equal(mirrors[2], require("api.urlapi"):getLibgenUrls()[1])
+
+            web.fetched = {}
+            web.pages[searchUrl(mirrors[2], 1, "dune messiah")] = fixtures.libgenResults({ fixtures.DUNE })
+            assert.are.equal(1, #LlgiSearch:search("dune messiah", 1))
+            assert.are.same({ searchUrl(mirrors[2], 1, "dune messiah") }, searches())
+        end)
+
         it("treats unexpected pages as failures", function()
             web.pages[searchUrl(mirrors[1])] = "<html><body>Under maintenance</body></html>"
             results(mirrors[2], { fixtures.DUNE })
