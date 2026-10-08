@@ -22,7 +22,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch, in KOReader's gesture manager)
 - **Automatic Curl Updates**: Ensures curl 8.21.0, the latest static build, is available on Kindles, and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
-- **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
+- **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes, then offers to restart KOReader to use the new version (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
 - **Safe File Handling**: Automatic filename sanitisation and directory management, asking before downloading over a book that's already there
 

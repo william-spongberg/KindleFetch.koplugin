@@ -343,6 +343,10 @@ local function createStubs(state)
         nextTick = function(_, fn)
             table.insert(state.scheduled, fn)
         end,
+        -- KOReader's offer to restart, or saying it needs restarting where it can't restart itself
+        askForRestart = function(_, text)
+            table.insert(state.restart_prompts, text)
+        end,
     }
 
     stubs.inputdialog = {
@@ -648,6 +652,7 @@ function helper.reset()
         scheduled = {},
         broadcasts = {},
         notifications = {},
+        restart_prompts = {},
         dir_choosers = {},
         actions = {},
         logs = {},

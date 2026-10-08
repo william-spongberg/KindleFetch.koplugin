@@ -347,7 +347,11 @@ for _, layout in ipairs(LAYOUTS) do
                 assert.are.equal("-- v0.4\n", helper.readFile(plugin_path .. "/main.lua"))
                 assert.are.equal("0.4", helper.readFile(plugin_path .. "/version.txt"))
                 assert.is_false(helper.exists(plugin_path .. "/util/pathutil.lua"))
-                assert.are.equal("Plugin updated. Please restart KOReader to apply changes.", helper.lastNotification())
+                -- offering to restart KOReader, which uses the new version once it has
+                assert.are.same(
+                    { "Kindle Fetch has updated to v0.4, which KOReader will use once it restarts." },
+                    helper.state.restart_prompts
+                )
             end)
 
             it("cleans up the backup and downloaded files", function()

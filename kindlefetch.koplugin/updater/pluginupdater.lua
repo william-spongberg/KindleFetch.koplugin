@@ -222,11 +222,13 @@ local function updatePlugin(plugin_path, version_str)
         return false
     end
 
-    NotifyUtil.info("Successfully updated KindleFetch to v" .. version_str)
     LogUtil.debug("plugin update completed successfully")
 
-    -- notify user that plugin needs restart
-    NotifyUtil.info("Plugin updated. Please restart KOReader to apply changes.")
+    -- KOReader loads plugins as it starts, so the new version is used once it restarts, which it offers to do now
+    -- where it can restart itself (rather than a notification that's gone after a couple of seconds)
+    UIManager:askForRestart(
+        string.format(_("Kindle Fetch has updated to v%s, which KOReader will use once it restarts."), version_str)
+    )
 
     return true
 end
