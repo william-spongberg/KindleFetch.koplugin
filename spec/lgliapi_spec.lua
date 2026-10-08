@@ -95,6 +95,7 @@ describe("LlgiAPI", function()
                 exit_file = exit_file,
                 headers_file = opts.headers_file,
                 stall_time = opts.stall_time,
+                resume = opts.resume,
             })
             return spawned[#spawned].pid, exit_file
         end
@@ -295,8 +296,32 @@ describe("LlgiAPI", function()
                 headers_file = spawned[1].headers_file,
                 -- rather than waiting forever on a download that has stalled
                 stall_time = 30,
+                -- and when curl tries it again, carrying on from where it stopped rather than from the beginning
+                resume = true,
             }, spawned[1])
             assert.is_string(spawned[1].headers_file)
+        end)
+
+        -- which could be another book entirely, with the same title
+        it("doesn't carry on from what's left of an earlier download of a book of the same name", function()
+            helper.writeFile(filepath .. ".part", "another book")
+            download()
+            assert.is_false(helper.exists(filepath .. ".part"))
+            assert.is_true(spawned[1].resume)
+        end)
+
+        it("starts again from the beginning when the site can't carry on from where the download stopped", function()
+            download()
+            curlWrote(MB / 2, 33)
+            helper.tick()
+            assert.are.equal(2, #spawned)
+            assert.is_false(spawned[2].resume)
+            assert.is_false(spawned[2].use_proxy)
+            assert.is_false(helper.exists(filepath .. ".part"))
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
         end)
 
         -- so that half a book is never left looking like a whole one
@@ -626,12 +651,15 @@ describe("LlgiAPI", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"
             download()
 
-            curlWrote(0, 7)
+            curlWrote(MB / 4, 7)
             helper.tick()
             assert.are.equal(2, #spawned)
             assert.is_true(spawned[2].use_proxy)
             assert.are.equal(filepath .. ".part", spawned[2].path)
             assert.are.equal(30, spawned[2].stall_time)
+            -- carrying on from what had downloaded
+            assert.is_true(spawned[2].resume)
+            assert.are.equal(MB / 4, #helper.readFile(filepath .. ".part"))
 
             curlWrote(MB, 0)
             helper.runScheduled()

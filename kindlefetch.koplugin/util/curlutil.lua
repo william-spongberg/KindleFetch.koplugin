@@ -27,6 +27,7 @@ local CURL_ERRORS = {
     [26] = "failed reading local data",
     [27] = "out of memory",
     [28] = "request timed out",
+    [33] = "the site can't carry on from where the download stopped",
     [35] = "TLS/SSL connection failed",
     [36] = "transfer was stopped",
     [37] = "failed to open local file",
@@ -183,12 +184,15 @@ function CurlUtil.getErrorMeaning(exit_code)
     return CURL_ERRORS[exit_code] or "(curl exit code " .. tostring(exit_code) .. ")"
 end
 
--- the size of the file a site is sending, from the headers of its responses (one after another when redirected)
+-- the size of the file a site is sending, from the headers of its responses (one after another when redirected,
+-- or when curl has carried on from where a download stopped)
 function CurlUtil.parseContentLength(headers)
-    -- get content length from the last response that has one, i.e. the file's rather than a redirect's
+    -- from the last response that says, i.e. the file's rather than a redirect's
     local file_size = nil
     for block in headers:gmatch("HTTP[/%d%.]+.-\r?\n\r?\n") do
-        local size = block:match("[Cc]ontent%-[Ll]ength:%s*(%d+)")
+        -- the whole file's size, when only the rest of it was sent
+        local size = block:match("[Cc]ontent%-[Rr]ange:%s*bytes%s+%d+%-%d+/(%d+)")
+            or block:match("[Cc]ontent%-[Ll]ength:%s*(%d+)")
         if size then
             file_size = tonumber(size)
         end
@@ -415,12 +419,17 @@ function CurlUtil.getCMD(download_url, filepath, exit_file, use_proxy)
 end
 
 -- max_time optionally limits how long each attempt (and retrying) can take, in seconds.
--- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize), and
--- opts.stall_time gives up on a download once nothing has arrived for that many seconds
+-- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize),
+-- opts.stall_time gives up on a download once nothing has arrived for that many seconds, and opts.resume has curl
+-- carry on from what's already in filepath, including when it tries again after a download stops partway (where
+-- the site says it can), rather than starting again from the beginning
 function CurlUtil.download(download_url, filepath, use_proxy, background, max_time, opts)
     opts = opts or {}
 
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
+    if opts.resume then
+        cmd = cmd .. " -C -"
+    end
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, download_url)
     cmd = CurlUtil.enableRetry(cmd, 2, 2)

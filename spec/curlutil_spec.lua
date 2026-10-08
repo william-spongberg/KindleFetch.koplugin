@@ -41,6 +41,7 @@ describe("CurlUtil", function()
     it("explains curl exit codes", function()
         assert.are.equal("could not resolve host", CurlUtil.getErrorMeaning(6))
         assert.are.equal("TLS certificate verification failed", CurlUtil.getErrorMeaning(60))
+        assert.are.equal("the site can't carry on from where the download stopped", CurlUtil.getErrorMeaning(33))
         -- downloads need curl, which not every e-reader has
         assert.are.equal("curl isn't installed on this device", CurlUtil.getErrorMeaning(127))
         assert.are.equal("curl can't be run on this device", CurlUtil.getErrorMeaning(126))
@@ -215,6 +216,16 @@ describe("CurlUtil", function()
             assert.are.equal(1048576, CurlUtil.getDownloadSize(headers_file))
         end)
 
+        -- when curl has asked for the rest of a download that stalled
+        it("uses the whole file's size when only the rest of it was sent", function()
+            helper.writeFile(
+                headers_file,
+                "HTTP/2 200\r\ncontent-length: 1048576\r\naccept-ranges: bytes\r\n\r\n"
+                    .. "HTTP/2 206\r\ncontent-range: bytes 524288-1048575/1048576\r\ncontent-length: 524288\r\n\r\n"
+            )
+            assert.are.equal(1048576, CurlUtil.getDownloadSize(headers_file))
+        end)
+
         it("returns nil when the size is unknown", function()
             helper.writeFile(headers_file, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
             assert.is_nil(CurlUtil.getDownloadSize(headers_file))
@@ -358,6 +369,16 @@ describe("CurlUtil", function()
 
             CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
             assert.is_nil(helper.state.executed[#helper.state.executed]:find(" -D ", 1, true))
+        end)
+
+        it("carries on from what has already downloaded, including when it tries again, when asked to", function()
+            helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false, nil, { resume = true })
+            assert.matches(" -C - ", helper.state.executed[#helper.state.executed], 1, true)
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find(" -C ", 1, true))
         end)
 
         it("gives up on a download once nothing has arrived for a while, when asked to", function()

@@ -189,7 +189,7 @@ kindlefetch.koplugin/
    - Curl fetches the ads page using the book's MD5 hash to obtain a download URL
    - File size is read from the headers of the download itself for progress calculation, without a separate request
    - A curl process is spawned to download the file in the background, to a `.part` file next to where the book will be saved, so half a book never shows up in your library
-   - A download that receives nothing for 30 seconds is retried, then given up on
+   - A download that receives nothing for 30 seconds is tried again, carrying on from where it stopped rather than starting the book again, and given up on after two more tries
    - Progress widget updates every 0.5 seconds with percentage and file size information
    - On completion, the file is moved into the configured download directory, and the plugin offers to open it
 
