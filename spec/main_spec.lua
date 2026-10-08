@@ -205,6 +205,9 @@ describe("KindleFetch", function()
                 function menu:loadCoversForPage(page)
                     table.insert(self.covers_loaded, page)
                 end
+                function menu:updateItems()
+                    self.redrawn = (self.redrawn or 0) + 1
+                end
                 -- like KOReader's menu, show other entries, turning to the page with the given one (2 to a page here)
                 -- (or staying on the page that's showing for a negative one)
                 function menu:switchItemTable(title, item_table, item_number)
@@ -949,6 +952,22 @@ describe("KindleFetch", function()
             search_results[1] = { { book("Dune"), book("AC/DC", "pdf") } }
             plugin = openUI()
             search(plugin, "dune")
+        end)
+
+        it("marks the books that are in the download folder already", function()
+            helper.state.fs["/mnt/us/documents/Dune.epub"] = "file"
+            assert.is_true(menus[1].is_downloaded(book("Dune")))
+            assert.is_false(menus[1].is_downloaded(book("AC/DC", "pdf")))
+        end)
+
+        it("marks a book as downloaded once it has", function()
+            assert.is_false(menus[1].is_downloaded(book("Dune")))
+            selectBook("Dune")
+            helper.state.fs["/mnt/us/documents/Dune.epub"] = "file"
+            downloads[1].callback(true, nil, "/mnt/us/documents/Dune.epub")
+
+            assert.are.equal(1, menus[1].redrawn)
+            assert.is_true(menus[1].is_downloaded(book("Dune")))
         end)
 
         it("downloads the selected book into the download folder", function()

@@ -195,6 +195,21 @@ describe("BookMenu", function()
             assert.are.equal("black", content[5].fgcolor)
         end)
 
+        -- in bold, after the rest
+        it("say when the book has been downloaded already", function()
+            local menu = newMenu(2)
+            menu.is_downloaded = function(b)
+                return b.md5 == "md5-1"
+            end
+            local _, _, info = details(menu:createBookItemWidget(book(1)))
+            assert.are.equal(
+                "\u{FFF1}1990 · English [en] · Book (fiction) · epub · 1.2MB · \u{FFF2}Downloaded\u{FFF3}",
+                info
+            )
+            _, _, info = details(menu:createBookItemWidget(book(2)))
+            assert.are.equal("1990 · English [en] · Book (fiction) · epub · 1.2MB", info)
+        end)
+
         it("leave out missing details", function()
             local menu = newMenu(1)
             local b = book(1, { year = "" })

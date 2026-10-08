@@ -21,6 +21,7 @@ local CoverCache = require("cache.covercache")
 local CoverPlaceholder = require("ui.coverplaceholder")
 local KindleFetchSettings = require("settings.settings")
 local LogUtil = require("util.logutil")
+local _ = require("gettext")
 
 -- constants
 local COVER_SIZE = Screen:scaleBySize(100)
@@ -78,6 +79,7 @@ function BookMenuItem:onTapSelect(arg, ges)
     return true
 end
 
+-- is_downloaded is optionally called with each book shown, saying whether it's in the download folder already
 local BookMenu = Menu:extend {}
 
 function BookMenu:onMenuSelect(entry)
@@ -128,11 +130,23 @@ function BookMenu:createBookItemWidget(book)
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
-    -- book details (year, language, type, format, size)
+    -- book details (year, language, type, format, size), then whether it's in the download folder already (see
+    -- is_downloaded), in bold
+    local details = formatBookDetails(book)
+    if self.is_downloaded and self.is_downloaded(book) then
+        details = string.format(
+            "%s%s%s%s%s",
+            TextBoxWidget.PTF_HEADER,
+            details ~= "" and details .. " · " or "",
+            TextBoxWidget.PTF_BOLD_START,
+            _("Downloaded"),
+            TextBoxWidget.PTF_BOLD_END
+        )
+    end
     local details_widget = TextBoxWidget:new {
         width = self.dimen.w,
         face = Font:getFace("cfont", 14),
-        text = formatBookDetails(book),
+        text = details,
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 

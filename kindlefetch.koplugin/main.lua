@@ -489,8 +489,25 @@ function KindleFetch:booksTitle()
     return string.format("%s · %s", self.current_search_query, found)
 end
 
+local function buildDownloadPath(book)
+    local download_dir = KindleFetchSettings:getDownloadDir()
+    local filename = util.getSafeFilename(book.title .. "." .. book.file_type, download_dir)
+    return download_dir .. "/" .. filename
+end
+
+-- whether the book is in the download folder already, under the name it would be downloaded as. remembered for the
+-- books showing, as working out that name means reading which file systems are mounted, until a download finishes
+function KindleFetch:isDownloaded(book)
+    self.downloaded = self.downloaded or {}
+    if self.downloaded[book.md5] == nil then
+        self.downloaded[book.md5] = FileUtil.isValidFile(buildDownloadPath(book)) or false
+    end
+    return self.downloaded[book.md5]
+end
+
 function KindleFetch:showBooks(books)
     local this = self
+    self.downloaded = nil
 
     local menu
     menu = BookMenu:new {
@@ -505,6 +522,10 @@ function KindleFetch:showBooks(books)
         width = this.dimen.w,
         height = this.dimen.h,
         items_max_lines = true,
+        -- so books that have been downloaded already are marked as such
+        is_downloaded = function(book)
+            return this:isDownloaded(book)
+        end,
         onPageChange = function(page)
             if KindleFetchSettings:getShowBookCovers() then
                 LogUtil.debug("loading covers for page", page)
@@ -585,12 +606,6 @@ function KindleFetch:loadMoreBooks()
     end)
 end
 
-local function buildDownloadPath(book)
-    local download_dir = KindleFetchSettings:getDownloadDir()
-    local filename = util.getSafeFilename(book.title .. "." .. book.file_type, download_dir)
-    return download_dir .. "/" .. filename
-end
-
 function KindleFetch:openBook(filepath)
     -- close the results and the search box behind them too, which would otherwise show again once the book is closed
     if self.books_menu then
@@ -620,6 +635,11 @@ function KindleFetch:downloadBook(book)
     LlgiAPI:downloadBook(book, filepath, function(ok, err, saved_filepath)
         if ok then
             LogUtil.debug("downloaded book to", saved_filepath)
+            -- so it's marked as downloaded in the results behind
+            self.downloaded = nil
+            if self.books_menu and not self.books_menu.closed then
+                self.books_menu:updateItems()
+            end
             -- ask on the next tick, once the download progress has closed
             UIManager:nextTick(function()
                 -- centred, with the title in bold on a line of its own, so it stands out from the question
