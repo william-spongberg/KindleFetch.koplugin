@@ -963,12 +963,14 @@ describe("KindleFetch", function()
             assert.is_true(helper.wasClosed(plugin.search_box))
         end)
 
-        it("closes the offer to read the book when cancelled", function()
+        it("closes the offer to read the book when it isn't wanted now", function()
             selectBook("Dune")
             downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
             helper.tick()
 
             local dialog = helper.lastShown()
+            -- rather than Cancel, as the book has downloaded
+            assert.are.equal("Not now", dialog.buttons[1][1].text)
             dialog.buttons[1][1].callback()
             assert.is_true(helper.wasClosed(dialog))
             assert.is_nil(opened)

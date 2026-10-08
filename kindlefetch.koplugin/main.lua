@@ -608,7 +608,8 @@ function KindleFetch:downloadBook(book)
                     buttons = {
                         {
                             {
-                                text = _("Cancel"),
+                                -- as the book has downloaded, and nothing is called off
+                                text = _("Not now"),
                                 id = "close",
                                 callback = function()
                                     UIManager:close(dialog)
