@@ -33,13 +33,13 @@ describe("CurlUpdater", function()
         end)
 
         it("accepts curl at the minimum version", function()
-            installedCurl("8.17.0")
+            installedCurl("8.21.0")
             assert.is_true(CurlUpdater.checkVersion())
             assert.are.equal(0, #helper.state.shown)
         end)
 
         it("accepts curl above the minimum version", function()
-            installedCurl("8.20.1")
+            installedCurl("8.22.1")
             assert.is_true(CurlUpdater.checkVersion())
             assert.are.equal(0, #helper.state.shown)
         end)
@@ -50,9 +50,9 @@ describe("CurlUpdater", function()
 
             local dialog = helper.state.shown[1]
             assert.are.equal("Update curl?", dialog.title)
-            assert.matches("curl v7.68.0 is installed.\nMinimum required: v8.17.0", dialog.input, 1, true)
+            assert.matches("curl v7.68.0 is installed.\nMinimum required: v8.21.0", dialog.input, 1, true)
             -- saying what it's needed for
-            assert.matches("can't download books", dialog.input, 1, true)
+            assert.matches("searches are slower", dialog.input, 1, true)
         end)
 
         describe("once updating curl is turned down", function()
@@ -69,7 +69,7 @@ describe("CurlUpdater", function()
                 assert.is_false(CurlUpdater.checkVersion())
                 assert.are.equal(1, #helper.state.shown)
                 assert.is_truthy(
-                    helper.logged("warn", "^curl 7.68.0 is older than 8.17.0, but updating it was turned down")
+                    helper.logged("warn", "^curl 7.68.0 is older than 8.21.0, but updating it was turned down")
                 )
             end)
 
@@ -139,7 +139,7 @@ describe("CurlUpdater", function()
                 { "chmod", "remount_rw", "find_backup", "backup", "install", "permissions", "remount_ro" },
                 commands
             )
-            assert.are.equal("Updated curl to v8.17.0", helper.lastNotification())
+            assert.are.equal("Updated curl to v8.21.0", helper.lastNotification())
         end)
 
         it("keeps an existing backup of the system curl", function()
@@ -221,16 +221,16 @@ describe("CurlUpdater", function()
 
             helper.stubCommand(
                 "curl --version",
-                "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1\n"
+                "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1\n"
             )
             assert.is_true(CurlUtil.canFetch())
-            assert.are.equal("8.17.0", CurlUtil.getVersion())
+            assert.are.equal("8.21.0", CurlUtil.getVersion())
         end)
 
         it("carries on when the installed curl's permissions cannot be set", function()
             stubInstall({ permissions = true })
             acceptUpdate()
-            assert.are.equal("Updated curl to v8.17.0", helper.lastNotification())
+            assert.are.equal("Updated curl to v8.21.0", helper.lastNotification())
         end)
     end)
 
@@ -250,7 +250,7 @@ describe("CurlUpdater", function()
             helper.state.shown[1].buttons[1][2].callback()
 
             assert.are.same({
-                url = "https://github.com/moparisthebest/static-curl/releases/download/v8.17.0/curl-armhf",
+                url = "https://github.com/moparisthebest/static-curl/releases/download/v8.21.0/curl-armhf",
                 filepath = data_dir .. "/cache/kindlefetch/curl-armhf",
             }, download)
             assert.are.equal("Failed to download curl update", helper.lastError())

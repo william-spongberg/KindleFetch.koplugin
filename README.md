@@ -21,7 +21,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch, in KOReader's gesture manager)
-- **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available on Kindles, and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
+- **Automatic Curl Updates**: Ensures curl 8.21.0, the latest static build, is available on Kindles, and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
 - **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
 - **Safe File Handling**: Automatic filename sanitisation and directory management, asking before downloading over a book that's already there
@@ -131,7 +131,7 @@ kindlefetch.koplugin/
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
 │   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
-│   ├── curlupdater.lua        # Checks curl version and automatically installs static curl (8.17.0) if needed
+│   ├── curlupdater.lua        # Checks curl version and automatically installs static curl (8.21.0) if needed
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes
 └── util/
     ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
@@ -150,7 +150,7 @@ kindlefetch.koplugin/
    - Unless turned off in settings, updates are checked for at most once a day while connected, or manually via Kindle Fetch → Check for updates
    - The latest release is looked up in the background, so KOReader can be used meanwhile
    - A curl or plugin update that is turned down is only offered again by checking manually
-   - On Kindles, curl version is checked; user is prompted to update if version is below 8.17.0
+   - On Kindles, curl version is checked; user is prompted to update if version is below 8.21.0
    - Plugin version is checked against GitHub releases; user is prompted to update if new version available
    - Settings are loaded from persistent storage
 

@@ -57,7 +57,7 @@ describe("CurlUtil", function()
         -- which isn't why it couldn't when it was offline
         assert.are.equal("could not resolve host", CurlUtil.explainExitCode(6))
 
-        helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
+        helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
         CurlUtil.forgetVersion()
         assert.is_false(CurlUtil.isOutdated())
         assert.are.equal("TLS/SSL connection failed", CurlUtil.explainExitCode(35))
@@ -98,9 +98,9 @@ describe("CurlUtil", function()
         helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
         assert.is_false(CurlUtil.canFetch())
 
-        helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 zlib\n")
+        helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 zlib\n")
         CurlUtil.forgetVersion()
-        assert.are.equal("8.17.0", CurlUtil.getVersion())
+        assert.are.equal("8.21.0", CurlUtil.getVersion())
         assert.is_true(CurlUtil.canFetch())
     end)
 
@@ -110,14 +110,18 @@ describe("CurlUtil", function()
             helper.stubCommand("curl --version", description .. "\nRelease-Date: 2025-11-05\n")
         end
 
-        it("is left to curl once it's new enough to connect to Library Genesis from a Kindle", function()
-            installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
+        it("is left to curl once it's been updated on a Kindle", function()
+            installedCurl("curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1")
             assert.is_true(CurlUtil.canFetch())
             assert.is_truthy(helper.logged("info", "^fetching pages with curl compressed$"))
         end)
 
-        it("isn't left to the curl a Kindle comes with", function()
+        it("isn't left to the curl a Kindle comes with, or an older update", function()
             installedCurl("curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2 zlib/1.2.8")
+            assert.is_false(CurlUtil.canFetch())
+
+            installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
+            CurlUtil.forgetVersion()
             assert.is_false(CurlUtil.canFetch())
         end)
 

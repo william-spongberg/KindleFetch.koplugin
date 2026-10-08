@@ -9,8 +9,9 @@ local Device = require("device")
 
 local CurlUtil = {}
 
--- the oldest curl known to connect to Library Genesis from a Kindle, whose own curl is too old to
-CurlUtil.MIN_VERSION = "8.17.0"
+-- the curl that's installed on Kindles, whose own is too old to connect to Library Genesis (see CurlUpdater): the
+-- latest static build, which older ones are asked to be updated to, for the fixes for security problems found since
+CurlUtil.MIN_VERSION = "8.21.0"
 
 -- constants
 local TMP_DIR = DataStorage:getSettingsDir() .. "/tmp/"
