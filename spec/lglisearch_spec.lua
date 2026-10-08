@@ -434,14 +434,16 @@ describe("LlgiSearch", function()
                     assert.are.equal(1, web.scrapes)
                 end)
 
-                it("doesn't show the books found on earlier pages, or save them", function()
+                -- which there may have been a few of, when it was called off while looking for more
+                it("shows the books found on earlier pages, carrying on from the one it was called off on", function()
                     results(mirrors[1], fullPage(1, 3), 1)
                     callOffAt("&page=2")
 
-                    local books, err = LlgiSearch:search("dune", 1)
-                    assert.is_nil(books)
-                    assert.are.equal(HttpUtil.CANCELLED, err)
-                    assert.is_false(LlgiSearch:isCached("dune", 1))
+                    local books, err, next_page = LlgiSearch:search("dune", 1)
+                    assert.is_nil(err)
+                    assert.are.equal(3, #books)
+                    assert.are.equal(2, next_page)
+                    assert.is_truthy(helper.logged("info", "^search called off on page 2 so showing the 3 books"))
                 end)
 
                 it("stops while the mirrors are being looked up, rather than taking it for being offline", function()
