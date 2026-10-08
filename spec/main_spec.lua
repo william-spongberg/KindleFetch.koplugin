@@ -592,25 +592,53 @@ describe("KindleFetch", function()
                 return helper.state.shown[2]
             end
 
-            it("says it's searching until the books are found, and how to call it off", function()
+            it("says it's searching until the books are found, with a button to call it off", function()
                 search_results[1] = { { book("Dune") } }
                 search(openUI(), "dune")
 
-                assert.are.equal("Searching Library Genesis...\nTap to cancel.", message().text)
-                assert.is_true(message().flush_events_on_show)
+                assert.are.equal("Searching Library Genesis for\n“dune”...", message().title)
+                assert.are.equal("Cancel", message().buttons[1][1].text)
+                -- rather than any tap calling it off, which may have been meant for something else
+                assert.is_false(message().dismissable)
+                -- or a second tap on what started the search landing on it
+                assert.is_true(helper.state.input_inhibited)
                 assert.is_true(helper.wasClosed(message()))
                 assert.are.equal(0, #helper.state.notifications)
-                -- a tap on the message is what calls it off
+                -- it's what calls the search off
                 assert.are.same({ message() }, trap_widgets)
                 assert.is_nil(require("util.httputil").trap_widget)
             end)
 
-            it("doesn't say how to call it off when it can't be", function()
+            it("is called off with the message's Cancel button", function()
+                local dismissed = 0
+                search_results[1] = function()
+                    -- as Trapper:dismissablePopen does, while waiting for the page
+                    message().dismiss_callback = function()
+                        dismissed = dismissed + 1
+                    end
+                    message().buttons[1][1].callback()
+                    return nil, "request cancelled"
+                end
+                search(openUI(), "dune")
+
+                assert.are.equal(1, dismissed)
+                assert.is_true(helper.wasClosed(message()))
+                -- once
+                local closes = 0
+                for _, closed in ipairs(helper.state.closed) do
+                    closes = closes + (closed == message() and 1 or 0)
+                end
+                assert.are.equal(1, closes)
+                assert.are.equal(0, #menus)
+            end)
+
+            it("doesn't offer to call it off when it can't be", function()
                 can_cancel = false
                 search_results[1] = { { book("Dune") } }
                 search(openUI(), "dune")
 
-                assert.are.equal("Searching Library Genesis...", message().text)
+                assert.are.equal("Searching Library Genesis for\n“dune”...", message().text)
+                assert.is_nil(message().buttons)
             end)
 
             it("shows nothing more once it's called off", function()
@@ -766,13 +794,14 @@ describe("KindleFetch", function()
             search(plugin, "dune")
         end)
 
-        it("says it's loading more until they're found, and how to call it off", function()
+        it("says it's loading more until they're found, with a button to call it off", function()
             search_results[2] = { { book("Children of Dune") }, nil, 4 }
             local shown = #helper.state.shown
             loadMore()
 
             local message = helper.state.shown[shown + 1]
-            assert.are.equal("Loading more books...\nTap to cancel.", message.text)
+            assert.are.equal("Loading more books...", message.title)
+            assert.are.equal("Cancel", message.buttons[1][1].text)
             assert.is_true(helper.wasClosed(message))
             assert.are.equal(message, trap_widgets[2])
         end)

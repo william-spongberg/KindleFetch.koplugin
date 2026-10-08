@@ -118,22 +118,27 @@ function H.findButton(text, root)
     end, root)
 end
 
--- tap the middle of a widget, as a finger would
-function H.tap(widget)
-    assert(widget, "nothing to tap")
-    local dimen = widget.dimen
-    assert(dimen and dimen.x, "can't tap a widget that hasn't been drawn")
+-- tap the screen at x, y, as a finger would
+function H.tapAt(x, y)
     UIManager:sendEvent(Event:new("Gesture", {
         ges = "tap",
         pos = Geom:new {
-            x = dimen.x + math.floor(dimen.w / 2),
-            y = dimen.y + math.floor(dimen.h / 2),
+            x = x,
+            y = y,
             w = 0,
             h = 0,
         },
         time = time.now(),
     }))
     H.pump()
+end
+
+-- tap the middle of a widget
+function H.tap(widget)
+    assert(widget, "nothing to tap")
+    local dimen = widget.dimen
+    assert(dimen and dimen.x, "can't tap a widget that hasn't been drawn")
+    H.tapAt(dimen.x + math.floor(dimen.w / 2), dimen.y + math.floor(dimen.h / 2))
 end
 
 function H.tapButton(text, root)

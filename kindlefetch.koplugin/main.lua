@@ -314,7 +314,9 @@ end
 -- search from a page of Library Genesis' results, and show the books found
 function KindleFetch:searchFrom(query, page)
     self.current_search_query = query
-    local waiting_text = _("Searching Library Genesis...")
+    -- saying what's being searched for, as the search box is behind it, on a line of its own, so the message covers
+    -- the search box's own buttons however short the search
+    local waiting_text = string.format(_("Searching Library Genesis for\n“%s”..."), query)
     self:searchInBackground(query, page, waiting_text, function(books, err, next_page, results_read)
         self.books = books
         self.next_page = next_page
@@ -384,23 +386,51 @@ function KindleFetch:search(query, page)
     return books, nil, next_page, results_read
 end
 
+-- a message saying what's being waited for, with a Cancel button where the wait can be called off (see
+-- HttpUtil.trap_widget), rather than any tap calling it off, as a tap may have been meant for something else
+local function waitingMessage(text)
+    if not HttpUtil.canCancel() then
+        return InfoMessage:new {
+            text = text,
+        }
+    end
+
+    local message
+    message = ButtonDialog:new {
+        title = text,
+        title_align = "center",
+        dismissable = false,
+        buttons = {
+            {
+                {
+                    text = _("Cancel"),
+                    callback = function()
+                        message.cancelled = true
+                        UIManager:close(message)
+                        -- set by Trapper:dismissablePopen while it waits
+                        if message.dismiss_callback then
+                            message.dismiss_callback()
+                        end
+                    end,
+                },
+            },
+        },
+    }
+    return message
+end
+
 -- search without holding up the rest of KOReader while Library Genesis answers, where that's possible (see
 -- HttpUtil), showing waiting_text until it has. calls on_done with what search returned, unless the search was
--- called off by tapping that message
+-- called off before finding anything, with the message's Cancel button
 function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
     Trapper:wrap(function()
         -- results saved from an earlier search are there straight away
         local message
         if not LlgiSearch:isCached(query, page) then
-            if HttpUtil.canCancel() then
-                waiting_text = waiting_text .. "\n" .. _("Tap to cancel.")
-            end
-            message = InfoMessage:new {
-                text = waiting_text,
-                -- so that a second tap on what started the search doesn't call it off
-                flush_events_on_show = true,
-            }
+            message = waitingMessage(waiting_text)
             UIManager:show(message)
+            -- so that a second tap on what started the search doesn't land on the message
+            Device.input:inhibitInputUntil(true)
             UIManager:forceRePaint()
         end
 
@@ -408,7 +438,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
         HttpUtil.trap_widget = message
         local ok, books, err, next_page, results_read = pcall(self.search, self, query, page)
         HttpUtil.trap_widget = nil
-        if message then
+        if message and not message.cancelled then
             UIManager:close(message)
         end
         if not ok then

@@ -222,6 +222,12 @@ local function createStubs(state)
         sdl = false,
         android = false,
         home_dir = nil,
+        -- KOReader's input, which can be told to ignore taps for a moment, kept in state.input_inhibited
+        input = {
+            inhibitInputUntil = function(_, set_or_seconds)
+                state.input_inhibited = set_or_seconds
+            end,
+        },
         screen = {
             scaleBySize = function(_, size)
                 return size
