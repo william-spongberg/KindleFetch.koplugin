@@ -19,6 +19,8 @@ LlgiAPI.active_downloads = {}
 local DOWNLOAD_POLL_INTERVAL = 0.5
 -- a download that hasn't received anything for this many seconds is given up on, rather than waited on forever
 local DOWNLOAD_STALL_TIME = 30
+-- and once it hasn't for this many, the progress says it has stalled, as it may be a while before curl tries again
+local STALL_NOTICE_TIME = 10
 local BUSY_ERROR = "Library Genesis is too busy to send books right now, try again in a few minutes"
 
 -- whether a mirror's download page says its database is refusing connections, as it does while it's very busy.
@@ -66,6 +68,12 @@ local function pollDownload(transfer)
     end
 
     local bytes_downloaded = FileUtil.getSize(part_path)
+    -- when the latest of the book arrived, to tell when the download has stalled
+    if bytes_downloaded ~= transfer.last_size then
+        transfer.last_size = bytes_downloaded
+        transfer.last_arrival = os.time()
+    end
+    local stalled = bytes_downloaded > 0 and os.time() - transfer.last_arrival >= STALL_NOTICE_TIME
 
     -- curl notes down the headers it's sent, which say how big the book is, before the book starts to arrive
     if not transfer.total_size and bytes_downloaded > 0 then
@@ -81,18 +89,21 @@ local function pollDownload(transfer)
         local percentage = math.min(bytes_downloaded / total_size, 0.99)
         progress_widget:update(
             percentage,
-            string.format(
-                "%d%% · %.1f / %.1f MB",
-                math.floor(percentage * 100),
-                bytes_downloaded / (1024 * 1024),
-                total_size / (1024 * 1024)
-            )
+            stalled and string.format(_("Stalled at %d%%, retrying..."), math.floor(percentage * 100))
+                or string.format(
+                    "%d%% · %.1f / %.1f MB",
+                    math.floor(percentage * 100),
+                    bytes_downloaded / (1024 * 1024),
+                    total_size / (1024 * 1024)
+                )
         )
     elseif bytes_downloaded > 0 then
         -- the size wasn't known, or was wrong
+        local megabytes = bytes_downloaded / (1024 * 1024)
         progress_widget:update(
             progress_widget.percentage or 0,
-            string.format("%.1f MB", bytes_downloaded / (1024 * 1024))
+            stalled and string.format(_("Stalled at %.1f MB, retrying..."), megabytes)
+                or string.format("%.1f MB", megabytes)
         )
     end
 
@@ -317,7 +328,8 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     transfer.progress_widget = progress_widget
 
     progress_widget:show()
-    progress_widget:update(0, "Starting download...")
+    -- which can mean trying several mirrors
+    progress_widget:update(0, _("Finding a download link..."))
     UIManager:forceRePaint()
 
     -- track this download
@@ -394,6 +406,8 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
         return
     end
 
+    -- which takes a few seconds, and sometimes many more, before the book starts to arrive
+    progress_widget:update(0, _("Waiting for Library Genesis..."))
     UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
         pollDownload(transfer)
     end)

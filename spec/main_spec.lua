@@ -454,14 +454,14 @@ describe("KindleFetch", function()
 
             it("lists the books that are downloading when there are several, to choose which to show", function()
                 downloading("Dune", 0.456, "45% · 0.5 / 1.1 MB")
-                downloading("Emma", 0, "Starting download...")
+                downloading("Emma", 0, "Waiting for Library Genesis...")
                 downloading("Persuasion", 0, "2.0 MB")
                 menuItem(openUI(), "Downloads (3)").callback()
 
                 local dialog = helper.lastShown()
                 assert.are.equal("Downloads", dialog.title)
                 assert.are.same(
-                    { "Dune · 45%", "Emma · Starting download...", "Persuasion · 2.0 MB" },
+                    { "Dune · 45%", "Emma · Waiting for Library Genesis...", "Persuasion · 2.0 MB" },
                     { dialog.buttons[1][1].text, dialog.buttons[2][1].text, dialog.buttons[3][1].text }
                 )
 

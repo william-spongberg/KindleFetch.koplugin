@@ -425,13 +425,68 @@ describe("LlgiAPI", function()
             assert.are.equal("50% · 0.5 / 1.0 MB", widget.status_widget.text)
         end)
 
+        -- which can take a while
+        it("says what it's waiting for until the book starts to arrive", function()
+            local HttpUtil = require("util.httputil")
+            local getBody = HttpUtil.getBody
+            local while_finding_the_link
+            HttpUtil.getBody = function(url)
+                if url:find("/ads.php", 1, true) then
+                    while_finding_the_link = progress().status_text
+                end
+                return getBody(url)
+            end
+
+            download()
+            assert.are.equal("Finding a download link...", while_finding_the_link)
+            assert.are.equal("Waiting for Library Genesis...", progress().status_widget.text)
+            helper.tick()
+            assert.are.equal("Waiting for Library Genesis...", progress().status_widget.text)
+
+            curlWrote(MB / 2)
+            helper.tick()
+            assert.are.equal("50% · 0.5 / 1.0 MB", progress().status_widget.text)
+        end)
+
+        -- rather than looking as if KOReader is stuck, as curl only tries again once it has stalled for a while
+        it("says when the download has stalled", function()
+            helper.state.time = 1000
+            download()
+            curlWrote(MB / 2)
+            helper.tick()
+            helper.state.time = 1009
+            helper.tick()
+            assert.are.equal("50% · 0.5 / 1.0 MB", progress().status_widget.text)
+
+            helper.state.time = 1010
+            helper.tick()
+            assert.are.equal("Stalled at 50%, retrying...", progress().status_widget.text)
+            assert.are.equal(0.5, progress().bar_widget.percentage)
+
+            -- until more arrives
+            curlWrote(MB * 3 / 4)
+            helper.tick()
+            assert.are.equal("75% · 0.8 / 1.0 MB", progress().status_widget.text)
+        end)
+
+        it("says when a download of unknown size has stalled", function()
+            remote_size = nil
+            helper.state.time = 1000
+            download()
+            curlWrote(MB / 2)
+            helper.tick()
+            helper.state.time = 1010
+            helper.tick()
+            assert.are.equal("Stalled at 0.5 MB, retrying...", progress().status_widget.text)
+        end)
+
         -- rather than asking for it before downloading, and waiting for the answer
         it("works out the book's size from the headers curl notes down as the book starts to arrive", function()
             download()
             local widget = progress()
 
             helper.tick()
-            assert.are.equal("Starting download...", widget.status_widget.text)
+            assert.are.equal("Waiting for Library Genesis...", widget.status_widget.text)
 
             helper.writeFile(
                 spawned[1].headers_file,

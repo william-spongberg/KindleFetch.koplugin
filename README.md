@@ -17,7 +17,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
   - Book covers (500 entries max, the oldest removed to make room)
 - **Preferences**: Filter results by preferred languages, file types, and book types
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders until each one arrives; tap a cover in the download prompt to see it full size
-- **Download Progress**: Visual download progress bar with real-time file size information
+- **Download Progress**: Visual download progress bar with real-time file size information, saying what it's waiting for until the book starts to arrive, and when the download has stalled
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch, in KOReader's gesture manager)
@@ -190,7 +190,7 @@ kindlefetch.koplugin/
    - File size is read from the headers of the download itself for progress calculation, without a separate request
    - A curl process is spawned to download the file in the background, to a `.part` file next to where the book will be saved, so half a book never shows up in your library
    - A download that receives nothing for 30 seconds is tried again, carrying on from where it stopped rather than starting the book again, and given up on after two more tries
-   - Progress widget updates every 0.5 seconds with percentage and file size information
+   - Progress widget updates every 0.5 seconds with percentage and file size information. Until the book starts to arrive, it says what it's waiting for: a download link, then Library Genesis, which can take several seconds to start sending the book. Once nothing has arrived for 10 seconds, it says the download has stalled
    - On completion, the file is moved into the configured download directory, and the plugin offers to open it
 
 5. **Error Handling & Resilience**
