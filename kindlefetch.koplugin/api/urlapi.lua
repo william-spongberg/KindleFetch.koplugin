@@ -85,6 +85,11 @@ function UrlApi:getLibgenUrls(refresh)
     return fallback_urls
 end
 
+-- try this mirror first from now on, as it has just answered, when the ones before it may have been too busy
+function UrlApi:preferLibgenUrl(url)
+    return UrlCache:moveValueToFront(url, LIBGEN_KEY)
+end
+
 function UrlApi:deleteLibgenUrl(url)
     LogUtil.info("dropping mirror", LogUtil.site(url), "as it failed")
     return UrlCache:deleteValueFromKey(url, LIBGEN_KEY)

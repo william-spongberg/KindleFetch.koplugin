@@ -41,17 +41,67 @@ describe("CurlUtil", function()
     it("explains curl exit codes", function()
         assert.are.equal("could not resolve host", CurlUtil.getErrorMeaning(6))
         assert.are.equal("TLS certificate verification failed", CurlUtil.getErrorMeaning(60))
+        assert.are.equal("the site can't carry on from where the download stopped", CurlUtil.getErrorMeaning(33))
         -- downloads need curl, which not every e-reader has
         assert.are.equal("curl isn't installed on this device", CurlUtil.getErrorMeaning(127))
         assert.are.equal("curl can't be run on this device", CurlUtil.getErrorMeaning(126))
         assert.are.equal("(curl exit code 99)", CurlUtil.getErrorMeaning(99))
     end)
 
+    -- a Kindle's own curl can't connect to Library Genesis, so says the TLS connection failed
+    it("explains that a Kindle's curl is too old, and how to update it, when that's why it couldn't connect", function()
+        helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
+        assert.is_true(CurlUtil.isOutdated())
+        assert.are.equal(CurlUtil.OUTDATED_ERROR, CurlUtil.explainExitCode(35))
+        assert.are.equal(CurlUtil.OUTDATED_ERROR, CurlUtil.explainExitCode(60))
+        -- which isn't why it couldn't when it was offline
+        assert.are.equal("could not resolve host", CurlUtil.explainExitCode(6))
+
+        helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
+        CurlUtil.forgetVersion()
+        assert.is_false(CurlUtil.isOutdated())
+        assert.are.equal("TLS/SSL connection failed", CurlUtil.explainExitCode(35))
+
+        -- other devices' curls aren't updated, and connect whatever their version
+        helper.stubs.device.kindle = false
+        helper.stubCommand("curl --version", "curl 7.68.0 (x86_64-pc-linux-gnu) libcurl/7.68.0\n")
+        CurlUtil.forgetVersion()
+        assert.is_false(CurlUtil.isOutdated())
+        assert.are.equal("TLS/SSL connection failed", CurlUtil.explainExitCode(35))
+    end)
+
     it("reads curl's version", function()
         helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
         assert.are.equal("8.17.0", CurlUtil.getVersion())
         helper.stubCommand("curl --version", "")
+        CurlUtil.forgetVersion()
         assert.is_nil(CurlUtil.getVersion())
+    end)
+
+    -- it's asked for when KOReader starts, before searching, and before offering to update curl
+    it("only starts curl to ask its version once per session", function()
+        helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
+        CurlUtil.getVersion()
+        CurlUtil.canFetch()
+        CurlUtil.getVersion()
+        assert.are.equal(1, #helper.state.popen_calls)
+
+        -- or once it isn't there
+        helper.stubCommand("curl --version", "")
+        CurlUtil.forgetVersion()
+        CurlUtil.getVersion()
+        CurlUtil.canFetch()
+        assert.are.equal(2, #helper.state.popen_calls)
+    end)
+
+    it("asks again once told to forget, e.g. after curl has been updated", function()
+        helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
+        assert.is_false(CurlUtil.canFetch())
+
+        helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 zlib\n")
+        CurlUtil.forgetVersion()
+        assert.are.equal("8.21.0", CurlUtil.getVersion())
+        assert.is_true(CurlUtil.canFetch())
     end)
 
     -- pages are fetched with curl where it's up to it, as it asks for them compressed and can wait in the background
@@ -60,14 +110,18 @@ describe("CurlUtil", function()
             helper.stubCommand("curl --version", description .. "\nRelease-Date: 2025-11-05\n")
         end
 
-        it("is left to curl once it's new enough to connect to Library Genesis from a Kindle", function()
-            installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
+        it("is left to curl once it's been updated on a Kindle", function()
+            installedCurl("curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1")
             assert.is_true(CurlUtil.canFetch())
             assert.is_truthy(helper.logged("info", "^fetching pages with curl compressed$"))
         end)
 
-        it("isn't left to the curl a Kindle comes with", function()
+        it("isn't left to the curl a Kindle comes with, or an older update", function()
             installedCurl("curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2 zlib/1.2.8")
+            assert.is_false(CurlUtil.canFetch())
+
+            installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
+            CurlUtil.forgetVersion()
             assert.is_false(CurlUtil.canFetch())
         end)
 
@@ -184,6 +238,16 @@ describe("CurlUtil", function()
                 headers_file,
                 "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/book\r\nContent-Length: 0\r\n\r\n"
                     .. "HTTP/2 200\r\ncontent-length: 1048576\r\n\r\n"
+            )
+            assert.are.equal(1048576, CurlUtil.getDownloadSize(headers_file))
+        end)
+
+        -- when curl has asked for the rest of a download that stalled
+        it("uses the whole file's size when only the rest of it was sent", function()
+            helper.writeFile(
+                headers_file,
+                "HTTP/2 200\r\ncontent-length: 1048576\r\naccept-ranges: bytes\r\n\r\n"
+                    .. "HTTP/2 206\r\ncontent-range: bytes 524288-1048575/1048576\r\ncontent-length: 524288\r\n\r\n"
             )
             assert.are.equal(1048576, CurlUtil.getDownloadSize(headers_file))
         end)
@@ -333,6 +397,16 @@ describe("CurlUtil", function()
             assert.is_nil(helper.state.executed[#helper.state.executed]:find(" -D ", 1, true))
         end)
 
+        it("carries on from what has already downloaded, including when it tries again, when asked to", function()
+            helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false, nil, { resume = true })
+            assert.matches(" -C - ", helper.state.executed[#helper.state.executed], 1, true)
+
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find(" -C ", 1, true))
+        end)
+
         it("gives up on a download once nothing has arrived for a while, when asked to", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
 
@@ -405,7 +479,7 @@ describe("CurlUtil", function()
                         table.insert(results, transfer_exit_codes[i] .. " " .. output)
                     end
                 end
-                helper.writeFile(cmd:match("%-w '[^']*' > '([^']+)'"), table.concat(results, "\n"))
+                helper.writeFile(cmd:match("%-w '[^']*' 2?> '([^']+)'"), table.concat(results, "\n"))
                 helper.writeFile(cmd:match("echo %$%? > '([^']+)'"), tostring(exit_code or 0))
             end
         end
@@ -432,6 +506,47 @@ describe("CurlUtil", function()
             assert.matches("--retry 2", cmd, 1, true)
         end)
 
+        -- rather than waiting to see whether they can share one connection, which Library Genesis never allows
+        it("opens a connection for every file at once, where curl can", function()
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }))
+            local function command()
+                CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15)
+                return helper.state.executed[#helper.state.executed]
+            end
+
+            helper.stubCommand("curl --version", "curl 7.68.0 (x86_64-pc-linux-gnu) libcurl/7.68.0\n")
+            assert.matches("--parallel --parallel-max 4 --parallel-immediate", command(), 1, true)
+
+            -- older curls stop at options they don't know
+            helper.stubCommand("curl --version", "curl 7.67.0 (x86_64-pc-linux-gnu) libcurl/7.67.0\n")
+            CurlUtil.forgetVersion()
+            assert.is_nil(command():find("--parallel-immediate", 1, true))
+
+            helper.stubCommand("curl --version", "")
+            CurlUtil.forgetVersion()
+            assert.is_nil(command():find("--parallel-immediate", 1, true))
+        end)
+
+        -- so covers can be shown as they arrive, rather than once the slowest has
+        it("writes each file's result as soon as it has downloaded, where curl can", function()
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }, 0, { 0, 0, 0 }))
+            local function command()
+                CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15)
+                return helper.state.executed[#helper.state.executed]
+            end
+
+            -- its stderr isn't buffered, unlike its stdout
+            helper.stubCommand("curl --version", "curl 7.63.0 (x86_64-pc-linux-gnu) libcurl/7.63.0\n")
+            assert.matches("-w '%{stderr}%{exitcode} %{filename_effective}\\n' 2> '", command(), 1, true)
+            assert.is_true(helper.exists(paths[3]))
+
+            -- older curls can only write them out together, once they've all finished
+            helper.stubCommand("curl --version", "curl 7.62.0 (x86_64-pc-linux-gnu) libcurl/7.62.0\n")
+            CurlUtil.forgetVersion()
+            assert.matches("-w '%{exitcode} %{filename_effective}\\n' > '", command(), 1, true)
+            assert.is_true(helper.exists(paths[3]))
+        end)
+
         -- anything else in the file is read by curl as an option, such as where to save a file
         it("only writes addresses and where to save them to curl's config file", function()
             helper.stubCommand("& echo $!", "4242\n")
@@ -451,7 +566,7 @@ describe("CurlUtil", function()
             assert.is_truthy(helper.logged("warn", "^left out a download whose address can't be used"))
         end)
 
-        -- the files are shown once they've all finished, so one that has stalled would keep the rest waiting
+        -- the next page's covers are fetched once these have finished, and older curls only say once they all have
         it("gives up on a file once nothing of it has arrived for a while, when asked to", function()
             helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }))
 

@@ -135,7 +135,7 @@ describe("HttpUtil", function()
             fetches = {}
             helper.stubCommand(
                 "curl --version",
-                "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1\n"
+                "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1\n"
             )
         end)
 

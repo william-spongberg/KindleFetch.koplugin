@@ -47,11 +47,23 @@ describe("KindleFetch", function()
         }
     end
 
+    -- the button in a row of buttons with the given text
+    local function button(dialog, text)
+        for _, row in ipairs(dialog.buttons) do
+            for _, b in ipairs(row) do
+                if b.text == text then
+                    return b
+                end
+            end
+        end
+        error("no button " .. text)
+    end
+
     -- open the search dialog and search for query
     local function search(plugin, query)
         plugin:setupUI()
         plugin.search_box.input_text = query
-        plugin.search_box.buttons[1][2].callback()
+        button(plugin.search_box, "Search").callback()
     end
 
     local function itemTexts(menu)
@@ -76,6 +88,7 @@ describe("KindleFetch", function()
             languages = { "en" },
             file_types = { "epub" },
             book_types = { "fiction" },
+            recent_searches = {},
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
         saved = {}
@@ -108,6 +121,12 @@ describe("KindleFetch", function()
             end,
             getPreferredBookTypes = function()
                 return settings.book_types
+            end,
+            getRecentSearches = function()
+                return settings.recent_searches
+            end,
+            addRecentSearch = function(_, query)
+                table.insert(settings.recent_searches, 1, query)
             end,
         })
 
@@ -204,6 +223,9 @@ describe("KindleFetch", function()
                 menu.page = 1
                 function menu:loadCoversForPage(page)
                     table.insert(self.covers_loaded, page)
+                end
+                function menu:updateItems()
+                    self.redrawn = (self.redrawn or 0) + 1
                 end
                 -- like KOReader's menu, show other entries, turning to the page with the given one (2 to a page here)
                 -- (or staying on the page that's showing for a negative one)
@@ -454,14 +476,14 @@ describe("KindleFetch", function()
 
             it("lists the books that are downloading when there are several, to choose which to show", function()
                 downloading("Dune", 0.456, "45% · 0.5 / 1.1 MB")
-                downloading("Emma", 0, "Starting download...")
+                downloading("Emma", 0, "Waiting for Library Genesis...")
                 downloading("Persuasion", 0, "2.0 MB")
                 menuItem(openUI(), "Downloads (3)").callback()
 
                 local dialog = helper.lastShown()
                 assert.are.equal("Downloads", dialog.title)
                 assert.are.same(
-                    { "Dune · 45%", "Emma · Starting download...", "Persuasion · 2.0 MB" },
+                    { "Dune · 45%", "Emma · Waiting for Library Genesis...", "Persuasion · 2.0 MB" },
                     { dialog.buttons[1][1].text, dialog.buttons[2][1].text, dialog.buttons[3][1].text }
                 )
 
@@ -520,10 +542,64 @@ describe("KindleFetch", function()
             local plugin = openUI()
             plugin:setupUI()
 
-            local search_button = plugin.search_box.buttons[1][2]
-            assert.are.equal("Search", search_button.text)
+            local search_button = button(plugin.search_box, "Search")
             assert.is_true(search_button.is_enter_default)
-            assert.is_nil(plugin.search_box.buttons[1][1].is_enter_default)
+            assert.is_nil(button(plugin.search_box, "Cancel").is_enter_default)
+            assert.is_nil(button(plugin.search_box, "Recent").is_enter_default)
+        end)
+
+        describe("recent searches", function()
+            it("are remembered", function()
+                search(openUI(), "  dune  ")
+                assert.are.same({ "dune" }, settings.recent_searches)
+
+                -- but not when there's nothing to search for
+                search(openUI(), "  ")
+                settings.languages = {}
+                search(openUI(), "emma")
+                assert.are.same({ "dune" }, settings.recent_searches)
+            end)
+
+            it("are offered from the search box, to search for again", function()
+                settings.recent_searches = { "emma", "dune" }
+                search_results[1] = { { book("Emma") } }
+                local plugin = openUI()
+                plugin:setupUI()
+                assert.is_true(button(plugin.search_box, "Recent").enabled)
+                button(plugin.search_box, "Recent").callback()
+
+                local list = helper.lastShown()
+                assert.are.equal("Recent searches", list.title)
+                assert.are.same({ "emma", "dune" }, { list.buttons[1][1].text, list.buttons[2][1].text })
+                list.buttons[1][1].callback()
+                assert.is_true(helper.wasClosed(list))
+                -- in the search box too, to change it from there once the books are closed
+                assert.are.equal("emma", plugin.search_box.input_text)
+                assert.are.same({ { "emma", 1 } }, searches)
+                assert.are.same({ "Emma" }, itemTexts(menus[1]))
+            end)
+
+            it("can't be chosen before there are any", function()
+                local plugin = openUI()
+                plugin:setupUI()
+                assert.is_false(button(plugin.search_box, "Recent").enabled)
+
+                -- until something has been searched for from the search box that's open
+                local enabled = false
+                plugin.search_box.button_table = {
+                    getButtonById = function(_, id)
+                        assert.are.equal("recent", id)
+                        return {
+                            enable = function()
+                                enabled = true
+                            end,
+                        }
+                    end,
+                }
+                plugin.search_box.input_text = "dune"
+                button(plugin.search_box, "Search").callback()
+                assert.is_true(enabled)
+            end)
         end)
 
         it("needs a search term", function()
@@ -592,25 +668,53 @@ describe("KindleFetch", function()
                 return helper.state.shown[2]
             end
 
-            it("says it's searching until the books are found, and how to call it off", function()
+            it("says it's searching until the books are found, with a button to call it off", function()
                 search_results[1] = { { book("Dune") } }
                 search(openUI(), "dune")
 
-                assert.are.equal("Searching Library Genesis...\nTap to cancel.", message().text)
-                assert.is_true(message().flush_events_on_show)
+                assert.are.equal("Searching Library Genesis for\n“dune”...", message().title)
+                assert.are.equal("Cancel", message().buttons[1][1].text)
+                -- rather than any tap calling it off, which may have been meant for something else
+                assert.is_false(message().dismissable)
+                -- or a second tap on what started the search landing on it
+                assert.is_true(helper.state.input_inhibited)
                 assert.is_true(helper.wasClosed(message()))
                 assert.are.equal(0, #helper.state.notifications)
-                -- a tap on the message is what calls it off
+                -- it's what calls the search off
                 assert.are.same({ message() }, trap_widgets)
                 assert.is_nil(require("util.httputil").trap_widget)
             end)
 
-            it("doesn't say how to call it off when it can't be", function()
+            it("is called off with the message's Cancel button", function()
+                local dismissed = 0
+                search_results[1] = function()
+                    -- as Trapper:dismissablePopen does, while waiting for the page
+                    message().dismiss_callback = function()
+                        dismissed = dismissed + 1
+                    end
+                    message().buttons[1][1].callback()
+                    return nil, "request cancelled"
+                end
+                search(openUI(), "dune")
+
+                assert.are.equal(1, dismissed)
+                assert.is_true(helper.wasClosed(message()))
+                -- once
+                local closes = 0
+                for _, closed in ipairs(helper.state.closed) do
+                    closes = closes + (closed == message() and 1 or 0)
+                end
+                assert.are.equal(1, closes)
+                assert.are.equal(0, #menus)
+            end)
+
+            it("doesn't offer to call it off when it can't be", function()
                 can_cancel = false
                 search_results[1] = { { book("Dune") } }
                 search(openUI(), "dune")
 
-                assert.are.equal("Searching Library Genesis...", message().text)
+                assert.are.equal("Searching Library Genesis for\n“dune”...", message().text)
+                assert.is_nil(message().buttons)
             end)
 
             it("shows nothing more once it's called off", function()
@@ -766,13 +870,14 @@ describe("KindleFetch", function()
             search(plugin, "dune")
         end)
 
-        it("says it's loading more until they're found, and how to call it off", function()
+        it("says it's loading more until they're found, with a button to call it off", function()
             search_results[2] = { { book("Children of Dune") }, nil, 4 }
             local shown = #helper.state.shown
             loadMore()
 
             local message = helper.state.shown[shown + 1]
-            assert.are.equal("Loading more books...\nTap to cancel.", message.text)
+            assert.are.equal("Loading more books...", message.title)
+            assert.are.equal("Cancel", message.buttons[1][1].text)
             assert.is_true(helper.wasClosed(message))
             assert.are.equal(message, trap_widgets[2])
         end)
@@ -922,6 +1027,22 @@ describe("KindleFetch", function()
             search(plugin, "dune")
         end)
 
+        it("marks the books that are in the download folder already", function()
+            helper.state.fs["/mnt/us/documents/Dune.epub"] = "file"
+            assert.is_true(menus[1].is_downloaded(book("Dune")))
+            assert.is_false(menus[1].is_downloaded(book("AC/DC", "pdf")))
+        end)
+
+        it("marks a book as downloaded once it has", function()
+            assert.is_false(menus[1].is_downloaded(book("Dune")))
+            selectBook("Dune")
+            helper.state.fs["/mnt/us/documents/Dune.epub"] = "file"
+            downloads[1].callback(true, nil, "/mnt/us/documents/Dune.epub")
+
+            assert.are.equal(1, menus[1].redrawn)
+            assert.is_true(menus[1].is_downloaded(book("Dune")))
+        end)
+
         it("downloads the selected book into the download folder", function()
             selectBook("Dune")
             assert.are.equal("Dune", downloads[1].book.title)
@@ -963,12 +1084,14 @@ describe("KindleFetch", function()
             assert.is_true(helper.wasClosed(plugin.search_box))
         end)
 
-        it("closes the offer to read the book when cancelled", function()
+        it("closes the offer to read the book when it isn't wanted now", function()
             selectBook("Dune")
             downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
             helper.tick()
 
             local dialog = helper.lastShown()
+            -- rather than Cancel, as the book has downloaded
+            assert.are.equal("Not now", dialog.buttons[1][1].text)
             dialog.buttons[1][1].callback()
             assert.is_true(helper.wasClosed(dialog))
             assert.is_nil(opened)

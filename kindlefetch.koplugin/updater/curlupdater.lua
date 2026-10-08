@@ -109,6 +109,8 @@ local function updateCurl()
     end
 
     LogUtil.info("installed static curl " .. MIN_VERSION)
+    -- so searches use the new curl straight away, rather than once KOReader has restarted
+    CurlUtil.forgetVersion()
     NotifyUtil.info("Updated curl to v" .. MIN_VERSION)
     -- ask again if it's ever out of date again, e.g. once a Kindle update puts the old one back
     KindleFetchSettings:setCurlUpdateDeclined(false)
@@ -118,7 +120,8 @@ end
 -- prompt for curl update
 local function promptCurlUpdate(current_version, min_version)
     local message = string.format(
-        "curl v%s is installed.\nMinimum required: v%s\n\nUpdate curl now? This will avoid potential TLS issues.",
+        "curl v%s is installed.\nMinimum required: v%s\n\nUntil curl is updated, searches are slower and can't be "
+            .. "called off, and books and their covers may not download from Library Genesis.\n\nUpdate curl now?",
         current_version,
         min_version
     )

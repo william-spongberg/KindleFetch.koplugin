@@ -246,6 +246,30 @@ function KindleFetch:showDownloads()
     UIManager:show(dialog)
 end
 
+-- the searches made recently, to choose one to search for again
+function KindleFetch:showRecentSearches()
+    local dialog
+    local buttons = {}
+    for _, query in ipairs(KindleFetchSettings:getRecentSearches()) do
+        table.insert(buttons, {
+            {
+                text = query,
+                callback = function()
+                    UIManager:close(dialog)
+                    self.search_box:setInputText(query)
+                    self:performSearch()
+                end,
+            },
+        })
+    end
+    dialog = ButtonDialog:new {
+        title = _("Recent searches"),
+        title_align = "center",
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
+end
+
 function KindleFetch:setupUI()
     -- grab self reference for callbacks
     local this = self
@@ -259,6 +283,14 @@ function KindleFetch:setupUI()
                     text = "Cancel",
                     callback = function()
                         UIManager:close(this.search_box)
+                    end,
+                },
+                {
+                    text = _("Recent"),
+                    id = "recent",
+                    enabled = #KindleFetchSettings:getRecentSearches() > 0,
+                    callback = function()
+                        this:showRecentSearches()
                     end,
                 },
                 {
@@ -297,6 +329,13 @@ function KindleFetch:performSearch()
         return
     end
 
+    KindleFetchSettings:addRecentSearch(query)
+    -- which there may not have been any of when the search box was opened
+    local recent = self.search_box.button_table and self.search_box.button_table:getButtonById("recent")
+    if recent then
+        recent:enable()
+    end
+
     -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once
     -- connected,
     -- unless the results are saved from an earlier search
@@ -314,7 +353,9 @@ end
 -- search from a page of Library Genesis' results, and show the books found
 function KindleFetch:searchFrom(query, page)
     self.current_search_query = query
-    local waiting_text = _("Searching Library Genesis...")
+    -- saying what's being searched for, as the search box is behind it, on a line of its own, so the message covers
+    -- the search box's own buttons however short the search
+    local waiting_text = string.format(_("Searching Library Genesis for\n“%s”..."), query)
     self:searchInBackground(query, page, waiting_text, function(books, err, next_page, results_read)
         self.books = books
         self.next_page = next_page
@@ -384,23 +425,51 @@ function KindleFetch:search(query, page)
     return books, nil, next_page, results_read
 end
 
+-- a message saying what's being waited for, with a Cancel button where the wait can be called off (see
+-- HttpUtil.trap_widget), rather than any tap calling it off, as a tap may have been meant for something else
+local function waitingMessage(text)
+    if not HttpUtil.canCancel() then
+        return InfoMessage:new {
+            text = text,
+        }
+    end
+
+    local message
+    message = ButtonDialog:new {
+        title = text,
+        title_align = "center",
+        dismissable = false,
+        buttons = {
+            {
+                {
+                    text = _("Cancel"),
+                    callback = function()
+                        message.cancelled = true
+                        UIManager:close(message)
+                        -- set by Trapper:dismissablePopen while it waits
+                        if message.dismiss_callback then
+                            message.dismiss_callback()
+                        end
+                    end,
+                },
+            },
+        },
+    }
+    return message
+end
+
 -- search without holding up the rest of KOReader while Library Genesis answers, where that's possible (see
 -- HttpUtil), showing waiting_text until it has. calls on_done with what search returned, unless the search was
--- called off by tapping that message
+-- called off before finding anything, with the message's Cancel button
 function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
     Trapper:wrap(function()
         -- results saved from an earlier search are there straight away
         local message
         if not LlgiSearch:isCached(query, page) then
-            if HttpUtil.canCancel() then
-                waiting_text = waiting_text .. "\n" .. _("Tap to cancel.")
-            end
-            message = InfoMessage:new {
-                text = waiting_text,
-                -- so that a second tap on what started the search doesn't call it off
-                flush_events_on_show = true,
-            }
+            message = waitingMessage(waiting_text)
             UIManager:show(message)
+            -- so that a second tap on what started the search doesn't land on the message
+            Device.input:inhibitInputUntil(true)
             UIManager:forceRePaint()
         end
 
@@ -408,7 +477,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
         HttpUtil.trap_widget = message
         local ok, books, err, next_page, results_read = pcall(self.search, self, query, page)
         HttpUtil.trap_widget = nil
-        if message then
+        if message and not message.cancelled then
             UIManager:close(message)
         end
         if not ok then
@@ -459,8 +528,25 @@ function KindleFetch:booksTitle()
     return string.format("%s · %s", self.current_search_query, found)
 end
 
+local function buildDownloadPath(book)
+    local download_dir = KindleFetchSettings:getDownloadDir()
+    local filename = util.getSafeFilename(book.title .. "." .. book.file_type, download_dir)
+    return download_dir .. "/" .. filename
+end
+
+-- whether the book is in the download folder already, under the name it would be downloaded as. remembered for the
+-- books showing, as working out that name means reading which file systems are mounted, until a download finishes
+function KindleFetch:isDownloaded(book)
+    self.downloaded = self.downloaded or {}
+    if self.downloaded[book.md5] == nil then
+        self.downloaded[book.md5] = FileUtil.isValidFile(buildDownloadPath(book)) or false
+    end
+    return self.downloaded[book.md5]
+end
+
 function KindleFetch:showBooks(books)
     local this = self
+    self.downloaded = nil
 
     local menu
     menu = BookMenu:new {
@@ -475,6 +561,10 @@ function KindleFetch:showBooks(books)
         width = this.dimen.w,
         height = this.dimen.h,
         items_max_lines = true,
+        -- so books that have been downloaded already are marked as such
+        is_downloaded = function(book)
+            return this:isDownloaded(book)
+        end,
         onPageChange = function(page)
             if KindleFetchSettings:getShowBookCovers() then
                 LogUtil.debug("loading covers for page", page)
@@ -555,12 +645,6 @@ function KindleFetch:loadMoreBooks()
     end)
 end
 
-local function buildDownloadPath(book)
-    local download_dir = KindleFetchSettings:getDownloadDir()
-    local filename = util.getSafeFilename(book.title .. "." .. book.file_type, download_dir)
-    return download_dir .. "/" .. filename
-end
-
 function KindleFetch:openBook(filepath)
     -- close the results and the search box behind them too, which would otherwise show again once the book is closed
     if self.books_menu then
@@ -590,6 +674,11 @@ function KindleFetch:downloadBook(book)
     LlgiAPI:downloadBook(book, filepath, function(ok, err, saved_filepath)
         if ok then
             LogUtil.debug("downloaded book to", saved_filepath)
+            -- so it's marked as downloaded in the results behind
+            self.downloaded = nil
+            if self.books_menu and not self.books_menu.closed then
+                self.books_menu:updateItems()
+            end
             -- ask on the next tick, once the download progress has closed
             UIManager:nextTick(function()
                 -- centred, with the title in bold on a line of its own, so it stands out from the question
@@ -608,7 +697,8 @@ function KindleFetch:downloadBook(book)
                     buttons = {
                         {
                             {
-                                text = _("Cancel"),
+                                -- as the book has downloaded, and nothing is called off
+                                text = _("Not now"),
                                 id = "close",
                                 callback = function()
                                     UIManager:close(dialog)

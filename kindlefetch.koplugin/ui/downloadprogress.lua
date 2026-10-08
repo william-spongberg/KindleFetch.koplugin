@@ -58,7 +58,8 @@ function DownloadProgress:build()
     self.status_container = CenterContainer:new {
         dimen = Geom:new {
             w = CONTENT_WIDTH,
-            h = 25,
+            -- as tall as its text, whose font is bigger on screens with more dots to the inch
+            h = self.status_widget:getSize().h,
         },
         self.status_widget,
     }
@@ -205,9 +206,22 @@ function DownloadProgress:cancel()
     end
 
     self:close()
+
+    -- and stop waiting on what was being waited for, such as the download link being looked up. set by
+    -- Trapper:dismissablePopen, when the widget is what calls the wait off (see HttpUtil.trap_widget)
+    local dismiss = self.dismiss_callback
+    self.dismiss_callback = nil
+    if dismiss then
+        dismiss()
+    end
 end
 
+-- close the widget for good, once (what was being waited for may close it too, as it's cancelled)
 function DownloadProgress:close()
+    if self.closed then
+        return
+    end
+    self.closed = true
     if not self.is_visible then
         return
     end

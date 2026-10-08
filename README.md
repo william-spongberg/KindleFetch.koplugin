@@ -10,19 +10,19 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 ## Features
 
-- **Book Search + Downloads**: Search Library Genesis from your device with simple text input and download with a tap; searches run in the background, and can be cancelled with a tap
+- **Book Search + Downloads**: Search Library Genesis from your device with simple text input and download with a tap; searches run in the background and can be cancelled, and books you have already downloaded are marked in the results
 - **Caching**: Minimise network requests and improve performance
   - Search results (2 week expiry by default, 100 entries max)
   - Mirror URLs (1 week expiry by default)
   - Book covers (500 entries max, the oldest removed to make room)
 - **Preferences**: Filter results by preferred languages, file types, and book types
-- **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders while they download; tap a cover in the download prompt to see it full size
-- **Download Progress**: Visual download progress bar with real-time file size information
+- **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders until each one arrives; tap a cover in the download prompt to see it full size
+- **Download Progress**: Visual download progress bar with real-time file size information, saying what it's waiting for until the book starts to arrive, and when the download has stalled
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch, in KOReader's gesture manager)
-- **Automatic Curl Updates**: Ensures a compatible curl version (8.17.0+) is available on Kindles
-- **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
+- **Automatic Curl Updates**: Offers to install curl 8.21.0, the latest static build, on Kindles with an older one, and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
+- **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes, then offers to restart KOReader to use the new version (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
 - **Safe File Handling**: Automatic filename sanitisation and directory management, asking before downloading over a book that's already there
 
@@ -42,15 +42,15 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 <img width="350" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" /> <img width="350" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
-1. Enter a book title, author, or keyword in the search box. KOReader carries on while Library Genesis answers; tap the message saying it's searching to cancel.
+1. Enter a book title, author, or keyword in the search box, or tap Recent to search again for one of your last 10 searches. KOReader carries on while Library Genesis answers; tap Cancel on the message saying it's searching to call the search off.
 
-<img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" /> <img width="350" alt="Message saying it's searching, which a tap cancels" src="docs/screenshots/04-searching.png" />
+<img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" /> <img width="350" alt="Message saying it's searching, with a button to cancel" src="docs/screenshots/04-searching.png" />
 
 2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download.
 
 <img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" /> <img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" />
 
-3. In the download prompt, optionally tap the book cover to see it full size, or tap the download path to choose another folder, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
+3. In the download prompt, optionally tap the book cover to see it full size, or tap the folder it will be saved in (above the name it will be saved as) to choose another, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
 
 <img width="350" alt="Download prompt" src="docs/screenshots/07-download-prompt.png" /> <img width="350" alt="Fullscreen cover" src="docs/screenshots/08-download-cover.png" /> <img width="350" alt="Being asked before downloading over a book that's already there" src="docs/screenshots/09-download-overwrite.png" />
 
@@ -62,7 +62,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 <img width="350" alt="Read now prompt" src="docs/screenshots/11-download-finished.png" /> <img width="350" alt="Reading the downloaded book" src="docs/screenshots/12-reading.png" />
 
-Downloaded books are saved to your configured download location.
+Downloaded books are saved to the download folder in the settings, unless you choose another in the download prompt.
 
 ### Settings
 
@@ -72,15 +72,15 @@ Downloaded books are saved to your configured download location.
 
 <img width="350" alt="Settings" src="docs/screenshots/13-settings.png" /> <img width="350" alt="Search results without covers" src="docs/screenshots/14-search-results-without-covers.png" />
 
-- **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`)
+- **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`); the settings show the end of a long one, which says the most about it
 
 <img width="350" alt="Choosing the download folder" src="docs/screenshots/15-settings-download-folder.png" />
 
-- **Preferred Languages**: Choose which languages to prioritise in search results (default: English)
+- **Preferred Languages**: Choose the languages of the books shown in search results (default: English)
 
 <img width="350" alt="Preferred languages" src="docs/screenshots/16-settings-languages.png" />
 
-- **Preferred File Types**: Select desired formats across five categories, from those KOReader can open (default: all of them):
+- **Preferred File Types**: Select desired formats across five categories, from those KOReader can open (default: all of them, which the settings show as All):
   - Ebooks: EPUB, MOBI, AZW, FB2, PRC
   - Comics: CBR, CBZ
   - Documents: PDF, TXT, RTF, DOC, DOCX, ODT, DJVU
@@ -89,7 +89,7 @@ Downloaded books are saved to your configured download location.
 
 <img width="350" alt="Preferred file types" src="docs/screenshots/17-settings-file-types.png" />
 
-- **Preferred Book Types**: Filter by fiction, non-fiction, comics, magazines, scientific articles, or standards (default: all of them)
+- **Preferred Book Types**: Filter by fiction, non-fiction, comics, magazines, scientific articles, or standards (default: all of them, which the settings show as All)
 
 <img width="350" alt="Preferred book types" src="docs/screenshots/18-settings-book-types.png" />
 
@@ -103,7 +103,7 @@ When a search finds books, but none in the languages and file types chosen, Kind
 
 <img width="350" alt="How long searches are kept" src="docs/screenshots/20-settings-cache.png" />
 
-- **Clear Cache**: Forget the searches, mirrors and book covers that have been saved, e.g. if results look out of date
+- **Clear Cache**: Forget the searches (and the recent ones the search box offers), mirrors and book covers that have been saved, e.g. if results look out of date
 
 ## How It Works
 
@@ -131,13 +131,13 @@ kindlefetch.koplugin/
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
 │   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
-│   ├── curlupdater.lua        # Checks curl version and automatically installs static curl (8.17.0) if needed
+│   ├── curlupdater.lua        # Checks curl version on Kindles and offers to install static curl (8.21.0) if it's older
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes
 └── util/
     ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
     ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback
     ├── fileutil.lua           # File operations (size, creation, deletion, validation) and directory checks
-    ├── stringutil.lua         # String utilities (trimming, validation, emoji removal, HTML entity conversion)
+    ├── stringutil.lua         # String utilities (trimming, validation, cleaning titles and file names, HTML entity conversion, checking web addresses)
     ├── logutil.lua            # Logger wrapper
     ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed
     ├── pathutil.lua           # Plugin install location and temporary download directory
@@ -150,12 +150,12 @@ kindlefetch.koplugin/
    - Unless turned off in settings, updates are checked for at most once a day while connected, or manually via Kindle Fetch → Check for updates
    - The latest release is looked up in the background, so KOReader can be used meanwhile
    - A curl or plugin update that is turned down is only offered again by checking manually
-   - On Kindles, curl version is checked; user is prompted to update if version is below 8.17.0
+   - On Kindles, curl version is checked; user is prompted to update if version is below 8.21.0
    - Plugin version is checked against GitHub releases; user is prompted to update if new version available
    - Settings are loaded from persistent storage
 
 1. **Settings & Filtering** (`SettingsPage`)
-   - User can customize preferred languages (100+ supported)
+   - User can customize preferred languages (100 supported)
    - User can select preferred file types: ebooks (EPUB, MOBI, AZW, etc.), comics (CBR, CBZ), documents (PDF, DOCX, etc.), images, or web formats
    - User can filter by book type: fiction, non-fiction, comics, magazines, scientific articles, or standards
    - Download directory can be changed from a file browser
@@ -163,20 +163,20 @@ kindlefetch.koplugin/
    - All settings are persisted and applied to future searches
 
 2. **Search Phase** (`LlgiSearch`)
-   - User enters a search query via InputDialog
+   - User enters a search query via InputDialog, or chooses one of the last 10 from its Recent button
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
-   - Pages are fetched with curl where there is one (on a Kindle, once it has been updated): compressed, which Library Genesis sends several times sooner, and in the background, so KOReader isn't held up and a tap on the message cancels the search. Otherwise they're fetched with KOReader's own HTTP, which holds KOReader up until they arrive
+   - Pages are fetched with curl where there is one (on a Kindle, once it has been updated): compressed, which Library Genesis sends several times sooner, and in the background, so KOReader isn't held up, and Cancel on the message saying it's searching calls the search off. Otherwise they're fetched with KOReader's own HTTP, which holds KOReader up until they arrive
    - HTML table is parsed to extract book metadata (title, authors, year, language, file type, MD5 hash, cover image URL), keeping books in the preferred languages and file types
-   - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there, adding the books to the list where it was tapped
+   - As Library Genesis can't filter by language or file type, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there, adding the books to the list where it was tapped. Calling the search off while it reads further pages shows the books it has found so far
    - Results are cached (2 weeks by default, 100 entries max) to minimise requests
-   - Search results are displayed in a menu
+   - Search results are displayed in a menu, marking the books that are in the download folder already
    - When Library Genesis lists results but none are in the preferred languages and file types, the plugin says how many it listed, and offers the settings or to keep searching through the rest
 
 3. **Cover Loading**
-   - Covers for the page of results showing are downloaded in the background, in parallel using curl's `--parallel` flag, with placeholders shown until they arrive
+   - Covers for the page of results showing are downloaded in the background, in parallel using curl's `--parallel` flag, with placeholders shown until they arrive. A connection is opened for each cover at once (with curl 7.68 or later), rather than curl waiting to see whether they can share one, which Library Genesis doesn't allow, so a page of covers arrives in about a third of the time
    - Turning the page loads the covers for that page, and the next page's are downloaded ahead so they're there when it's turned to
-   - A cover that stalls is given up on after 10 seconds, so it doesn't keep the rest of its page waiting
+   - Each cover is shown as soon as it has downloaded (with curl 7.63 or later), rather than once the slowest on its page has, at most once a second as each time the screen is refreshed; one that stalls is given up on after 10 seconds
    - Downloaded covers are cached locally with persistent storage
    - If a cover can't be downloaded, its book is shown without one
    - Tapping a cover in the download prompt downloads the full-size cover, showing the thumbnail until it arrives
@@ -186,17 +186,18 @@ kindlefetch.koplugin/
    - If a file of that name is already there, the plugin asks whether to overwrite it or read the existing book
    - The book's cover is fetched if it isn't cached already
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
-   - Curl fetches the ads page using the book's MD5 hash to obtain a download URL
+   - Curl fetches the ads page using the book's MD5 hash to obtain a download URL, in the background (where pages are fetched with curl), so KOReader carries on while the mirrors answer, and Cancel calls it off
    - File size is read from the headers of the download itself for progress calculation, without a separate request
    - A curl process is spawned to download the file in the background, to a `.part` file next to where the book will be saved, so half a book never shows up in your library
-   - A download that receives nothing for 30 seconds is retried, then given up on
-   - Progress widget updates every 0.5 seconds with percentage and file size information
-   - On completion, the file is moved into the configured download directory, and the plugin offers to open it
+   - A download that receives nothing for 30 seconds is tried again, carrying on from where it stopped rather than starting the book again, and given up on after two more tries
+   - Progress widget updates every 0.5 seconds with percentage and file size information. Until the book starts to arrive, it says what it's waiting for: a download link, then Library Genesis, which can take several seconds to start sending the book. Once nothing has arrived for 10 seconds, it says the download has stalled
+   - On completion, the `.part` file is renamed to the book's name, in the folder chosen in the download prompt, and the plugin offers to open it
 
 5. **Error Handling & Resilience**
    - Wi-Fi is turned on before searching if it's off
-   - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or corrupted downloads are detected and deleted
+   - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or failed downloads are deleted
    - Failed mirrors are removed from cache; if all cached URLs fail they are re-scraped from Wikipedia
+   - The mirror that last answered a search or gave a download link is tried first from then on, rather than asking the ones before it, which may be too busy, every time
    - If Wikipedia answers without listing any mirrors (e.g. once its page has been rearranged), the mirrors known when the plugin was released are used
    - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything
    - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes

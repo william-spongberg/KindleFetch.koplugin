@@ -9,8 +9,9 @@ local Device = require("device")
 
 local CurlUtil = {}
 
--- the oldest curl known to connect to Library Genesis from a Kindle, whose own curl is too old to
-CurlUtil.MIN_VERSION = "8.17.0"
+-- the curl that's installed on Kindles, whose own is too old to connect to Library Genesis (see CurlUpdater): the
+-- latest static build, which older ones are asked to be updated to, for the fixes for security problems found since
+CurlUtil.MIN_VERSION = "8.21.0"
 
 -- constants
 local TMP_DIR = DataStorage:getSettingsDir() .. "/tmp/"
@@ -27,6 +28,7 @@ local CURL_ERRORS = {
     [26] = "failed reading local data",
     [27] = "out of memory",
     [28] = "request timed out",
+    [33] = "the site can't carry on from where the download stopped",
     [35] = "TLS/SSL connection failed",
     [36] = "transfer was stopped",
     [37] = "failed to open local file",
@@ -115,17 +117,20 @@ function CurlUtil.killPid(pid)
 end
 
 -- how the installed curl describes itself, e.g. "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0
--- OpenSSL/3.5.4 zlib/1.3.1", or nil if curl isn't there
+-- OpenSSL/3.5.4 zlib/1.3.1", or nil if curl isn't there. looked up once per session (see forgetVersion), as it
+-- means starting curl, and several things ask
+local curl_description
 local function describeCurl()
-    local pipe = io.popen("curl --version 2>/dev/null", "r")
-    if not pipe then
-        return nil
+    if curl_description == nil then
+        local pipe = io.popen("curl --version 2>/dev/null", "r")
+        local output = pipe and pipe:read("*l")
+        if pipe then
+            pipe:close()
+        end
+        -- false when curl isn't there, so it isn't looked for again
+        curl_description = output or false
     end
-
-    local output = pipe:read("*l")
-    pipe:close()
-
-    return output
+    return curl_description or nil
 end
 
 -- the installed curl's version, e.g. "8.17.0", or nil if curl isn't there
@@ -133,6 +138,12 @@ function CurlUtil.getVersion()
     local description = describeCurl()
     -- "curl X.Y.Z (platform) ..."
     return description and description:match("^curl%s+([%d%.]+)")
+end
+
+-- whether the installed curl is at least min_version, e.g. "7.68.0", for options older ones would fail on
+local function curlIsAtLeast(min_version)
+    local version = VersionUtil.parseVersion(CurlUtil.getVersion())
+    return version ~= nil and VersionUtil.compareVersions(version, VersionUtil.parseVersion(min_version)) >= 0
 end
 
 -- whether curl can fetch web pages (see fetchCommand), and ask for them compressed. worked out once per session,
@@ -164,16 +175,44 @@ function CurlUtil.canFetch()
     return can_fetch
 end
 
+-- look curl up again when it's next needed, e.g. once a newer one has been installed
+function CurlUtil.forgetVersion()
+    curl_description = nil
+    can_fetch, can_decompress = nil, nil
+end
+
 function CurlUtil.getErrorMeaning(exit_code)
     return CURL_ERRORS[exit_code] or "(curl exit code " .. tostring(exit_code) .. ")"
 end
 
--- the size of the file a site is sending, from the headers of its responses (one after another when redirected)
+-- what a Kindle's own curl fails with when connecting to Library Genesis, which it's too old to
+local TLS_ERRORS = { [35] = true, [51] = true, [58] = true, [59] = true, [60] = true, [77] = true, [83] = true }
+CurlUtil.OUTDATED_ERROR = "this Kindle's curl is too old to download from Library Genesis. Update it from "
+    .. "Search → Kindle Fetch → Check for updates"
+
+-- whether this is a Kindle whose curl is older than the oldest known to connect to Library Genesis
+function CurlUtil.isOutdated()
+    return Device:isKindle() and CurlUtil.getVersion() ~= nil and not curlIsAtLeast(CurlUtil.MIN_VERSION)
+end
+
+-- what went wrong for curl to exit with exit_code, for saying so: on a Kindle whose curl is too old to connect to
+-- Library Genesis, that and how to update it, rather than that the TLS connection failed
+function CurlUtil.explainExitCode(exit_code)
+    if TLS_ERRORS[exit_code] and CurlUtil.isOutdated() then
+        return CurlUtil.OUTDATED_ERROR
+    end
+    return CurlUtil.getErrorMeaning(exit_code)
+end
+
+-- the size of the file a site is sending, from the headers of its responses (one after another when redirected,
+-- or when curl has carried on from where a download stopped)
 function CurlUtil.parseContentLength(headers)
-    -- get content length from the last response that has one, i.e. the file's rather than a redirect's
+    -- from the last response that says, i.e. the file's rather than a redirect's
     local file_size = nil
     for block in headers:gmatch("HTTP[/%d%.]+.-\r?\n\r?\n") do
-        local size = block:match("[Cc]ontent%-[Ll]ength:%s*(%d+)")
+        -- the whole file's size, when only the rest of it was sent
+        local size = block:match("[Cc]ontent%-[Rr]ange:%s*bytes%s+%d+%-%d+/(%d+)")
+            or block:match("[Cc]ontent%-[Ll]ength:%s*(%d+)")
         if size then
             file_size = tonumber(size)
         end
@@ -310,7 +349,13 @@ function CurlUtil.dumpHeaders(curl_cmd, headers_file)
 end
 
 function CurlUtil.enableParallel(curl_cmd, max_parallel)
-    return string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
+    local cmd = string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
+    -- open a connection for each file at once, rather than waiting to see whether they can share one, which
+    -- Library Genesis' sites never let them: a page of covers arrives in a third of the time
+    if curlIsAtLeast("7.68.0") then
+        cmd = cmd .. " --parallel-immediate"
+    end
+    return cmd
 end
 
 function CurlUtil.applyProxy(curl_cmd)
@@ -394,12 +439,17 @@ function CurlUtil.getCMD(download_url, filepath, exit_file, use_proxy)
 end
 
 -- max_time optionally limits how long each attempt (and retrying) can take, in seconds.
--- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize), and
--- opts.stall_time gives up on a download once nothing has arrived for that many seconds
+-- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize),
+-- opts.stall_time gives up on a download once nothing has arrived for that many seconds, and opts.resume has curl
+-- carry on from what's already in filepath, including when it tries again after a download stops partway (where
+-- the site says it can), rather than starting again from the beginning
 function CurlUtil.download(download_url, filepath, use_proxy, background, max_time, opts)
     opts = opts or {}
 
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
+    if opts.resume then
+        cmd = cmd .. " -C -"
+    end
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, download_url)
     cmd = CurlUtil.enableRetry(cmd, 2, 2)
@@ -513,13 +563,20 @@ function CurlUtil.downloadMultiple(
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)
     end
-    -- write each file's result, as some may download when others fail
-    cmd = string.format(
-        "%s -w %s > %s",
-        cmd,
-        CurlUtil.shellQuote("%{exitcode} %{filename_effective}\\n"),
-        CurlUtil.shellQuote(results_file)
-    )
+    -- write each file's result, as some may download when others fail. where curl can, to its stderr, which isn't
+    -- buffered like its stdout, so each file's result is there as soon as it has downloaded (and been written out
+    -- in full), rather than once they all have
+    local write_out = "%{exitcode} %{filename_effective}\\n"
+    if curlIsAtLeast("7.63.0") then
+        cmd = string.format(
+            "%s -w %s 2> %s",
+            cmd,
+            CurlUtil.shellQuote("%{stderr}" .. write_out),
+            CurlUtil.shellQuote(results_file)
+        )
+    else
+        cmd = string.format("%s -w %s > %s", cmd, CurlUtil.shellQuote(write_out), CurlUtil.shellQuote(results_file))
+    end
 
     local exit_file = CurlUtil.createExitFile()
     cmd = CurlUtil.saveExitCode(cmd, exit_file)

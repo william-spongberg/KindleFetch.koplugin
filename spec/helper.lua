@@ -222,6 +222,12 @@ local function createStubs(state)
         sdl = false,
         android = false,
         home_dir = nil,
+        -- KOReader's input, which can be told to ignore taps for a moment, kept in state.input_inhibited
+        input = {
+            inhibitInputUntil = function(_, set_or_seconds)
+                state.input_inhibited = set_or_seconds
+            end,
+        },
         screen = {
             scaleBySize = function(_, size)
                 return size
@@ -343,6 +349,10 @@ local function createStubs(state)
         nextTick = function(_, fn)
             table.insert(state.scheduled, fn)
         end,
+        -- KOReader's offer to restart, or saying it needs restarting where it can't restart itself
+        askForRestart = function(_, text)
+            table.insert(state.restart_prompts, text)
+        end,
     }
 
     stubs.inputdialog = {
@@ -350,6 +360,9 @@ local function createStubs(state)
             o = o or {}
             o.getInputText = function(self)
                 return self.input_text or ""
+            end
+            o.setInputText = function(self, text)
+                self.input_text = text
             end
             o.onCloseKeyboard = function(self)
                 self.keyboard_closed = true
@@ -648,6 +661,7 @@ function helper.reset()
         scheduled = {},
         broadcasts = {},
         notifications = {},
+        restart_prompts = {},
         dir_choosers = {},
         actions = {},
         logs = {},

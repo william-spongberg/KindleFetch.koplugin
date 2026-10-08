@@ -203,4 +203,27 @@ function KindleFetchCache:deleteValueFromKey(value, ...)
     self:save()
 end
 
+-- put value first in the list cached under the key, keeping when it was cached, so it expires when it would have
+function KindleFetchCache:moveValueToFront(value, ...)
+    self:load()
+    local entry = self.cache[self.makeKey(...)]
+    if not entry or type(entry.value) ~= "table" or entry.value[1] == value then
+        return
+    end
+
+    -- build a new list rather than reordering in place, as callers may still be looping over the old one
+    local reordered = { value }
+    for _, v in ipairs(entry.value) do
+        if v ~= value then
+            table.insert(reordered, v)
+        end
+    end
+    if #reordered > #entry.value then
+        return
+    end
+    entry.value = reordered
+
+    self:save()
+end
+
 return KindleFetchCache

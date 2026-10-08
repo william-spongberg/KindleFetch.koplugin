@@ -49,17 +49,39 @@ describe("SettingsPage", function()
 
         assert.are.same({
             "Show Book Covers: ☑",
-            "Download Folder: " .. helper.abs(data_dir),
-            "Preferred Languages: en",
-            "Preferred File Types: epub, mobi, azw, fb2, prc, cbr, cbz, "
-                .. "pdf, txt, rtf, doc, docx, odt, djvu, jpg, tif, pdb, chm, htm, html, htmlz",
-            "Preferred Book Types: fiction, nonfiction, comics, magazines, articles, standards",
+            "Download Folder: " .. SettingsPage.shortenFolder(helper.abs(data_dir)),
+            -- by name, rather than the codes they're saved as
+            "Preferred Languages: English",
+            "Preferred File Types: All",
+            "Preferred Book Types: All",
             "Check for Updates Automatically: ☑",
             "Keep Searches For: 14 days",
             "Keep Mirrors For: 7 days",
             "Clear Cache",
         }, itemTexts(lastMenu()))
         assert.are.equal("Kindle Fetch Settings", lastMenu().title)
+    end)
+
+    -- rather than a list too long to fit, or codes
+    it("names the file types and book types chosen, when they aren't all", function()
+        Settings:setPreferredFileTypes({ "pdf", "epub" })
+        Settings:setPreferredBookTypes({ "nonfiction", "fiction" })
+        SettingsPage:showSettings()
+
+        -- in the order they're listed in
+        assert.are.equal("Preferred File Types: epub, pdf", lastMenu().item_table[4].text)
+        assert.are.equal("Preferred Book Types: Fiction, Non-fiction", lastMenu().item_table[5].text)
+    end)
+
+    -- whose end says the most about it, where the menu would cut it off
+    it("shows the end of a long download folder", function()
+        assert.are.equal("/mnt/us/documents/books", SettingsPage.shortenFolder("/mnt/us/documents/books"))
+        assert.are.equal(
+            "…/e2e/kindle-paperwhite/books",
+            SettingsPage.shortenFolder("/home/someone/Documents/dev/projects/KindleFetch/e2e/kindle-paperwhite/books")
+        )
+        local long_name = "/" .. string.rep("a very long folder name ", 3)
+        assert.are.equal("…" .. long_name, SettingsPage.shortenFolder("/mnt/us/documents" .. long_name))
     end)
 
     -- rounded corners aren't painted, so the top edge of KOReader's menu showed in the corners of the settings
@@ -82,7 +104,8 @@ describe("SettingsPage", function()
 
         assert.is_false(Settings:getShowBookCovers())
         assert.are.equal("Show Book Covers: ☐", lastMenu().item_table[1].text)
-        assert.are.equal("Book cover visibility updated", helper.lastNotification())
+        -- which isn't said as well, as each notification refreshes the screen twice
+        assert.are.equal(0, #helper.state.notifications)
     end)
 
     -- closing the menu and opening another for every change flashed the whole screen twice
@@ -106,7 +129,7 @@ describe("SettingsPage", function()
 
         assert.is_false(Settings:getCheckForUpdates())
         assert.are.equal("Check for Updates Automatically: ☐", lastMenu().item_table[6].text)
-        assert.are.equal("Update checks updated", helper.lastNotification())
+        assert.are.equal(0, #helper.state.notifications)
 
         tap("Check for Updates Automatically")
         assert.is_true(Settings:getCheckForUpdates())
@@ -125,7 +148,7 @@ describe("SettingsPage", function()
             local choices = lastMenu()
             tap("30 days")
             assert.are.equal(30, Settings:getSearchCacheExpiryDays())
-            assert.are.equal("Cache expiry updated", helper.lastNotification())
+            assert.are.equal(0, #helper.state.notifications)
             -- back in the settings, which were open underneath
             assert.is_true(helper.wasClosed(choices))
             assert.are.equal("Keep Searches For: 30 days", lastMenu().item_table[7].text)
@@ -150,7 +173,7 @@ describe("SettingsPage", function()
             helper.state.dir_choosers[1].onConfirm(books)
 
             assert.are.equal(books, Settings:getDownloadDir())
-            assert.are.equal("Download folder updated", helper.lastNotification())
+            assert.are.equal(0, #helper.state.notifications)
             assert.are.equal("Download Folder: " .. books, lastMenu().item_table[2].text)
         end)
 
@@ -184,8 +207,8 @@ describe("SettingsPage", function()
             lastMenu().onClose()
 
             assert.are.same({ "es", "fr" }, Settings:getPreferredLanguages())
-            assert.are.equal("Languages updated", helper.lastNotification())
-            assert.are.equal("Preferred Languages: es, fr", lastMenu().item_table[3].text)
+            assert.are.equal(0, #helper.state.notifications)
+            assert.are.equal("Preferred Languages: Spanish, French", lastMenu().item_table[3].text)
         end)
 
         -- there are eight pages of languages, and each tick used to go back to the first
@@ -275,7 +298,7 @@ describe("SettingsPage", function()
                 "html",
                 "htmlz",
             }, Settings:getPreferredFileTypes())
-            assert.are.equal("File types updated", helper.lastNotification())
+            assert.are.equal(0, #helper.state.notifications)
         end)
 
         it("cannot all be unticked", function()
@@ -303,7 +326,7 @@ describe("SettingsPage", function()
             lastMenu().onClose()
 
             assert.are.same({ "fiction", "magazines", "articles", "standards" }, Settings:getPreferredBookTypes())
-            assert.are.equal("Book types updated", helper.lastNotification())
+            assert.are.equal(0, #helper.state.notifications)
         end)
 
         it("cannot all be unticked", function()
@@ -357,11 +380,14 @@ describe("SettingsPage", function()
         end)
 
         it("forgets the searches, mirrors and book covers that are saved", function()
+            Settings:addRecentSearch("dune")
             SettingsPage:showSettings()
             tap("Clear Cache")
             helper.lastShown().ok_callback()
 
             assert.are.same({ "search", "url", "cover" }, cleared)
+            -- and the searches made recently
+            assert.are.same({}, Settings:getRecentSearches())
             assert.are.equal("Cache cleared", helper.lastNotification())
         end)
     end)

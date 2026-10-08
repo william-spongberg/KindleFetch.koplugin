@@ -32,9 +32,11 @@ local COVER_SIZE = Screen:scaleBySize(192)
 -- the title and the book's details in black, the rest in greys that are still dark enough to read on e-ink (#3)
 local AUTHOR_COLOR = Blitbuffer.COLOR_GRAY_4
 local LABEL_COLOR = Blitbuffer.COLOR_GRAY_6
--- the most lines a long title and a long list of authors can take up, so the prompt always fits on the screen
+-- the most lines a long title, a long list of authors and the name the book is saved as can take up, so the
+-- prompt always fits on the screen
 local TITLE_MAX_LINES = 4
 local AUTHOR_MAX_LINES = 2
+local FILENAME_MAX_LINES = 2
 local TITLE_FACE = Font:getFace("cfont", 20)
 local AUTHOR_FACE = Font:getFace("cfont", 17)
 local DETAIL_FACE = Font:getFace("cfont", 15)
@@ -72,9 +74,12 @@ function DownloadPrompt.new(book, filepath, on_download)
         end
         return false
     end
-    -- show the cover once it has downloaded, or take its placeholder away if it couldn't be
+    -- show the cover once it has downloaded, or take its placeholder away if it couldn't be, but not for other
+    -- books' covers, which can arrive several times a second while search results are open
     function self.outer_container.onKindleFetchCoversDownloaded()
-        parent_ref:refreshCover()
+        if parent_ref:coverState() ~= parent_ref.cover_state then
+            parent_ref:refreshCover()
+        end
     end
 
     self:buildCover()
@@ -149,10 +154,21 @@ function DownloadPrompt:coverFile()
     return CoverCache:getFullSize(self.book) or CoverCache:get(self.book.md5)
 end
 
+-- which of its covers the book has, and which are still coming, to tell when that has changed
+function DownloadPrompt:coverState()
+    return string.format(
+        "%s|%s|%s",
+        tostring(self:coverFile()),
+        tostring(CoverCache:isComing(self.book)),
+        tostring(CoverCache:isFullSizeComing(self.book))
+    )
+end
+
 -- the book's cover (which can be tapped to show it fullscreen), a placeholder while it downloads, or nothing
 function DownloadPrompt:buildCover()
     self.cover = nil
     self.cover_container = nil
+    self.cover_state = self:coverState()
 
     local cover_file = self:coverFile()
     if cover_file then
@@ -364,6 +380,14 @@ function DownloadPrompt:buildContent()
         }
     end
 
+    -- the name it's saved as, on its own, as a long folder would leave no room for it beside it
+    self.filename_widget = wrappedText(FILENAME_MAX_LINES, {
+        width = CONTENT_WIDTH,
+        face = DETAIL_FACE,
+        text = self:filename(),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    })
+
     return VerticalGroup:new {
         align = "left",
         self.header,
@@ -380,13 +404,26 @@ function DownloadPrompt:buildContent()
             width = Size.padding.small,
         },
         self.path_widget,
+        VerticalSpan:new {
+            width = Size.padding.small,
+        },
+        self.filename_widget,
     }
 end
 
--- the download path, which can be tapped to choose another folder
+-- the folder the book is saved in, and the name it's saved as
+function DownloadPrompt:folder()
+    local folder = self.filepath:match("^(.*)/[^/]*$")
+    return folder ~= "" and folder or "/"
+end
+function DownloadPrompt:filename()
+    return self.filepath:match("([^/]+)$") or ""
+end
+
+-- the folder the book is downloaded to, which can be tapped to choose another
 function DownloadPrompt:buildPathButton()
     self.path_widget = Button:new {
-        text = self.filepath,
+        text = self:folder(),
         callback = function()
             self:choosePath()
         end,
@@ -404,8 +441,7 @@ function DownloadPrompt:choosePath()
     DownloadMgr:new {
         title = _("Choose download directory"),
         onConfirm = function(dir)
-            local filename = self.filepath:match("([^/]+)$") or ""
-            self.filepath = dir .. "/" .. filename
+            self.filepath = dir .. "/" .. self:filename()
 
             -- recreate the button rather than setting its text, which keeps the old text's size
             self:buildPathButton()

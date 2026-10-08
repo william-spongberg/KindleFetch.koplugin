@@ -95,6 +95,7 @@ describe("LlgiAPI", function()
                 exit_file = exit_file,
                 headers_file = opts.headers_file,
                 stall_time = opts.stall_time,
+                resume = opts.resume,
             })
             return spawned[#spawned].pid, exit_file
         end
@@ -295,8 +296,96 @@ describe("LlgiAPI", function()
                 headers_file = spawned[1].headers_file,
                 -- rather than waiting forever on a download that has stalled
                 stall_time = 30,
+                -- and when curl tries it again, carrying on from where it stopped rather than from the beginning
+                resume = true,
             }, spawned[1])
             assert.is_string(spawned[1].headers_file)
+        end)
+
+        -- which can mean trying several mirrors, each taking a while to answer
+        describe("while looking up the download link", function()
+            local HttpUtil, Trapper, getBody
+
+            before_each(function()
+                HttpUtil = require("util.httputil")
+                Trapper = require("ui/trapper")
+                getBody = HttpUtil.getBody
+            end)
+
+            it("doesn't hold KOReader up, letting the progress's Cancel call it off", function()
+                local waits = {}
+                HttpUtil.getBody = function(url)
+                    table.insert(waits, { wrapped = Trapper:isWrapped(), trap_widget = HttpUtil.trap_widget })
+                    return getBody(url)
+                end
+
+                download()
+                -- Wikipedia's list of mirrors, then the mirror's download page
+                assert.are.equal(2, #waits)
+                for _, wait in ipairs(waits) do
+                    assert.is_true(wait.wrapped)
+                    assert.are.equal(progress(), wait.trap_widget)
+                end
+                assert.is_nil(HttpUtil.trap_widget)
+                assert.are.equal(1, #spawned)
+            end)
+
+            it("can be called off, which says nothing about the mirrors", function()
+                HttpUtil.getBody = function(url)
+                    if url:find("/ads.php", 1, true) then
+                        progress().cancel_button.callback()
+                        return nil, HttpUtil.CANCELLED
+                    end
+                    return getBody(url)
+                end
+
+                download()
+                assert.are.same({ { ok = false, err = "cancelled" } }, results)
+                assert.are.equal(0, #spawned)
+                assert.are.same({}, LlgiAPI:getActiveDownloads())
+                assert.is_nil(HttpUtil.trap_widget)
+                -- none are dropped, or looked up again
+                HttpUtil.getBody = getBody
+                assert.are.same(mirrors, UrlApi:getLibgenUrls())
+                assert.are.equal(1, web.scrapes)
+            end)
+
+            it("says something went wrong, rather than leaving the progress showing", function()
+                local widget
+                HttpUtil.getBody = function()
+                    widget = progress()
+                    error("unexpected")
+                end
+
+                download()
+                assert.are.same({ { ok = false, err = "something went wrong, see crash.log" } }, results)
+                assert.is_true(helper.wasClosed(widget.container))
+                assert.are.same({}, LlgiAPI:getActiveDownloads())
+                assert.is_nil(HttpUtil.trap_widget)
+                assert.is_truthy(helper.logged("err", "^looking up the download link went wrong:.*unexpected"))
+            end)
+        end)
+
+        -- which could be another book entirely, with the same title
+        it("doesn't carry on from what's left of an earlier download of a book of the same name", function()
+            helper.writeFile(filepath .. ".part", "another book")
+            download()
+            assert.is_false(helper.exists(filepath .. ".part"))
+            assert.is_true(spawned[1].resume)
+        end)
+
+        it("starts again from the beginning when the site can't carry on from where the download stopped", function()
+            download()
+            curlWrote(MB / 2, 33)
+            helper.tick()
+            assert.are.equal(2, #spawned)
+            assert.is_false(spawned[2].resume)
+            assert.is_false(spawned[2].use_proxy)
+            assert.is_false(helper.exists(filepath .. ".part"))
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
         end)
 
         -- so that half a book is never left looking like a whole one
@@ -336,13 +425,68 @@ describe("LlgiAPI", function()
             assert.are.equal("50% · 0.5 / 1.0 MB", widget.status_widget.text)
         end)
 
+        -- which can take a while
+        it("says what it's waiting for until the book starts to arrive", function()
+            local HttpUtil = require("util.httputil")
+            local getBody = HttpUtil.getBody
+            local while_finding_the_link
+            HttpUtil.getBody = function(url)
+                if url:find("/ads.php", 1, true) then
+                    while_finding_the_link = progress().status_text
+                end
+                return getBody(url)
+            end
+
+            download()
+            assert.are.equal("Finding a download link...", while_finding_the_link)
+            assert.are.equal("Waiting for Library Genesis...", progress().status_widget.text)
+            helper.tick()
+            assert.are.equal("Waiting for Library Genesis...", progress().status_widget.text)
+
+            curlWrote(MB / 2)
+            helper.tick()
+            assert.are.equal("50% · 0.5 / 1.0 MB", progress().status_widget.text)
+        end)
+
+        -- rather than looking as if KOReader is stuck, as curl only tries again once it has stalled for a while
+        it("says when the download has stalled", function()
+            helper.state.time = 1000
+            download()
+            curlWrote(MB / 2)
+            helper.tick()
+            helper.state.time = 1009
+            helper.tick()
+            assert.are.equal("50% · 0.5 / 1.0 MB", progress().status_widget.text)
+
+            helper.state.time = 1010
+            helper.tick()
+            assert.are.equal("Stalled at 50%, retrying...", progress().status_widget.text)
+            assert.are.equal(0.5, progress().bar_widget.percentage)
+
+            -- until more arrives
+            curlWrote(MB * 3 / 4)
+            helper.tick()
+            assert.are.equal("75% · 0.8 / 1.0 MB", progress().status_widget.text)
+        end)
+
+        it("says when a download of unknown size has stalled", function()
+            remote_size = nil
+            helper.state.time = 1000
+            download()
+            curlWrote(MB / 2)
+            helper.tick()
+            helper.state.time = 1010
+            helper.tick()
+            assert.are.equal("Stalled at 0.5 MB, retrying...", progress().status_widget.text)
+        end)
+
         -- rather than asking for it before downloading, and waiting for the answer
         it("works out the book's size from the headers curl notes down as the book starts to arrive", function()
             download()
             local widget = progress()
 
             helper.tick()
-            assert.are.equal("Starting download...", widget.status_widget.text)
+            assert.are.equal("Waiting for Library Genesis...", widget.status_widget.text)
 
             helper.writeFile(
                 spawned[1].headers_file,
@@ -442,7 +586,27 @@ describe("LlgiAPI", function()
 
             download()
             assert.are.equal(getUrl(mirrors[2]), spawned[1].url)
-            assert.are.same(mirrors, UrlApi:getLibgenUrls())
+            local reordered = { mirrors[2], mirrors[1] }
+            for i = 3, #mirrors do
+                table.insert(reordered, mirrors[i])
+            end
+            assert.are.same(reordered, UrlApi:getLibgenUrls())
+        end)
+
+        -- rather than asking the ones before it every time, which may be too busy for a while
+        it("asks the mirror that last gave a download link first", function()
+            web.pages[adsUrl(mirrors[1])] = "<html><body>Could not connect to the database 3306. User 'libgen_get' "
+                .. "has exceeded the 'max_user_connections' resource (current value: 80)</body></html>"
+            hasBook(mirrors[2])
+            download()
+            curlWrote(MB, 0)
+            helper.runScheduled()
+
+            web.fetched = {}
+            os.remove(filepath)
+            download()
+            assert.are.same({ adsUrl(mirrors[2]) }, web.fetched)
+            assert.are.equal(getUrl(mirrors[2]), spawned[2].url)
         end)
 
         it("scrapes the mirrors again when every mirror fails", function()
@@ -569,6 +733,18 @@ describe("LlgiAPI", function()
             )
         end)
 
+        -- rather than that the TLS connection failed, which doesn't say what to do about it
+        it("says when a Kindle's curl is too old to download the book, and how to update it", function()
+            helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0\n")
+            CurlUtil.forgetVersion()
+            download()
+            curlWrote(0, 35)
+            helper.runScheduled()
+
+            assert.are.same({ { ok = false, err = CurlUtil.OUTDATED_ERROR } }, results)
+            assert.matches("Check for updates", CurlUtil.OUTDATED_ERROR, 1, true)
+        end)
+
         -- as happened while this was written: the mirrors linked to the book, then answered with an error
         it("says Library Genesis is too busy when its servers fail to send the book", function()
             download()
@@ -626,12 +802,15 @@ describe("LlgiAPI", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"
             download()
 
-            curlWrote(0, 7)
+            curlWrote(MB / 4, 7)
             helper.tick()
             assert.are.equal(2, #spawned)
             assert.is_true(spawned[2].use_proxy)
             assert.are.equal(filepath .. ".part", spawned[2].path)
             assert.are.equal(30, spawned[2].stall_time)
+            -- carrying on from what had downloaded
+            assert.is_true(spawned[2].resume)
+            assert.are.equal(MB / 4, #helper.readFile(filepath .. ".part"))
 
             curlWrote(MB, 0)
             helper.runScheduled()

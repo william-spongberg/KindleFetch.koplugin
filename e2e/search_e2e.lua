@@ -43,15 +43,18 @@ describe("Searching", function()
 
         local message = H.waitFor("the message saying it's searching", 10, function()
             for _, window in ipairs(H.windows()) do
-                if type(window.text) == "string" and window.text:find("Searching Library Genesis", 1, true) then
+                if type(window.title) == "string" and window.title:find("Searching Library Genesis", 1, true) then
                     return window
                 end
             end
         end)
-        assert(message.text:find("Tap to cancel", 1, true), "the message doesn't say how to call the search off")
         H.shot("searching")
 
-        H.tap(message.movable)
+        -- a tap elsewhere, which may have been meant for something else, leaves it searching
+        H.tapAt(5, 5)
+        assert(H.isShown(message), "a tap away from the message called the search off")
+
+        H.tapButton("Cancel", message)
         H.waitFor("the message to go", 10, function()
             return not H.isShown(message)
         end)

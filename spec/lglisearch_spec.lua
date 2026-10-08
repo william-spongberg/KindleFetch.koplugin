@@ -434,14 +434,16 @@ describe("LlgiSearch", function()
                     assert.are.equal(1, web.scrapes)
                 end)
 
-                it("doesn't show the books found on earlier pages, or save them", function()
+                -- which there may have been a few of, when it was called off while looking for more
+                it("shows the books found on earlier pages, carrying on from the one it was called off on", function()
                     results(mirrors[1], fullPage(1, 3), 1)
                     callOffAt("&page=2")
 
-                    local books, err = LlgiSearch:search("dune", 1)
-                    assert.is_nil(books)
-                    assert.are.equal(HttpUtil.CANCELLED, err)
-                    assert.is_false(LlgiSearch:isCached("dune", 1))
+                    local books, err, next_page = LlgiSearch:search("dune", 1)
+                    assert.is_nil(err)
+                    assert.are.equal(3, #books)
+                    assert.are.equal(2, next_page)
+                    assert.is_truthy(helper.logged("info", "^search called off on page 2 so showing the 3 books"))
                 end)
 
                 it("stops while the mirrors are being looked up, rather than taking it for being offline", function()
@@ -521,6 +523,20 @@ describe("LlgiSearch", function()
                 table.insert(remaining, mirrors[i])
             end
             assert.are.same(remaining, require("api.urlapi"):getLibgenUrls())
+        end)
+
+        -- rather than asking the ones before it every time, which may be blocking searches for a while
+        it("asks the mirror that last answered first", function()
+            web.pages[searchUrl(mirrors[1])] =
+                "<html><head><title>DDoS-Guard</title></head><body>Checking your browser</body></html>"
+            results(mirrors[2], { fixtures.DUNE })
+            assert.are.equal(1, #LlgiSearch:search("dune", 1))
+            assert.are.equal(mirrors[2], require("api.urlapi"):getLibgenUrls()[1])
+
+            web.fetched = {}
+            web.pages[searchUrl(mirrors[2], 1, "dune messiah")] = fixtures.libgenResults({ fixtures.DUNE })
+            assert.are.equal(1, #LlgiSearch:search("dune messiah", 1))
+            assert.are.same({ searchUrl(mirrors[2], 1, "dune messiah") }, searches())
         end)
 
         it("treats unexpected pages as failures", function()

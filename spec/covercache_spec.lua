@@ -203,7 +203,7 @@ describe("CoverCache", function()
             assert.are.same({ covers_dir .. "new.jpg" }, runs[1].paths)
             assert.are.equal(6, runs[1].parallel_jobs)
             assert.is_false(runs[1].use_proxy)
-            -- covers are shown once they've all finished, so one that has stalled mustn't keep the rest waiting
+            -- one that has stalled mustn't keep its placeholder showing, or the next page's covers waiting
             assert.are.equal(10, runs[1].stall_time)
             -- search results show placeholders, rather than a notification
             assert.are.equal(0, #helper.state.notifications)
@@ -219,6 +219,107 @@ describe("CoverCache", function()
             assert.are.equal(covers_dir .. "new.jpg", CoverCache:get("new"))
             -- so every open search result can show them
             assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
+        end)
+
+        -- rather than once the slowest has, which curl can wait on for a while before giving up
+        describe("as they arrive", function()
+            local results_file, cache_file
+
+            -- curl writes each cover's result as soon as it has downloaded
+            local function arrive(...)
+                local lines = {}
+                for _, result in ipairs({ ... }) do
+                    if result[2] == 0 then
+                        helper.writeFile(covers_dir .. result[1] .. ".jpg", "jpeg")
+                    end
+                    table.insert(lines, result[2] .. " " .. covers_dir .. result[1] .. ".jpg")
+                end
+                helper.writeFile(results_file, table.concat(lines, "\n") .. "\n")
+            end
+
+            before_each(function()
+                results_file = data_dir .. "/settings/curl_config.txt.results"
+                cache_file = data_dir .. "/settings/kindlefetch_covercache.lua"
+                CoverCache:downloadMultiple({
+                    book("a", "https://covers.example/a.jpg"),
+                    book("b", "https://covers.example/b.jpg"),
+                    book("c", "https://covers.example/c.jpg"),
+                }, 6, onDone)
+            end)
+
+            it("shows each cover while the others are still coming", function()
+                arrive({ "a", 0 })
+                helper.tick()
+                assert.are.equal(covers_dir .. "a.jpg", CoverCache:get("a"))
+                assert.is_true(CoverCache:isComing(book("b", "https://covers.example/b.jpg")))
+                assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
+                assert.are.same({}, results)
+
+                -- c stalls, and is given up on once curl has finished
+                arrive({ "a", 0 }, { "b", 0 }, { "c", 28 })
+                finishRun(runs[1], {}, 28)
+                helper.runScheduled()
+                assert.are.same({ 2 }, results)
+                assert.is_true(CoverCache:cacheExists("b"))
+                assert.is_false(CoverCache:isComing(book("c", "https://covers.example/c.jpg")))
+                -- so its placeholder can be taken away
+                assert.are.equal(2, #helper.state.broadcasts)
+            end)
+
+            -- each time, the screen is refreshed
+            it("shows them at most once a second", function()
+                arrive({ "a", 0 })
+                helper.tick()
+                arrive({ "a", 0 }, { "b", 0 })
+                helper.tick()
+                assert.are.equal(1, #helper.state.broadcasts)
+                assert.is_false(CoverCache:cacheExists("b"))
+
+                helper.tick()
+                assert.are.equal(2, #helper.state.broadcasts)
+                assert.is_true(CoverCache:cacheExists("b"))
+
+                -- and not when nothing new has arrived
+                helper.tick()
+                helper.tick()
+                assert.are.equal(2, #helper.state.broadcasts)
+            end)
+
+            it("writes the cache out once they've all finished", function()
+                local function savedCovers()
+                    local md5s = {}
+                    for md5 in pairs(helper.state.settings_files[cache_file] or {}) do
+                        table.insert(md5s, md5)
+                    end
+                    table.sort(md5s)
+                    return md5s
+                end
+
+                arrive({ "a", 0 }, { "b", 0 })
+                helper.tick()
+                assert.are.same({}, savedCovers())
+
+                arrive({ "a", 0 }, { "b", 0 }, { "c", 0 })
+                finishRun(runs[1], { true, true, true })
+                helper.runScheduled()
+                assert.are.same({ "a", "b", "c" }, savedCovers())
+            end)
+
+            it("only retries the covers that didn't arrive through PROXY_URL", function()
+                helper.state.env.PROXY_URL = "http://proxy.example:8080"
+                arrive({ "a", 0 })
+                helper.tick()
+
+                arrive({ "a", 0 }, { "b", 35 }, { "c", 35 })
+                finishRun(runs[1], {}, 35)
+                helper.tick()
+                assert.are.equal(2, #runs)
+                assert.are.same({ "https://covers.example/b.jpg", "https://covers.example/c.jpg" }, runs[2].urls)
+
+                finishRun(runs[2], { true, true })
+                helper.runScheduled()
+                assert.are.same({ 3 }, results)
+            end)
         end)
 
         -- the cache holds 500 covers

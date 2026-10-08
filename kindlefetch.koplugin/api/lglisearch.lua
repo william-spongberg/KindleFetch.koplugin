@@ -222,6 +222,7 @@ local function fetchResults(params, refresh)
             for _, unanswered_url in ipairs(unanswered) do
                 UrlApi:deleteLibgenUrl(unanswered_url)
             end
+            UrlApi:preferLibgenUrl(url)
             return html, nil, url
         end
 
@@ -318,8 +319,12 @@ function LlgiSearch:search(query, page)
     for _ = 1, MAX_PAGES do
         local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types))
         if not html then
-            -- show the books found so far, carrying on from the page that failed, unless the search was called off
-            if #books > 0 and err ~= HttpUtil.CANCELLED then
+            -- show the books found so far, carrying on from the page that failed, or that the search was called off
+            -- on, rather than throwing away what earlier pages found
+            if #books > 0 then
+                if err == HttpUtil.CANCELLED then
+                    LogUtil.info("search called off on page", next_page, "so showing the", #books, "books found before")
+                end
                 break
             end
             return nil, err

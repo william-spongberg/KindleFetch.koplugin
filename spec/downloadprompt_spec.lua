@@ -61,7 +61,9 @@ describe("DownloadPrompt", function()
 
         assert.are.equal("Dune", prompt.title.text)
         assert.are.equal("Frank Herbert", prompt.author.text)
-        assert.are.equal("/mnt/us/documents/Dune.epub", prompt.path_widget.text)
+        -- the folder, which can be tapped to choose another, and the name the book is saved as
+        assert.are.equal("/mnt/us/documents", prompt.path_widget.text)
+        assert.are.equal("Dune.epub", prompt.filename_widget.text)
         assert.are.same({
             { "Format", "EPUB · 1.2MB" },
             { "Language", "English [en]" },
@@ -151,10 +153,23 @@ describe("DownloadPrompt", function()
         helper.state.dir_choosers[1].onConfirm("/mnt/us/books")
 
         assert.are.equal("/mnt/us/books/Dune.epub", prompt.filepath)
-        assert.are.equal("/mnt/us/books/Dune.epub", prompt.path_widget.text)
+        assert.are.equal("/mnt/us/books", prompt.path_widget.text)
+        assert.are.equal("Dune.epub", prompt.filename_widget.text)
 
         tapButton(prompt, "download")
         assert.are.same({ "/mnt/us/books/Dune.epub" }, downloads)
+    end)
+
+    -- which used to share a button with the folder, and be cut off by a long one
+    it("shows the name the book is saved as on its own, however long the folder", function()
+        local folder = "/mnt/us/documents/" .. string.rep("a folder with a long name/", 6)
+        local prompt = DownloadPrompt.new(book, folder .. "Dune Messiah.epub", function() end)
+        assert.are.equal("Dune Messiah.epub", prompt.filename_widget.text)
+        assert.are.equal(folder:gsub("/$", ""), prompt.path_widget.text)
+
+        prompt = DownloadPrompt.new(book, "/Dune.epub", function() end)
+        assert.are.equal("/", prompt.path_widget.text)
+        assert.are.equal("Dune.epub", prompt.filename_widget.text)
     end)
 
     it("lets the download folder be changed more than once", function()
@@ -208,6 +223,23 @@ describe("DownloadPrompt", function()
             prompt.outer_container:onKindleFetchCoversDownloaded()
             assert.are.equal(prompt.cover_container, prompt.cover)
             assert.are.equal(prompt.cover, prompt.header[1])
+        end)
+
+        -- which arrive several times a second while the search results behind it load theirs
+        it("isn't redrawn when other books' covers arrive", function()
+            book.image_url = "https://covers.example/dune.jpg"
+            local prompt = newPrompt()
+            prompt:show()
+            helper.state.refreshes = {}
+
+            fixtures.cacheCover(helper, "another-book")
+            prompt.outer_container:onKindleFetchCoversDownloaded()
+            assert.are.equal(0, #helper.state.refreshes)
+
+            cacheCover()
+            prompt.outer_container:onKindleFetchCoversDownloaded()
+            assert.are.equal(1, #helper.state.refreshes)
+            assert.are.equal(prompt.cover_container, prompt.cover)
         end)
 
         it("is taken away when it couldn't be downloaded", function()

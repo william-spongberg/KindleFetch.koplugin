@@ -174,6 +174,8 @@ describe("BookMenu", function()
             assert.are.equal(string.rep("Мастер и Маргарита ", 10), content[1].text)
             assert.are.equal(494, content[1].max_width)
             assert.are.equal(494, content[3].max_width)
+            -- and the details wrap in that room, rather than running off the edge of the screen
+            assert.are.equal(494, content[5].width)
             -- each line is only as wide as its text, so they'd be centred otherwise
             assert.are.equal("left", content.align)
 
@@ -183,6 +185,7 @@ describe("BookMenu", function()
             content = content[#content]
             assert.are.equal(560, content[1].max_width)
             assert.are.equal(560, content[3].max_width)
+            assert.are.equal(560, content[5].width)
         end)
 
         -- gray text is hard to read on e-ink screens (#3)
@@ -193,6 +196,21 @@ describe("BookMenu", function()
 
             assert.are.equal("black", content[3].fgcolor)
             assert.are.equal("black", content[5].fgcolor)
+        end)
+
+        -- in bold, after the rest
+        it("say when the book has been downloaded already", function()
+            local menu = newMenu(2)
+            menu.is_downloaded = function(b)
+                return b.md5 == "md5-1"
+            end
+            local _, _, info = details(menu:createBookItemWidget(book(1)))
+            assert.are.equal(
+                "\u{FFF1}1990 · English [en] · Book (fiction) · epub · 1.2MB · \u{FFF2}Downloaded\u{FFF3}",
+                info
+            )
+            _, _, info = details(menu:createBookItemWidget(book(2)))
+            assert.are.equal("1990 · English [en] · Book (fiction) · epub · 1.2MB", info)
         end)
 
         it("leave out missing details", function()
@@ -285,6 +303,31 @@ describe("BookMenu", function()
             menu:updateItems()
             assert.is_nil(menu.item_group[1]:onTapSelect())
             assert.are.same({}, selected)
+        end)
+    end)
+
+    describe("redrawing as covers arrive", function()
+        -- covers arrive several times a page, and each redraw refreshes the screen
+        it("doesn't redraw the page until one of its own covers has downloaded, or been given up on", function()
+            local menu = newMenu(11)
+            menu:updateItems()
+            helper.state.refreshes = {}
+
+            cacheCover("md5-6")
+            menu:onKindleFetchCoversDownloaded()
+            assert.are.equal(0, #helper.state.refreshes)
+
+            cacheCover("md5-2")
+            menu:onKindleFetchCoversDownloaded()
+            assert.are.equal(1, #helper.state.refreshes)
+
+            -- its placeholder is taken away
+            require("util.curlutil").downloadMultiple = function()
+                return nil, nil, nil, "unable to launch curl"
+            end
+            CoverCache:downloadMultiple({ menu.item_table[3].book }, 1)
+            menu:onKindleFetchCoversDownloaded()
+            assert.are.equal(2, #helper.state.refreshes)
         end)
     end)
 
@@ -391,6 +434,7 @@ describe("BookMenu", function()
             menu.page = 3
             menu:updateItems()
             helper.state.refreshes = {}
+            cacheCover("md5-11")
             menu:onKindleFetchCoversDownloaded()
 
             assert.are.equal(2, #menu.item_group)
@@ -398,6 +442,10 @@ describe("BookMenu", function()
             -- once, and without the flash of a full refresh
             assert.are.equal(1, #helper.state.refreshes)
             assert.are.equal("ui", helper.state.refreshes[1][1])
+
+            -- and not again, once they're all there
+            menu:onKindleFetchCoversDownloaded()
+            assert.are.equal(1, #helper.state.refreshes)
         end)
 
         -- such as the next page's, which are downloaded ahead of it being turned to
