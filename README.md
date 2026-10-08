@@ -72,7 +72,7 @@ Downloaded books are saved to your configured download location.
 
 <img width="350" alt="Settings" src="docs/screenshots/13-settings.png" /> <img width="350" alt="Search results without covers" src="docs/screenshots/14-search-results-without-covers.png" />
 
-- **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`)
+- **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`); the settings show the end of a long one, which says the most about it
 
 <img width="350" alt="Choosing the download folder" src="docs/screenshots/15-settings-download-folder.png" />
 
@@ -80,7 +80,7 @@ Downloaded books are saved to your configured download location.
 
 <img width="350" alt="Preferred languages" src="docs/screenshots/16-settings-languages.png" />
 
-- **Preferred File Types**: Select desired formats across five categories, from those KOReader can open (default: all of them):
+- **Preferred File Types**: Select desired formats across five categories, from those KOReader can open (default: all of them, which the settings show as All):
   - Ebooks: EPUB, MOBI, AZW, FB2, PRC
   - Comics: CBR, CBZ
   - Documents: PDF, TXT, RTF, DOC, DOCX, ODT, DJVU
@@ -89,7 +89,7 @@ Downloaded books are saved to your configured download location.
 
 <img width="350" alt="Preferred file types" src="docs/screenshots/17-settings-file-types.png" />
 
-- **Preferred Book Types**: Filter by fiction, non-fiction, comics, magazines, scientific articles, or standards (default: all of them)
+- **Preferred Book Types**: Filter by fiction, non-fiction, comics, magazines, scientific articles, or standards (default: all of them, which the settings show as All)
 
 <img width="350" alt="Preferred book types" src="docs/screenshots/18-settings-book-types.png" />
 

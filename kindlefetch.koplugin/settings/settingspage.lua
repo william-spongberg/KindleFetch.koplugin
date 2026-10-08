@@ -16,6 +16,90 @@ local function formatDays(days)
     return string.format(days == 1 and _("%d day") or _("%d days"), days)
 end
 
+-- the most of a folder's path that's shown, which is about as much as fits beside its label
+local MAX_FOLDER_LENGTH = 32
+
+-- the end of a long folder's path, which says the most about it, e.g. "…/documents/books"
+function SettingsPage.shortenFolder(path)
+    if #path <= MAX_FOLDER_LENGTH then
+        return path
+    end
+    local shortened = path
+    while #shortened > MAX_FOLDER_LENGTH - 1 do
+        local rest = shortened:match("^/?[^/]+(/.+)$")
+        if not rest then
+            break
+        end
+        shortened = rest
+    end
+    return "…" .. shortened
+end
+
+-- the names of the choices that are chosen, as the settings list them (each choice with its text and the code it's
+-- saved as), or All when every one is
+local function describeChosen(choices, chosen)
+    local is_chosen = {}
+    for _, code in ipairs(chosen) do
+        is_chosen[code] = true
+    end
+    local names = {}
+    for _, choice in ipairs(choices) do
+        if choice.code and is_chosen[choice.code] then
+            table.insert(names, choice.text)
+        end
+    end
+    local available = 0
+    for _, choice in ipairs(choices) do
+        if choice.code then
+            available = available + 1
+        end
+    end
+    if #names == available then
+        return _("All")
+    end
+    return table.concat(names, ", ")
+end
+
+-- the file types that can be chosen, under a heading for each kind
+local function fileTypeChoices()
+    local categories = {
+        {
+            name = _("Ebooks"),
+            types = KindleFetchSettings:getEbookFileTypes(),
+        },
+        {
+            name = _("Comics"),
+            types = KindleFetchSettings:getComicFileTypes(),
+        },
+        {
+            name = _("Documents"),
+            types = KindleFetchSettings:getDocumentFileTypes(),
+        },
+        {
+            name = _("Images"),
+            types = KindleFetchSettings:getImageFileTypes(),
+        },
+        {
+            name = _("Web"),
+            types = KindleFetchSettings:getWebFileTypes(),
+        },
+    }
+
+    local choices = {}
+    for _, category in ipairs(categories) do
+        table.insert(choices, {
+            heading = category.name,
+        })
+        for _, ext in ipairs(category.types) do
+            table.insert(choices, {
+                text = ext,
+                code = ext,
+            })
+        end
+    end
+    return choices
+end
+
 -- a menu that fills the screen
 function SettingsPage:newMenu(title, item_table, onClose)
     return Menu:new {
@@ -51,25 +135,26 @@ function SettingsPage:settingsItems()
             end,
         },
         {
-            text = _("Download Folder: ") .. download_dir,
+            text = _("Download Folder: ") .. SettingsPage.shortenFolder(download_dir),
             callback = function()
                 this:changeDownloadFolder()
             end,
         },
         {
-            text = _("Preferred Languages: ") .. table.concat(languages, ", "),
+            text = _("Preferred Languages: ") .. describeChosen(KindleFetchSettings:getAvailableLanguages(), languages),
             callback = function()
                 this:changeLanguages()
             end,
         },
         {
-            text = _("Preferred File Types: ") .. table.concat(file_types, ", "),
+            text = _("Preferred File Types: ") .. describeChosen(fileTypeChoices(), file_types),
             callback = function()
                 this:changeFileTypes()
             end,
         },
         {
-            text = _("Preferred Book Types: ") .. table.concat(book_types, ", "),
+            text = _("Preferred Book Types: ")
+                .. describeChosen(KindleFetchSettings:getAvailableBookTypes(), book_types),
             callback = function()
                 this:changeBookTypes()
             end,
@@ -234,41 +319,7 @@ function SettingsPage:changeLanguages()
 end
 
 function SettingsPage:changeFileTypes()
-    local categories = {
-        {
-            name = _("Ebooks"),
-            types = KindleFetchSettings:getEbookFileTypes(),
-        },
-        {
-            name = _("Comics"),
-            types = KindleFetchSettings:getComicFileTypes(),
-        },
-        {
-            name = _("Documents"),
-            types = KindleFetchSettings:getDocumentFileTypes(),
-        },
-        {
-            name = _("Images"),
-            types = KindleFetchSettings:getImageFileTypes(),
-        },
-        {
-            name = _("Web"),
-            types = KindleFetchSettings:getWebFileTypes(),
-        },
-    }
-
-    local choices = {}
-    for _, category in ipairs(categories) do
-        table.insert(choices, {
-            heading = category.name,
-        })
-        for _, ext in ipairs(category.types) do
-            table.insert(choices, {
-                text = ext,
-                code = ext,
-            })
-        end
-    end
+    local choices = fileTypeChoices()
 
     self:tickSeveral(
         _("Preferred File Types"),
