@@ -1,5 +1,6 @@
 local UIManager = require("ui/uimanager")
 local NetworkMgr = require("ui/network/manager")
+local Trapper = require("ui/trapper")
 local ConfirmBox = require("ui/widget/confirmbox")
 local LogUtil = require("util.logutil")
 local DownloadProgress = require("ui.downloadprogress")
@@ -204,6 +205,83 @@ local function pollDownload(transfer)
     end)
 end
 
+-- the book's download link, from the first mirror whose download page has one, looked up on Wikipedia again
+-- when retrying. otherwise nil, and why not (HttpUtil.CANCELLED when called off), and whether a mirror failed,
+-- rather than not having the book
+local function findDownloadLink(book, retrying)
+    -- get urls from cache, or scrape them from wikipedia again when retrying
+    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(retrying)
+    if not base_urls then
+        if urls_err == HttpUtil.CANCELLED then
+            return nil, urls_err
+        end
+        return nil,
+            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or "no Library Genesis urls available"
+    end
+
+    -- try each libgen url
+    local download_url
+    local last_err
+    -- mirrors that didn't answer at all, which may be down, or the device may be offline
+    local unanswered = {}
+    local answered = false
+    local mirror_failed = false
+    local busy = false
+    for _, url in ipairs(base_urls) do
+        -- load ads page (to get key for download page)
+        local ads_page = string.format("%s/ads.php?md5=%s", url, book.md5)
+        local html, err, status = HttpUtil.getBody(ads_page)
+        -- called off, which says nothing about the mirrors
+        if err == HttpUtil.CANCELLED then
+            return nil, err
+        end
+        answered = answered or html ~= nil or status ~= nil
+
+        -- find download url with key linked in ads page
+        if html then
+            local download_path = html:match('href="([^"]*get%.php[^"]*)"')
+
+            if download_path and download_path ~= "" then
+                download_url = url .. "/" .. download_path:gsub("^/", "")
+
+                LogUtil.info("found the download link on", LogUtil.site(url))
+
+                break
+            else
+                LogUtil.warn(
+                    "no download link on",
+                    LogUtil.site(url) .. "'s download page (" .. #html .. " bytes):",
+                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                )
+                last_err = "no Library Genesis download link found"
+                busy = busy or isBusy(html)
+            end
+        elseif status then
+            -- it answered with an error
+            last_err = err
+            mirror_failed = true
+            UrlApi:deleteLibgenUrl(url)
+        else
+            table.insert(unanswered, url)
+            last_err = err
+            mirror_failed = true
+        end
+    end
+
+    -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
+    -- are down. otherwise the device may be offline, so keep them
+    if answered or retrying then
+        for _, url in ipairs(unanswered) do
+            UrlApi:deleteLibgenUrl(url)
+        end
+    end
+
+    if download_url then
+        return download_url
+    end
+    return nil, busy and BUSY_ERROR or last_err or "all Library Genesis mirrors failed", mirror_failed
+end
+
 function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     LogUtil.info(
         string.format(
@@ -250,82 +328,34 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
         started = os.time(),
     }
 
-    -- get urls from cache, or scrape them from wikipedia again when retrying
-    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(retrying)
-    if not base_urls then
-        progress_widget:close()
-        LlgiAPI.active_downloads[book.md5] = nil
-        callback(
-            false,
-            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or "no Library Genesis urls available"
-        )
-        return
-    end
-
-    -- try each libgen url
-    local download_url
-    local last_err
-    -- mirrors that didn't answer at all, which may be down, or the device may be offline
-    local unanswered = {}
-    local answered = false
-    local mirror_failed = false
-    local busy = false
-    for _, url in ipairs(base_urls) do
-        -- load ads page (to get key for download page)
-        local ads_page = string.format("%s/ads.php?md5=%s", url, book.md5)
-        local html, err, status = HttpUtil.getBody(ads_page)
-        answered = answered or html ~= nil or status ~= nil
-
-        -- find download url with key linked in ads page
-        if html then
-            local download_path = html:match('href="([^"]*get%.php[^"]*)"')
-
-            if download_path and download_path ~= "" then
-                download_url = url .. "/" .. download_path:gsub("^/", "")
-
-                LogUtil.info("found the download link on", LogUtil.site(url))
-
-                break
-            else
-                LogUtil.warn(
-                    "no download link on",
-                    LogUtil.site(url) .. "'s download page (" .. #html .. " bytes):",
-                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
-                )
-                last_err = "no Library Genesis download link found"
-                busy = busy or isBusy(html)
-            end
-        elseif status then
-            -- it answered with an error
-            last_err = err
-            mirror_failed = true
-            UrlApi:deleteLibgenUrl(url)
-        else
-            table.insert(unanswered, url)
-            last_err = err
-            mirror_failed = true
-        end
-    end
-
-    -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
-    -- are down. otherwise the device may be offline, so keep them
-    if answered or retrying then
-        for _, url in ipairs(unanswered) do
-            UrlApi:deleteLibgenUrl(url)
-        end
+    -- look the link up without holding KOReader up (where pages are fetched with curl, see HttpUtil), as it can
+    -- mean trying several mirrors, and let Cancel call it off. an error is passed on, rather than left to Trapper,
+    -- which would leave the progress showing
+    HttpUtil.trap_widget = progress_widget
+    local looked_up, download_url, lookup_err, mirror_failed = pcall(findDownloadLink, book, retrying)
+    HttpUtil.trap_widget = nil
+    progress_widget.dismiss_callback = nil
+    if not looked_up then
+        LogUtil.err("looking up the download link went wrong:", tostring(download_url))
+        download_url, lookup_err, mirror_failed = nil, "something went wrong, see crash.log", false
     end
 
     if not download_url then
         progress_widget:close()
         LlgiAPI.active_downloads[book.md5] = nil
 
-        LogUtil.warn("no mirror gave a download link:", last_err)
+        if lookup_err == HttpUtil.CANCELLED then
+            LogUtil.info(string.format("download of %q cancelled while looking up its link", book.title))
+            callback(false, "cancelled")
+            return
+        end
+        LogUtil.warn("no mirror gave a download link:", lookup_err)
         -- look the mirrors up again if any failed, in case they've moved, and try again
         if not retrying and mirror_failed then
             return LlgiAPI:_startDownload(book, filepath, callback, true)
         end
 
-        callback(false, busy and BUSY_ERROR or last_err or "all Library Genesis mirrors failed")
+        callback(false, lookup_err)
         return
     end
     transfer.download_url = download_url
@@ -391,7 +421,10 @@ function LlgiAPI:downloadBook(book, filepath, callback, open_existing)
         local function start()
             -- turning on wifi first if need be, as KOReader is set up to (it says so itself if it can't connect)
             NetworkMgr:runWhenConnected(function()
-                self:_startDownload(book, confirmed_filepath, callback, false)
+                -- so that looking up the download link doesn't hold KOReader up (see _startDownload)
+                Trapper:wrap(function()
+                    self:_startDownload(book, confirmed_filepath, callback, false)
+                end)
             end)
         end
 

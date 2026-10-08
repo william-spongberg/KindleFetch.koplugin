@@ -117,6 +117,30 @@ describe("DownloadProgress", function()
         assert.are.equal(0, widget.bar_widget.percentage)
     end)
 
+    -- such as the download link being looked up, before the download starts (see Trapper:dismissablePopen)
+    it("calls off what's being waited for when cancelled, once it has closed", function()
+        local dismissed = 0
+        widget:show()
+        widget.dismiss_callback = function()
+            assert.is_true(helper.wasClosed(widget.container))
+            dismissed = dismissed + 1
+        end
+
+        widget.cancel_button.callback()
+        widget.cancel_button.callback()
+        assert.are.equal(1, dismissed)
+        assert.are.equal(1, cancels)
+    end)
+
+    -- what was being waited for may close it too, as it's cancelled
+    it("is only closed once", function()
+        widget:show()
+        widget:close()
+        widget:close()
+        widget.cancel_button.callback()
+        assert.are.equal(1, #helper.state.closed)
+    end)
+
     it("can be cancelled without a cancel callback", function()
         widget = require("ui.downloadprogress").new("Dune")
         widget:cancel()

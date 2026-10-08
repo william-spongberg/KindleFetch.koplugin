@@ -302,6 +302,70 @@ describe("LlgiAPI", function()
             assert.is_string(spawned[1].headers_file)
         end)
 
+        -- which can mean trying several mirrors, each taking a while to answer
+        describe("while looking up the download link", function()
+            local HttpUtil, Trapper, getBody
+
+            before_each(function()
+                HttpUtil = require("util.httputil")
+                Trapper = require("ui/trapper")
+                getBody = HttpUtil.getBody
+            end)
+
+            it("doesn't hold KOReader up, letting the progress's Cancel call it off", function()
+                local waits = {}
+                HttpUtil.getBody = function(url)
+                    table.insert(waits, { wrapped = Trapper:isWrapped(), trap_widget = HttpUtil.trap_widget })
+                    return getBody(url)
+                end
+
+                download()
+                -- Wikipedia's list of mirrors, then the mirror's download page
+                assert.are.equal(2, #waits)
+                for _, wait in ipairs(waits) do
+                    assert.is_true(wait.wrapped)
+                    assert.are.equal(progress(), wait.trap_widget)
+                end
+                assert.is_nil(HttpUtil.trap_widget)
+                assert.are.equal(1, #spawned)
+            end)
+
+            it("can be called off, which says nothing about the mirrors", function()
+                HttpUtil.getBody = function(url)
+                    if url:find("/ads.php", 1, true) then
+                        progress().cancel_button.callback()
+                        return nil, HttpUtil.CANCELLED
+                    end
+                    return getBody(url)
+                end
+
+                download()
+                assert.are.same({ { ok = false, err = "cancelled" } }, results)
+                assert.are.equal(0, #spawned)
+                assert.are.same({}, LlgiAPI:getActiveDownloads())
+                assert.is_nil(HttpUtil.trap_widget)
+                -- none are dropped, or looked up again
+                HttpUtil.getBody = getBody
+                assert.are.same(mirrors, UrlApi:getLibgenUrls())
+                assert.are.equal(1, web.scrapes)
+            end)
+
+            it("says something went wrong, rather than leaving the progress showing", function()
+                local widget
+                HttpUtil.getBody = function()
+                    widget = progress()
+                    error("unexpected")
+                end
+
+                download()
+                assert.are.same({ { ok = false, err = "something went wrong, see crash.log" } }, results)
+                assert.is_true(helper.wasClosed(widget.container))
+                assert.are.same({}, LlgiAPI:getActiveDownloads())
+                assert.is_nil(HttpUtil.trap_widget)
+                assert.is_truthy(helper.logged("err", "^looking up the download link went wrong:.*unexpected"))
+            end)
+        end)
+
         -- which could be another book entirely, with the same title
         it("doesn't carry on from what's left of an earlier download of a book of the same name", function()
             helper.writeFile(filepath .. ".part", "another book")
