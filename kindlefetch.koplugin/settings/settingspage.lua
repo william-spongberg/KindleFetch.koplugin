@@ -204,7 +204,6 @@ end
 
 function SettingsPage:changeBookCoverVisibility()
     KindleFetchSettings:setShowBookCovers(not KindleFetchSettings:getShowBookCovers())
-    NotifyUtil.info("Book cover visibility updated")
     self:refresh()
 end
 
@@ -218,7 +217,6 @@ function SettingsPage:changeCacheExpiry(title, current_days, save)
             text = string.format("%s %s", days == current_days and "◉" or "○", formatDays(days)),
             callback = function()
                 save(days)
-                NotifyUtil.info("Cache expiry updated")
                 UIManager:close(menu)
                 this:refresh()
             end,
@@ -231,7 +229,6 @@ end
 
 function SettingsPage:changeCheckForUpdates()
     KindleFetchSettings:setCheckForUpdates(not KindleFetchSettings:getCheckForUpdates())
-    NotifyUtil.info("Update checks updated")
     self:refresh()
 end
 
@@ -243,7 +240,6 @@ function SettingsPage:changeDownloadFolder()
         onConfirm = function(dir)
             local ok, err = KindleFetchSettings:setDownloadDir(dir)
             if ok then
-                NotifyUtil.info("Download folder updated")
                 this:refresh()
             else
                 NotifyUtil.error(err)
@@ -254,8 +250,9 @@ end
 
 -- a menu of choices to tick, each with its text and the code it's saved as, or a heading to go above the choices
 -- after it. the ticked codes are passed to save when the menu is closed, unless there are none, as nothing could
--- then be found
-function SettingsPage:tickSeveral(title, choices, ticked, save, updated_text, none_text)
+-- then be found, which none_text says. (a change isn't otherwise said, as the settings show it, and each
+-- notification refreshes the screen twice)
+function SettingsPage:tickSeveral(title, choices, ticked, save, none_text)
     local this = self
     local selected = {}
     for _, code in ipairs(ticked) do
@@ -298,7 +295,6 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, updated_text, no
             return
         end
         save(result)
-        NotifyUtil.info(updated_text)
         UIManager:close(menu)
         this:refresh()
     end)
@@ -313,7 +309,6 @@ function SettingsPage:changeLanguages()
         function(languages)
             KindleFetchSettings:setPreferredLanguages(languages)
         end,
-        "Languages updated",
         "Select at least one language"
     )
 end
@@ -328,7 +323,6 @@ function SettingsPage:changeFileTypes()
         function(file_types)
             KindleFetchSettings:setPreferredFileTypes(file_types)
         end,
-        "File types updated",
         "Select at least one file type"
     )
 end
@@ -341,7 +335,6 @@ function SettingsPage:changeBookTypes()
         function(book_types)
             KindleFetchSettings:setPreferredBookTypes(book_types)
         end,
-        "Book types updated",
         "Select at least one book type"
     )
 end

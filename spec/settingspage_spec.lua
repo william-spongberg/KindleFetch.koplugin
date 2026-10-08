@@ -104,7 +104,8 @@ describe("SettingsPage", function()
 
         assert.is_false(Settings:getShowBookCovers())
         assert.are.equal("Show Book Covers: ☐", lastMenu().item_table[1].text)
-        assert.are.equal("Book cover visibility updated", helper.lastNotification())
+        -- which isn't said as well, as each notification refreshes the screen twice
+        assert.are.equal(0, #helper.state.notifications)
     end)
 
     -- closing the menu and opening another for every change flashed the whole screen twice
@@ -128,7 +129,7 @@ describe("SettingsPage", function()
 
         assert.is_false(Settings:getCheckForUpdates())
         assert.are.equal("Check for Updates Automatically: ☐", lastMenu().item_table[6].text)
-        assert.are.equal("Update checks updated", helper.lastNotification())
+        assert.are.equal(0, #helper.state.notifications)
 
         tap("Check for Updates Automatically")
         assert.is_true(Settings:getCheckForUpdates())
@@ -147,7 +148,7 @@ describe("SettingsPage", function()
             local choices = lastMenu()
             tap("30 days")
             assert.are.equal(30, Settings:getSearchCacheExpiryDays())
-            assert.are.equal("Cache expiry updated", helper.lastNotification())
+            assert.are.equal(0, #helper.state.notifications)
             -- back in the settings, which were open underneath
             assert.is_true(helper.wasClosed(choices))
             assert.are.equal("Keep Searches For: 30 days", lastMenu().item_table[7].text)
@@ -172,7 +173,7 @@ describe("SettingsPage", function()
             helper.state.dir_choosers[1].onConfirm(books)
 
             assert.are.equal(books, Settings:getDownloadDir())
-            assert.are.equal("Download folder updated", helper.lastNotification())
+            assert.are.equal(0, #helper.state.notifications)
             assert.are.equal("Download Folder: " .. books, lastMenu().item_table[2].text)
         end)
 
@@ -206,7 +207,7 @@ describe("SettingsPage", function()
             lastMenu().onClose()
 
             assert.are.same({ "es", "fr" }, Settings:getPreferredLanguages())
-            assert.are.equal("Languages updated", helper.lastNotification())
+            assert.are.equal(0, #helper.state.notifications)
             assert.are.equal("Preferred Languages: Spanish, French", lastMenu().item_table[3].text)
         end)
 
@@ -297,7 +298,7 @@ describe("SettingsPage", function()
                 "html",
                 "htmlz",
             }, Settings:getPreferredFileTypes())
-            assert.are.equal("File types updated", helper.lastNotification())
+            assert.are.equal(0, #helper.state.notifications)
         end)
 
         it("cannot all be unticked", function()
@@ -325,7 +326,7 @@ describe("SettingsPage", function()
             lastMenu().onClose()
 
             assert.are.same({ "fiction", "magazines", "articles", "standards" }, Settings:getPreferredBookTypes())
-            assert.are.equal("Book types updated", helper.lastNotification())
+            assert.are.equal(0, #helper.state.notifications)
         end)
 
         it("cannot all be unticked", function()
