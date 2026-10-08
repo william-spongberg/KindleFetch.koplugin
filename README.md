@@ -50,7 +50,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 <img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" /> <img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" />
 
-3. In the download prompt, optionally tap the book cover to see it full size, or tap the download path to choose another folder, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
+3. In the download prompt, optionally tap the book cover to see it full size, or tap the folder it will be saved in (above the name it will be saved as) to choose another, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
 
 <img width="350" alt="Download prompt" src="docs/screenshots/07-download-prompt.png" /> <img width="350" alt="Fullscreen cover" src="docs/screenshots/08-download-cover.png" /> <img width="350" alt="Being asked before downloading over a book that's already there" src="docs/screenshots/09-download-overwrite.png" />
 
