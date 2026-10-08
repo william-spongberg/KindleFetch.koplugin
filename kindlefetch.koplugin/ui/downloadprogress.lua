@@ -58,7 +58,8 @@ function DownloadProgress:build()
     self.status_container = CenterContainer:new {
         dimen = Geom:new {
             w = CONTENT_WIDTH,
-            h = 25,
+            -- as tall as its text, whose font is bigger on screens with more dots to the inch
+            h = self.status_widget:getSize().h,
         },
         self.status_widget,
     }

@@ -23,6 +23,11 @@ describe("DownloadProgress", function()
         assert.is_true(helper.wasClosed(widget.container))
     end)
 
+    -- a fixed height cut the text off on screens with more dots to the inch, where its font is bigger
+    it("makes room for its status, whatever the screen", function()
+        assert.are.equal(widget.status_widget:getSize().h, widget.status_container.dimen.h)
+    end)
+
     it("updates the progress bar and status", function()
         widget:update(0.25, "25% · 1.0 / 4.0 MB")
         assert.are.equal(0.25, widget.bar_widget.percentage)
