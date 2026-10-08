@@ -47,11 +47,23 @@ describe("KindleFetch", function()
         }
     end
 
+    -- the button in a row of buttons with the given text
+    local function button(dialog, text)
+        for _, row in ipairs(dialog.buttons) do
+            for _, b in ipairs(row) do
+                if b.text == text then
+                    return b
+                end
+            end
+        end
+        error("no button " .. text)
+    end
+
     -- open the search dialog and search for query
     local function search(plugin, query)
         plugin:setupUI()
         plugin.search_box.input_text = query
-        plugin.search_box.buttons[1][2].callback()
+        button(plugin.search_box, "Search").callback()
     end
 
     local function itemTexts(menu)
@@ -76,6 +88,7 @@ describe("KindleFetch", function()
             languages = { "en" },
             file_types = { "epub" },
             book_types = { "fiction" },
+            recent_searches = {},
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
         saved = {}
@@ -108,6 +121,12 @@ describe("KindleFetch", function()
             end,
             getPreferredBookTypes = function()
                 return settings.book_types
+            end,
+            getRecentSearches = function()
+                return settings.recent_searches
+            end,
+            addRecentSearch = function(_, query)
+                table.insert(settings.recent_searches, 1, query)
             end,
         })
 
@@ -523,10 +542,64 @@ describe("KindleFetch", function()
             local plugin = openUI()
             plugin:setupUI()
 
-            local search_button = plugin.search_box.buttons[1][2]
-            assert.are.equal("Search", search_button.text)
+            local search_button = button(plugin.search_box, "Search")
             assert.is_true(search_button.is_enter_default)
-            assert.is_nil(plugin.search_box.buttons[1][1].is_enter_default)
+            assert.is_nil(button(plugin.search_box, "Cancel").is_enter_default)
+            assert.is_nil(button(plugin.search_box, "Recent").is_enter_default)
+        end)
+
+        describe("recent searches", function()
+            it("are remembered", function()
+                search(openUI(), "  dune  ")
+                assert.are.same({ "dune" }, settings.recent_searches)
+
+                -- but not when there's nothing to search for
+                search(openUI(), "  ")
+                settings.languages = {}
+                search(openUI(), "emma")
+                assert.are.same({ "dune" }, settings.recent_searches)
+            end)
+
+            it("are offered from the search box, to search for again", function()
+                settings.recent_searches = { "emma", "dune" }
+                search_results[1] = { { book("Emma") } }
+                local plugin = openUI()
+                plugin:setupUI()
+                assert.is_true(button(plugin.search_box, "Recent").enabled)
+                button(plugin.search_box, "Recent").callback()
+
+                local list = helper.lastShown()
+                assert.are.equal("Recent searches", list.title)
+                assert.are.same({ "emma", "dune" }, { list.buttons[1][1].text, list.buttons[2][1].text })
+                list.buttons[1][1].callback()
+                assert.is_true(helper.wasClosed(list))
+                -- in the search box too, to change it from there once the books are closed
+                assert.are.equal("emma", plugin.search_box.input_text)
+                assert.are.same({ { "emma", 1 } }, searches)
+                assert.are.same({ "Emma" }, itemTexts(menus[1]))
+            end)
+
+            it("can't be chosen before there are any", function()
+                local plugin = openUI()
+                plugin:setupUI()
+                assert.is_false(button(plugin.search_box, "Recent").enabled)
+
+                -- until something has been searched for from the search box that's open
+                local enabled = false
+                plugin.search_box.button_table = {
+                    getButtonById = function(_, id)
+                        assert.are.equal("recent", id)
+                        return {
+                            enable = function()
+                                enabled = true
+                            end,
+                        }
+                    end,
+                }
+                plugin.search_box.input_text = "dune"
+                button(plugin.search_box, "Search").callback()
+                assert.is_true(enabled)
+            end)
         end)
 
         it("needs a search term", function()

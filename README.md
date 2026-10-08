@@ -42,7 +42,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 <img width="350" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" /> <img width="350" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
-1. Enter a book title, author, or keyword in the search box. KOReader carries on while Library Genesis answers; tap Cancel on the message saying it's searching to call the search off.
+1. Enter a book title, author, or keyword in the search box, or tap Recent to search again for one of your last 10 searches. KOReader carries on while Library Genesis answers; tap Cancel on the message saying it's searching to call the search off.
 
 <img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" /> <img width="350" alt="Message saying it's searching, with a button to cancel" src="docs/screenshots/04-searching.png" />
 
@@ -103,7 +103,7 @@ When a search finds books, but none in the languages and file types chosen, Kind
 
 <img width="350" alt="How long searches are kept" src="docs/screenshots/20-settings-cache.png" />
 
-- **Clear Cache**: Forget the searches, mirrors and book covers that have been saved, e.g. if results look out of date
+- **Clear Cache**: Forget the searches (and the recent ones the search box offers), mirrors and book covers that have been saved, e.g. if results look out of date
 
 ## How It Works
 
@@ -163,7 +163,7 @@ kindlefetch.koplugin/
    - All settings are persisted and applied to future searches
 
 2. **Search Phase** (`LlgiSearch`)
-   - User enters a search query via InputDialog
+   - User enters a search query via InputDialog, or chooses one of the last 10 from its Recent button
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
    - Pages are fetched with curl where there is one (on a Kindle, once it has been updated): compressed, which Library Genesis sends several times sooner, and in the background, so KOReader isn't held up, and Cancel on the message saying it's searching calls the search off. Otherwise they're fetched with KOReader's own HTTP, which holds KOReader up until they arrive

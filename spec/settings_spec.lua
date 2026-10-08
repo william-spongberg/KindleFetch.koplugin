@@ -140,6 +140,34 @@ describe("KindleFetchSettings", function()
         end)
     end)
 
+    describe("recent searches", function()
+        it("are none to begin with", function()
+            assert.are.same({}, Settings:getRecentSearches())
+        end)
+
+        it("are remembered most recent first, once each whatever their capitals, up to 10", function()
+            Settings:addRecentSearch("dune")
+            Settings:addRecentSearch("emma")
+            Settings:addRecentSearch("Dune")
+            assert.are.same({ "Dune", "emma" }, Settings:getRecentSearches())
+            assert.are.same({ "Dune", "emma" }, pluginSettings().recent_searches)
+
+            for i = 1, 12 do
+                Settings:addRecentSearch("search " .. i)
+            end
+            local searches = Settings:getRecentSearches()
+            assert.are.equal(10, #searches)
+            assert.are.equal("search 12", searches[1])
+            assert.are.equal("search 3", searches[10])
+        end)
+
+        it("can be forgotten", function()
+            Settings:addRecentSearch("dune")
+            Settings:clearRecentSearches()
+            assert.are.same({}, Settings:getRecentSearches())
+        end)
+    end)
+
     it("remembers the plugin version it last ran", function()
         assert.is_nil(Settings:getLastVersion())
         Settings:setLastVersion("0.4")

@@ -246,6 +246,30 @@ function KindleFetch:showDownloads()
     UIManager:show(dialog)
 end
 
+-- the searches made recently, to choose one to search for again
+function KindleFetch:showRecentSearches()
+    local dialog
+    local buttons = {}
+    for _, query in ipairs(KindleFetchSettings:getRecentSearches()) do
+        table.insert(buttons, {
+            {
+                text = query,
+                callback = function()
+                    UIManager:close(dialog)
+                    self.search_box:setInputText(query)
+                    self:performSearch()
+                end,
+            },
+        })
+    end
+    dialog = ButtonDialog:new {
+        title = _("Recent searches"),
+        title_align = "center",
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
+end
+
 function KindleFetch:setupUI()
     -- grab self reference for callbacks
     local this = self
@@ -259,6 +283,14 @@ function KindleFetch:setupUI()
                     text = "Cancel",
                     callback = function()
                         UIManager:close(this.search_box)
+                    end,
+                },
+                {
+                    text = _("Recent"),
+                    id = "recent",
+                    enabled = #KindleFetchSettings:getRecentSearches() > 0,
+                    callback = function()
+                        this:showRecentSearches()
                     end,
                 },
                 {
@@ -295,6 +327,13 @@ function KindleFetch:performSearch()
         LogUtil.warn("every", turned_off, "is turned off, so there's nothing to search for")
         NotifyUtil.error(string.format(_("Turn on at least one %s in Kindle Fetch's settings first."), turned_off))
         return
+    end
+
+    KindleFetchSettings:addRecentSearch(query)
+    -- which there may not have been any of when the search box was opened
+    local recent = self.search_box.button_table and self.search_box.button_table:getButtonById("recent")
+    if recent then
+        recent:enable()
     end
 
     -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once

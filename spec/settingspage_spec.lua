@@ -380,11 +380,14 @@ describe("SettingsPage", function()
         end)
 
         it("forgets the searches, mirrors and book covers that are saved", function()
+            Settings:addRecentSearch("dune")
             SettingsPage:showSettings()
             tap("Clear Cache")
             helper.lastShown().ok_callback()
 
             assert.are.same({ "search", "url", "cover" }, cleared)
+            -- and the searches made recently
+            assert.are.same({}, Settings:getRecentSearches())
             assert.are.equal("Cache cleared", helper.lastNotification())
         end)
     end)

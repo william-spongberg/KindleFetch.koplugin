@@ -349,6 +349,7 @@ function SettingsPage:clearCache()
             SearchCache:clear()
             UrlCache:clear()
             CoverCache:clear()
+            KindleFetchSettings:clearRecentSearches()
             NotifyUtil.info(_("Cache cleared"))
         end,
     })

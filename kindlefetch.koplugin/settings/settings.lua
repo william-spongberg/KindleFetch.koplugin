@@ -631,6 +631,25 @@ function KindleFetchSettings:setCurlUpdateDeclined(bool)
     return KindleFetchSettings:setSetting("curl_update_declined", bool)
 end
 
+-- recent_searches (what was last searched for, most recent first)
+local MAX_RECENT_SEARCHES = 10
+function KindleFetchSettings:getRecentSearches()
+    return KindleFetchSettings:getSetting("recent_searches") or {}
+end
+-- once each, whatever its capitals, as Library Genesis finds the same books either way
+function KindleFetchSettings:addRecentSearch(query)
+    local searches = { query }
+    for _, search in ipairs(self:getRecentSearches()) do
+        if search:lower() ~= query:lower() and #searches < MAX_RECENT_SEARCHES then
+            table.insert(searches, search)
+        end
+    end
+    return KindleFetchSettings:setSetting("recent_searches", searches)
+end
+function KindleFetchSettings:clearRecentSearches()
+    return KindleFetchSettings:setSetting("recent_searches", {})
+end
+
 -- download_dir
 function KindleFetchSettings:getDownloadDir()
     local settings_file = getSettingsFile()

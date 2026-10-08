@@ -361,6 +361,9 @@ local function createStubs(state)
             o.getInputText = function(self)
                 return self.input_text or ""
             end
+            o.setInputText = function(self, text)
+                self.input_text = text
+            end
             o.onCloseKeyboard = function(self)
                 self.keyboard_closed = true
             end
