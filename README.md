@@ -21,7 +21,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch, in KOReader's gesture manager)
-- **Automatic Curl Updates**: Ensures curl 8.21.0, the latest static build, is available on Kindles, and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
+- **Automatic Curl Updates**: Offers to install curl 8.21.0, the latest static build, on Kindles with an older one, and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
 - **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes, then offers to restart KOReader to use the new version (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
 - **Safe File Handling**: Automatic filename sanitisation and directory management, asking before downloading over a book that's already there
@@ -62,7 +62,7 @@ KindleFetch integrates Library Genesis into KOReader, allowing you to search for
 
 <img width="350" alt="Read now prompt" src="docs/screenshots/11-download-finished.png" /> <img width="350" alt="Reading the downloaded book" src="docs/screenshots/12-reading.png" />
 
-Downloaded books are saved to your configured download location.
+Downloaded books are saved to the download folder in the settings, unless you choose another in the download prompt.
 
 ### Settings
 
@@ -76,7 +76,7 @@ Downloaded books are saved to your configured download location.
 
 <img width="350" alt="Choosing the download folder" src="docs/screenshots/15-settings-download-folder.png" />
 
-- **Preferred Languages**: Choose which languages to prioritise in search results (default: English)
+- **Preferred Languages**: Choose the languages of the books shown in search results (default: English)
 
 <img width="350" alt="Preferred languages" src="docs/screenshots/16-settings-languages.png" />
 
@@ -131,13 +131,13 @@ kindlefetch.koplugin/
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
 │   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
-│   ├── curlupdater.lua        # Checks curl version and automatically installs static curl (8.21.0) if needed
+│   ├── curlupdater.lua        # Checks curl version on Kindles and offers to install static curl (8.21.0) if it's older
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes
 └── util/
     ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
     ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback
     ├── fileutil.lua           # File operations (size, creation, deletion, validation) and directory checks
-    ├── stringutil.lua         # String utilities (trimming, validation, emoji removal, HTML entity conversion)
+    ├── stringutil.lua         # String utilities (trimming, validation, cleaning titles and file names, HTML entity conversion, checking web addresses)
     ├── logutil.lua            # Logger wrapper
     ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed
     ├── pathutil.lua           # Plugin install location and temporary download directory
@@ -155,7 +155,7 @@ kindlefetch.koplugin/
    - Settings are loaded from persistent storage
 
 1. **Settings & Filtering** (`SettingsPage`)
-   - User can customize preferred languages (100+ supported)
+   - User can customize preferred languages (100 supported)
    - User can select preferred file types: ebooks (EPUB, MOBI, AZW, etc.), comics (CBR, CBZ), documents (PDF, DOCX, etc.), images, or web formats
    - User can filter by book type: fiction, non-fiction, comics, magazines, scientific articles, or standards
    - Download directory can be changed from a file browser
@@ -191,11 +191,11 @@ kindlefetch.koplugin/
    - A curl process is spawned to download the file in the background, to a `.part` file next to where the book will be saved, so half a book never shows up in your library
    - A download that receives nothing for 30 seconds is tried again, carrying on from where it stopped rather than starting the book again, and given up on after two more tries
    - Progress widget updates every 0.5 seconds with percentage and file size information. Until the book starts to arrive, it says what it's waiting for: a download link, then Library Genesis, which can take several seconds to start sending the book. Once nothing has arrived for 10 seconds, it says the download has stalled
-   - On completion, the file is moved into the configured download directory, and the plugin offers to open it
+   - On completion, the `.part` file is renamed to the book's name, in the folder chosen in the download prompt, and the plugin offers to open it
 
 5. **Error Handling & Resilience**
    - Wi-Fi is turned on before searching if it's off
-   - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or corrupted downloads are detected and deleted
+   - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or failed downloads are deleted
    - Failed mirrors are removed from cache; if all cached URLs fail they are re-scraped from Wikipedia
    - The mirror that last answered a search or gave a download link is tried first from then on, rather than asking the ones before it, which may be too busy, every time
    - If Wikipedia answers without listing any mirrors (e.g. once its page has been rearranged), the mirrors known when the plugin was released are used
