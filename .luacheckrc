@@ -24,5 +24,5 @@ files["e2e/"] = {
 }
 -- runs the end-to-end tests, providing their describe/it, and boots KOReader, as reader.lua does
 files["e2e/runner.lua"] = {
-    globals = {"describe", "it", "before_each", "after_each", "G_reader_settings", "G_defaults"}
+    globals = {"describe", "it", "pending", "before_each", "after_each", "G_reader_settings", "G_defaults"}
 }

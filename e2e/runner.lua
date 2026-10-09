@@ -95,6 +95,16 @@ function it(name, fn)
     })
 end
 
+-- a test that can't be run here, said to be skipped, and why
+function pending(name)
+    table.insert(current.children, {
+        name = name,
+        parent = current,
+        test = true,
+        pending = true,
+    })
+end
+
 function before_each(fn)
     table.insert(current.before_each, fn)
 end
@@ -119,11 +129,16 @@ local function fullName(node)
 end
 
 local filter = os.getenv("E2E_FILTER")
-local passed, failed, count = 0, 0, 0
+local passed, failed, skipped, count = 0, 0, 0, 0
 
 local function runTest(node)
     local name = fullName(node)
     if filter and filter ~= "" and not name:find(filter, 1, true) then
+        return
+    end
+    if node.pending then
+        skipped = skipped + 1
+        report("  skip  %s", name)
         return
     end
     count = count + 1
@@ -183,6 +198,6 @@ end
 
 report("%s (%dx%d, %d dpi)", profile.description, profile.width, profile.height, profile.dpi)
 walk(root)
-report("%d passed, %d failed", passed, failed)
+report("%d passed, %d failed%s", passed, failed, skipped > 0 and ", " .. skipped .. " skipped" or "")
 
 os.exit(failed == 0 and 0 or 1)
