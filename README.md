@@ -128,6 +128,7 @@ kindlefetch.koplugin/
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination
 │   ├── coverplaceholder.lua   # Placeholder shown in place of a cover while it downloads
 │   ├── downloadprompt.lua     # Dialog showing a book's details and cover (full size when tapped), where to save it, and a Download button
+│   ├── waitingmessage.lua     # Message saying what's being waited for, with a Cancel button that calls the wait off
 │   └── downloadprogress.lua   # Renders a centered progress widget with cancel and hide buttons
 ├── cache/
 │   ├── cache.lua              # Generic caching system with expiry, size limits, and timestamp-based cleanup

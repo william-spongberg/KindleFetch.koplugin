@@ -3,7 +3,6 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
-local InfoMessage = require("ui/widget/infomessage")
 local Trapper = require("ui/trapper")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local Device = require("device")
@@ -20,6 +19,7 @@ local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
+local WaitingMessage = require("ui.waitingmessage")
 local SearchCache = require("cache.searchcache")
 local UrlCache = require("cache.urlcache")
 local CurlUpdater = require("updater.curlupdater")
@@ -443,39 +443,6 @@ function KindleFetch:search(query, page)
     return books, nil, next_page, results_read
 end
 
--- a message saying what's being waited for, with a Cancel button where the wait can be called off (see
--- HttpUtil.trap_widget), rather than any tap calling it off, as a tap may have been meant for something else
-local function waitingMessage(text)
-    if not HttpUtil.canCancel() then
-        return InfoMessage:new {
-            text = text,
-        }
-    end
-
-    local message
-    message = ButtonDialog:new {
-        title = text,
-        title_align = "center",
-        dismissable = false,
-        buttons = {
-            {
-                {
-                    text = _("Cancel"),
-                    callback = function()
-                        message.cancelled = true
-                        UIManager:close(message)
-                        -- set by Trapper:dismissablePopen while it waits
-                        if message.dismiss_callback then
-                            message.dismiss_callback()
-                        end
-                    end,
-                },
-            },
-        },
-    }
-    return message
-end
-
 -- search without holding up the rest of KOReader while the site answers, where that's possible (see
 -- HttpUtil), showing waiting_text until it has. calls on_done with what search returned, unless the search was
 -- called off before finding anything, with the message's Cancel button
@@ -484,7 +451,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
         -- results saved from an earlier search are there straight away
         local message
         if not Sources[self.source]:isCached(query, page) then
-            message = waitingMessage(waiting_text)
+            message = WaitingMessage.new(waiting_text)
             UIManager:show(message)
             -- so that a second tap on what started the search doesn't land on the message
             Device.input:inhibitInputUntil(true)
