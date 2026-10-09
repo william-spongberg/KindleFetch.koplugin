@@ -187,7 +187,7 @@ end
 
 -- what a Kindle's own curl fails with when connecting to Library Genesis, which it's too old to
 local TLS_ERRORS = { [35] = true, [51] = true, [58] = true, [59] = true, [60] = true, [77] = true, [83] = true }
-CurlUtil.OUTDATED_ERROR = "this Kindle's curl is too old to download from Library Genesis. Update it from "
+CurlUtil.OUTDATED_ERROR = "this Kindle's curl is too old to download books. Update it from "
     .. "Search → Kindle Fetch → Check for updates"
 
 -- whether this is a Kindle whose curl is older than the oldest known to connect to Library Genesis
