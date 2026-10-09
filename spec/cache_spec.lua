@@ -299,28 +299,30 @@ describe("SearchCache", function()
 
     after_each(helper.cleanup)
 
-    it("keys results by query, page and filters", function()
-        SearchCache:set({ "book" }, "dune", 1, { "en" }, { "epub" }, { "fiction" })
+    it("keys results by site, query, page and filters", function()
+        SearchCache:set({ "book" }, "libgen", "dune", 1, { "en" }, { "epub" }, { "fiction" })
 
-        assert.are.same({ "book" }, SearchCache:get("dune", 1, { "en" }, { "epub" }, { "fiction" }))
-        assert.is_nil(SearchCache:get("dune", 2, { "en" }, { "epub" }, { "fiction" }))
-        assert.is_nil(SearchCache:get("dune", 1, { "en", "fr" }, { "epub" }, { "fiction" }))
-        assert.is_nil(SearchCache:get("dune", 1, { "en" }, { "pdf" }, { "fiction" }))
-        assert.is_nil(SearchCache:get("dune", 1, { "en" }, { "epub" }, { "comics" }))
+        assert.are.same({ "book" }, SearchCache:get("libgen", "dune", 1, { "en" }, { "epub" }, { "fiction" }))
+        -- another site finds other books
+        assert.is_nil(SearchCache:get("archive", "dune", 1, { "en" }, { "epub" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("libgen", "dune", 2, { "en" }, { "epub" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("libgen", "dune", 1, { "en", "fr" }, { "epub" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("libgen", "dune", 1, { "en" }, { "pdf" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("libgen", "dune", 1, { "en" }, { "epub" }, { "comics" }))
     end)
 
     it("expires results after two weeks", function()
-        SearchCache:set({ "book" }, "dune", 1, { "en" }, { "epub" }, { "fiction" })
+        SearchCache:set({ "book" }, "libgen", "dune", 1, { "en" }, { "epub" }, { "fiction" })
         helper.state.time = 1000000 + 14 * 24 * 60 * 60 + 1
-        assert.is_nil(SearchCache:get("dune", 1, { "en" }, { "epub" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("libgen", "dune", 1, { "en" }, { "epub" }, { "fiction" }))
     end)
 
     it("keeps searches for as long as set in the settings", function()
         require("settings.settings"):setSearchCacheExpiryDays(1)
-        SearchCache:set({ "book" }, "dune", 1, { "en" }, { "epub" }, { "fiction" })
+        SearchCache:set({ "book" }, "libgen", "dune", 1, { "en" }, { "epub" }, { "fiction" })
 
         helper.state.time = 1000000 + 24 * 60 * 60 + 1
-        assert.is_nil(SearchCache:get("dune", 1, { "en" }, { "epub" }, { "fiction" }))
+        assert.is_nil(SearchCache:get("libgen", "dune", 1, { "en" }, { "epub" }, { "fiction" }))
     end)
 
     -- the whole cache is read and written at once, so it's kept small

@@ -475,6 +475,7 @@ describe("LlgiSearch", function()
                 { {
                     title = "Old",
                 } },
+                "libgen",
                 "dune",
                 1,
                 { "en" },

@@ -9,6 +9,7 @@ local UrlApi = require("api.urlapi")
 local LlgiSearch = {}
 
 -- constants
+local SOURCE = "libgen"
 local RESULTS_PER_PAGE = 100
 -- Library Genesis can't filter by language or file type, so a page of results may have few books to show.
 -- Searches read its pages until they have this many books...
@@ -278,6 +279,7 @@ end
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
 function LlgiSearch:isCached(query, page)
     local cached = SearchCache:get(
+        SOURCE,
         query,
         page,
         KindleFetchSettings:getPreferredLanguages(),
@@ -306,7 +308,7 @@ function LlgiSearch:search(query, page)
             table.concat(book_types, "/")
         )
     )
-    local cached = SearchCache:get(query, page, languages, file_types, book_types)
+    local cached = SearchCache:get(SOURCE, query, page, languages, file_types, book_types)
     if cached and cached.books then
         LogUtil.info("showing", #cached.books, "books saved from an earlier search")
         return cached.books, nil, cached.next_page
@@ -372,7 +374,7 @@ function LlgiSearch:search(query, page)
         SearchCache:set({
             books = books,
             next_page = next_page,
-        }, query, page, languages, file_types, book_types)
+        }, SOURCE, query, page, languages, file_types, book_types)
     end
     return books, nil, next_page, results_read
 end
