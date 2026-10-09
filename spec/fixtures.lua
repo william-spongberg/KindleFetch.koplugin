@@ -39,15 +39,15 @@ function fixtures.fakeWeb(helper)
     return web
 end
 
--- add a downloaded cover for md5 to the cover cache
-function fixtures.cacheCover(helper, md5)
+-- add a downloaded cover for the book with the id to the cover cache
+function fixtures.cacheCover(helper, id)
     local CurlUtil = require("util.curlutil")
     local download = CurlUtil.download
     CurlUtil.download = function(_, path)
         helper.writeFile(path, "jpeg")
         return true
     end
-    require("cache.covercache"):download(md5, "https://covers.example/" .. md5 .. ".jpg")
+    require("cache.covercache"):download(id, "https://covers.example/" .. id .. ".jpg")
     CurlUtil.download = download
 end
 

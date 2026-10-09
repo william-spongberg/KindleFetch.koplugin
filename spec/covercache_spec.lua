@@ -4,10 +4,10 @@ local fixtures = require("fixtures")
 describe("CoverCache", function()
     local data_dir, covers_dir, CurlUtil, CoverCache
 
-    local function book(md5, image_url)
+    local function book(id, image_url)
         return {
-            md5 = md5,
-            title = "Book " .. md5,
+            id = id,
+            title = "Book " .. id,
             image_url = image_url,
         }
     end
@@ -36,7 +36,7 @@ describe("CoverCache", function()
         CoverCache:clear()
     end)
 
-    it("stores covers by md5", function()
+    it("stores covers by book id", function()
         assert.are.equal(covers_dir .. "abc.jpg", CoverCache:getPath("abc"))
         assert.is_true(helper.isDir(covers_dir))
     end)
@@ -194,7 +194,7 @@ describe("CoverCache", function()
                 book("cached", "https://covers.example/cached.jpg"),
                 book("new", "https://covers.example/new.jpg"),
                 book("no-image"),
-                { title = "no md5", image_url = "https://covers.example/x.jpg" },
+                { title = "no id", image_url = "https://covers.example/x.jpg" },
             }
 
             assert.is_true(CoverCache:downloadMultiple(books, 6, onDone))
@@ -287,12 +287,12 @@ describe("CoverCache", function()
 
             it("writes the cache out once they've all finished", function()
                 local function savedCovers()
-                    local md5s = {}
-                    for md5 in pairs(helper.state.settings_files[cache_file] or {}) do
-                        table.insert(md5s, md5)
+                    local ids = {}
+                    for id in pairs(helper.state.settings_files[cache_file] or {}) do
+                        table.insert(ids, id)
                     end
-                    table.sort(md5s)
-                    return md5s
+                    table.sort(ids)
+                    return ids
                 end
 
                 arrive({ "a", 0 }, { "b", 0 })

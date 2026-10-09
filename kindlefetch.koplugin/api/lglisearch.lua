@@ -67,9 +67,10 @@ local function parseBook(row, base_url)
         return nil
     end
 
+    -- the file's md5, which is how Library Genesis finds it again for downloading
     local book = {}
-    book.md5 = cells[10]:match("md5=(%x+)")
-    book.md5 = book.md5 and book.md5:lower()
+    book.id = cells[10]:match("md5=(%x+)")
+    book.id = book.id and book.id:lower()
 
     local image_path = cells[1]:match('src="([^"]+)"')
     if image_path then
@@ -102,8 +103,8 @@ local function parseBook(row, base_url)
     local file_size = stripTags(cells[8])
     book.file_size = file_size ~= "" and file_size or "0"
 
-    -- at minimum need title + md5 + file type for a valid book
-    if not (book.title and book.title ~= "" and book.md5 and book.file_type) then
+    -- at minimum need title + id + file type for a valid book
+    if not (book.title and book.title ~= "" and book.id and book.file_type) then
         LogUtil.warn("skipped book with missing features")
         return nil
     end
@@ -342,8 +343,8 @@ function LlgiSearch:search(query, page)
         )
         results_read = results_read + results
         for _, book in ipairs(page_books) do
-            if not seen[book.md5] then
-                seen[book.md5] = true
+            if not seen[book.id] then
+                seen[book.id] = true
                 table.insert(books, book)
             end
         end

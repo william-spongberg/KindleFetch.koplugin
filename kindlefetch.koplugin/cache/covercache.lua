@@ -22,17 +22,17 @@ local COVER_MAX_TIME = 10
 -- to say as each cover arrives, keeping the rest of its page waiting)
 local COVER_STALL_TIME = 10
 
--- md5s of covers being downloaded, so they aren't downloaded twice at once
+-- ids of the books whose covers are being downloaded, so they aren't downloaded twice at once
 local downloading = {}
--- md5s of covers that couldn't be downloaded this session, so they aren't shown as coming
+-- ids of the books whose covers couldn't be downloaded this session, so they aren't shown as coming
 local unavailable = {}
 
 local persistent_cache = KindleFetchCache:new {
     filename = "kindlefetch_covercache.lua",
     expiry = nil, -- no expiry
     max_entries = 500, -- each cover image around 40KB, so around 20MB
-    makeKey = function(md5)
-        return md5
+    makeKey = function(id)
+        return id
     end,
     -- remove a cover's file once newer covers push it out, or it would be left behind for good
     onEvict = function(_, path)
@@ -64,8 +64,8 @@ local function removeOrphans()
 
     local orphans = {}
     for file in lfs.dir(CACHE_DIR) do
-        local md5 = file:match("^(.+)%.jpg$")
-        if md5 and not downloading[md5] and not persistent_cache:get(md5) then
+        local id = file:match("^(.+)%.jpg$")
+        if id and not downloading[id] and not persistent_cache:get(id) then
             table.insert(orphans, file)
         end
     end
@@ -77,25 +77,25 @@ local function removeOrphans()
     end
 end
 
-function CoverCache:getPath(md5)
+function CoverCache:getPath(id)
     ensureCacheDir()
-    return CACHE_DIR .. md5 .. ".jpg"
+    return CACHE_DIR .. id .. ".jpg"
 end
 
-function CoverCache:cacheExists(md5)
+function CoverCache:cacheExists(id)
     -- must agree with get, as covers are shown using the path it returns
-    return self:get(md5) ~= nil
+    return self:get(id) ~= nil
 end
 
 -- Library Genesis links to thumbnails ending in _small, with the full-size cover at the same path without it.
 -- returns the full-size cover as a book of its own, stored alongside the thumbnail, or nil if there isn't one
 local function fullSizeCover(book)
     local url = book.image_url and book.image_url:gsub("_small(%.%w+)$", "%1")
-    if not book.md5 or not url or url == book.image_url then
+    if not book.id or not url or url == book.image_url then
         return nil
     end
     return {
-        md5 = book.md5 .. "_full",
+        id = book.id .. "_full",
         image_url = url,
     }
 end
@@ -103,7 +103,7 @@ end
 -- the book's full-size cover, if it has downloaded
 function CoverCache:getFullSize(book)
     local cover = fullSizeCover(book)
-    return cover and self:get(cover.md5)
+    return cover and self:get(cover.id)
 end
 
 -- download the book's full-size cover in the background, for showing larger than in search results. returns
@@ -135,34 +135,34 @@ end
 
 -- whether a cover for the book is on its way, so worth showing a placeholder for
 function CoverCache:isComing(book)
-    return book.image_url ~= nil and not unavailable[book.md5] and not self:cacheExists(book.md5)
+    return book.image_url ~= nil and not unavailable[book.id] and not self:cacheExists(book.id)
 end
 
-function CoverCache:get(md5)
+function CoverCache:get(id)
     -- check persistent cache first
-    local cached_path = persistent_cache:get(md5)
+    local cached_path = persistent_cache:get(id)
     if cached_path and FileUtil.isValidFile(cached_path) then
         return cached_path
     end
     -- if cache says exists but file is gone, invalidate
     if cached_path then
-        persistent_cache:delete(md5)
+        persistent_cache:delete(id)
         persistent_cache:save()
     end
     return nil
 end
 
-function CoverCache:download(md5, url)
+function CoverCache:download(id, url)
     ensureCacheDir()
-    local path = self:getPath(md5)
+    local path = self:getPath(id)
 
     local success = CurlUtil.download(url, path, false, false, COVER_MAX_TIME)
     if not success and hasProxy() then
-        LogUtil.debug("retrying cover download through proxy", md5)
+        LogUtil.debug("retrying cover download through proxy", id)
         success = CurlUtil.download(url, path, true, false, COVER_MAX_TIME)
     end
     if success then
-        persistent_cache:set(path, md5)
+        persistent_cache:set(path, id)
         return path
     end
 
@@ -255,25 +255,25 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
 
     local download_urls = {}
     local filepaths = {}
-    local md5s = {}
+    local ids = {}
 
     for _, book in ipairs(books) do
-        if book.md5 and book.image_url and not self:get(book.md5) and not downloading[book.md5] then
+        if book.id and book.image_url and not self:get(book.id) and not downloading[book.id] then
             table.insert(download_urls, book.image_url)
-            table.insert(filepaths, self:getPath(book.md5))
-            table.insert(md5s, book.md5)
-            downloading[book.md5] = true
-            unavailable[book.md5] = nil
+            table.insert(filepaths, self:getPath(book.id))
+            table.insert(ids, book.id)
+            downloading[book.id] = true
+            unavailable[book.id] = nil
         end
     end
 
-    if #md5s == 0 then
+    if #ids == 0 then
         return false
     end
 
-    local md5_of = {}
+    local id_of = {}
     for i, path in ipairs(filepaths) do
-        md5_of[path] = md5s[i]
+        id_of[path] = ids[i]
     end
 
     -- the covers that have arrived, as they're added to the cache (in memory, until they've all finished)
@@ -282,10 +282,10 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     local function keep(paths)
         local added = 0
         for _, path in ipairs(paths) do
-            if md5_of[path] and not kept[path] then
+            if id_of[path] and not kept[path] then
                 kept[path] = true
-                downloading[md5_of[path]] = nil
-                persistent_cache:put(path, md5_of[path])
+                downloading[id_of[path]] = nil
+                persistent_cache:put(path, id_of[path])
                 added = added + 1
             end
         end
@@ -305,10 +305,10 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
 
     local function finish(downloaded_paths)
         keep(downloaded_paths)
-        for i, md5 in ipairs(md5s) do
+        for i, id in ipairs(ids) do
             if not kept[filepaths[i]] then
-                downloading[md5] = nil
-                unavailable[md5] = true
+                downloading[id] = nil
+                unavailable[id] = true
             end
         end
         -- once for all of them, rather than writing the cache out for each cover

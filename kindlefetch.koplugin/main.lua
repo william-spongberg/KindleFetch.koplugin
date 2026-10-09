@@ -538,10 +538,10 @@ end
 -- books showing, as working out that name means reading which file systems are mounted, until a download finishes
 function KindleFetch:isDownloaded(book)
     self.downloaded = self.downloaded or {}
-    if self.downloaded[book.md5] == nil then
-        self.downloaded[book.md5] = FileUtil.isValidFile(buildDownloadPath(book)) or false
+    if self.downloaded[book.id] == nil then
+        self.downloaded[book.id] = FileUtil.isValidFile(buildDownloadPath(book)) or false
     end
-    return self.downloaded[book.md5]
+    return self.downloaded[book.id]
 end
 
 function KindleFetch:showBooks(books)

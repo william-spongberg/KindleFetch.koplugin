@@ -109,7 +109,7 @@ local function pollDownload(transfer)
 
     LogUtil.debug("download progress", {
         title = book.title,
-        md5 = book.md5,
+        id = book.id,
         bytes_downloaded = bytes_downloaded,
         total_size = total_size,
     })
@@ -123,7 +123,7 @@ local function pollDownload(transfer)
         local final_size = FileUtil.getSize(part_path)
 
         -- check if completed successfully
-        local download = LlgiAPI.active_downloads[book.md5]
+        local download = LlgiAPI.active_downloads[book.id]
         local seconds = download and download.started and os.time() - download.started or 0
         if exit_code == 0 and final_size and final_size > 0 then
             progress_widget:update(1, "100%")
@@ -240,7 +240,8 @@ local function findDownloadLink(book, retrying)
     local busy = false
     for _, url in ipairs(base_urls) do
         -- load ads page (to get key for download page)
-        local ads_page = string.format("%s/ads.php?md5=%s", url, book.md5)
+        -- (the book's id is its md5)
+        local ads_page = string.format("%s/ads.php?md5=%s", url, book.id)
         local html, err, status = HttpUtil.getBody(ads_page)
         -- called off, which says nothing about the mirrors
         if err == HttpUtil.CANCELLED then
@@ -298,11 +299,11 @@ end
 function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     LogUtil.info(
         string.format(
-            "downloading %q (%s, %s, md5 %s) to %s%s",
+            "downloading %q (%s, %s, id %s) to %s%s",
             book.title,
             tostring(book.file_type),
             tostring(book.file_size),
-            tostring(book.md5),
+            tostring(book.id),
             filepath,
             retrying and ", after looking up mirrors again" or ""
         )
@@ -333,7 +334,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     UIManager:forceRePaint()
 
     -- track this download
-    LlgiAPI.active_downloads[book.md5] = {
+    LlgiAPI.active_downloads[book.id] = {
         book = book,
         filepath = filepath,
         part_path = part_path,
@@ -356,7 +357,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
 
     if not download_url then
         progress_widget:close()
-        LlgiAPI.active_downloads[book.md5] = nil
+        LlgiAPI.active_downloads[book.id] = nil
 
         if lookup_err == HttpUtil.CANCELLED then
             LogUtil.info(string.format("download of %q cancelled while looking up its link", book.title))
@@ -377,10 +378,10 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
     -- note down the headers curl is sent, which say how big the book is
     local headers_file = CurlUtil.createHeadersFile()
     transfer.headers_file = headers_file
-    LlgiAPI.active_downloads[book.md5].headers_file = headers_file
+    LlgiAPI.active_downloads[book.id].headers_file = headers_file
     transfer.on_finish = function(ok, err)
         progress_widget:close()
-        LlgiAPI.active_downloads[book.md5] = nil -- cleanup after download finishes
+        LlgiAPI.active_downloads[book.id] = nil -- cleanup after download finishes
         FileUtil.removeFile(headers_file)
         if ok and not os.rename(part_path, filepath) then
             LogUtil.warn("could not move the downloaded book from", part_path, "to", filepath)
@@ -401,7 +402,7 @@ function LlgiAPI:_startDownload(book, filepath, callback, retrying)
         LogUtil.warn("could not start curl to download:", spawn_err)
         FileUtil.removeFile(headers_file)
         progress_widget:close()
-        LlgiAPI.active_downloads[book.md5] = nil
+        LlgiAPI.active_downloads[book.id] = nil
         callback(false, spawn_err or "failed to spawn curl downloader")
         return
     end
@@ -419,15 +420,15 @@ function LlgiAPI:downloadBook(book, filepath, callback, open_existing)
     callback = callback or function() end
 
     -- show the progress of a book that is already downloading, in case it was hidden
-    if self:showDownload(book.md5) then
+    if self:showDownload(book.id) then
         return
     end
 
     -- get the book cover in the background, the prompt shows a placeholder until it arrives
-    if book.image_url and not CoverCache:cacheExists(book.md5) then
+    if book.image_url and not CoverCache:cacheExists(book.id) then
         LogUtil.debug("downloading book cover", {
             title = book.title,
-            md5 = book.md5,
+            id = book.id,
         })
         CoverCache:downloadMultiple({ book }, 1)
     end
@@ -472,9 +473,9 @@ function LlgiAPI:downloadBook(book, filepath, callback, open_existing)
     prompt:show()
 end
 
--- show the progress of a download, if it was hidden. returns whether the book with that md5 is downloading
-function LlgiAPI:showDownload(md5)
-    local active_download = self.active_downloads[md5]
+-- show the progress of a download, if it was hidden. returns whether the book with that id is downloading
+function LlgiAPI:showDownload(id)
+    local active_download = self.active_downloads[id]
     if not active_download then
         return false
     end
@@ -493,7 +494,6 @@ function LlgiAPI:getActiveDownloads()
             id = id,
             title = download_info.book.display_title or download_info.book.title,
             filepath = download_info.filepath,
-            md5 = download_info.book.md5,
             widget = download_info.progress_widget,
             started = download_info.started,
         })

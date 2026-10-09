@@ -93,9 +93,9 @@ function BookMenu:createBookItemWidget(book)
     -- cover image, a placeholder while it downloads, or nothing if there isn't one or covers are turned off
     local cover_widget
     local show_covers = KindleFetchSettings:getShowBookCovers()
-    if show_covers and CoverCache:cacheExists(book.md5) then
+    if show_covers and CoverCache:cacheExists(book.id) then
         cover_widget = ImageWidget:new {
-            file = CoverCache:get(book.md5),
+            file = CoverCache:get(book.id),
             width = COVER_SIZE,
             height = COVER_SIZE,
             scale_factor = 0,
@@ -105,7 +105,7 @@ function BookMenu:createBookItemWidget(book)
         cover_widget = CoverPlaceholder.new(math.floor(COVER_SIZE * 2 / 3), COVER_SIZE)
         -- so the page is drawn again once its cover arrives
         self.awaited_covers = self.awaited_covers or {}
-        self.awaited_covers[book.md5] = book
+        self.awaited_covers[book.id] = book
     end
 
     -- the room there is for text beside the cover
@@ -330,7 +330,7 @@ function BookMenu:booksWithoutCovers(page)
     local books = {}
     for idx = start_idx, end_idx do
         local item = self.item_table[idx]
-        if item and item.book and item.book.image_url and not CoverCache:cacheExists(item.book.md5) then
+        if item and item.book and item.book.image_url and not CoverCache:cacheExists(item.book.id) then
             table.insert(books, item.book)
         end
     end

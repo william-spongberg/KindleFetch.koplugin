@@ -6,7 +6,7 @@ describe("BookMenu", function()
 
     local function book(n, overrides)
         local b = {
-            md5 = "md5-" .. n,
+            id = "book-" .. n,
             display_title = "Book " .. n,
             authors = "Author " .. n,
             year = "1990",
@@ -61,8 +61,8 @@ describe("BookMenu", function()
         return menu
     end
 
-    local function cacheCover(md5)
-        fixtures.cacheCover(helper, md5)
+    local function cacheCover(id)
+        fixtures.cacheCover(helper, id)
     end
 
     before_each(function()
@@ -122,7 +122,7 @@ describe("BookMenu", function()
             menu:updateItems()
 
             assert.are.equal(2, #menu.item_group)
-            assert.are.equal("md5-11", menu.item_group[1].entry.book.md5)
+            assert.are.equal("book-11", menu.item_group[1].entry.book.id)
             assert.are.equal("Load more", menu.item_group[2].entry.text)
             assert.are.equal(2, #menu.layout)
             assert.are.equal("ui", helper.state.refresh[1])
@@ -202,7 +202,7 @@ describe("BookMenu", function()
         it("say when the book has been downloaded already", function()
             local menu = newMenu(2)
             menu.is_downloaded = function(b)
-                return b.md5 == "md5-1"
+                return b.id == "book-1"
             end
             local _, _, info = details(menu:createBookItemWidget(book(1)))
             assert.are.equal(
@@ -231,11 +231,11 @@ describe("BookMenu", function()
 
         it("show the cover once it has been downloaded", function()
             local menu = newMenu(1)
-            cacheCover("md5-1")
+            cacheCover("book-1")
             local item = menu:createBookItemWidget(book(1))[1]
 
             assert.are.equal(3, #item)
-            assert.are.equal(CoverCache:getPath("md5-1"), item[1][1].file)
+            assert.are.equal(CoverCache:getPath("book-1"), item[1][1].file)
         end)
 
         it("leave the cover out when the book doesn't have one", function()
@@ -265,7 +265,7 @@ describe("BookMenu", function()
 
         it("leave out covers already downloaded when covers are turned off", function()
             local menu = newMenu(1)
-            cacheCover("md5-1")
+            cacheCover("book-1")
             require("settings.settings"):setShowBookCovers(false)
 
             assert.are.equal(2, #menu:createBookItemWidget(book(1))[1])
@@ -313,11 +313,11 @@ describe("BookMenu", function()
             menu:updateItems()
             helper.state.refreshes = {}
 
-            cacheCover("md5-6")
+            cacheCover("book-6")
             menu:onKindleFetchCoversDownloaded()
             assert.are.equal(0, #helper.state.refreshes)
 
-            cacheCover("md5-2")
+            cacheCover("book-2")
             menu:onKindleFetchCoversDownloaded()
             assert.are.equal(1, #helper.state.refreshes)
 
@@ -342,7 +342,7 @@ describe("BookMenu", function()
                     on_done = on_done,
                 }
                 for _, b in ipairs(books) do
-                    table.insert(requested, b.md5)
+                    table.insert(requested, b.id)
                 end
                 return true
             end
@@ -350,12 +350,12 @@ describe("BookMenu", function()
 
         it("downloads the covers missing from that page in the background", function()
             local menu = newMenu(11)
-            cacheCover("md5-7")
+            cacheCover("book-7")
             menu.item_table[8].book.image_url = nil
 
             menu.page = 2
             menu:loadCoversForPage(2)
-            assert.are.same({ "md5-6", "md5-9", "md5-10" }, { requested[1], requested[2], requested[3] })
+            assert.are.same({ "book-6", "book-9", "book-10" }, { requested[1], requested[2], requested[3] })
             assert.are.equal(3, #requested)
             assert.are.equal(5, requested.parallel_jobs)
             -- the menu isn't redrawn until they have downloaded
@@ -375,7 +375,7 @@ describe("BookMenu", function()
             it("downloads the next page's covers", function()
                 requested.on_done(5)
 
-                assert.are.same({ "md5-11" }, { requested[1], requested[2] })
+                assert.are.same({ "book-11" }, { requested[1], requested[2] })
                 assert.are.equal(5, requested.parallel_jobs)
                 -- and stops there, rather than going on through every page
                 assert.is_nil(requested.on_done)
@@ -402,11 +402,11 @@ describe("BookMenu", function()
         it("goes straight on to the next page's covers when that page has all of its own", function()
             local menu = newMenu(11)
             for n = 1, 5 do
-                cacheCover("md5-" .. n)
+                cacheCover("book-" .. n)
             end
 
             menu:loadCoversForPage(1)
-            assert.are.same({ "md5-6", "md5-7", "md5-8", "md5-9", "md5-10" }, {
+            assert.are.same({ "book-6", "book-7", "book-8", "book-9", "book-10" }, {
                 requested[1],
                 requested[2],
                 requested[3],
@@ -420,12 +420,12 @@ describe("BookMenu", function()
             local menu = newMenu(11)
             local requests = {}
             CoverCache.downloadMultiple = function(_, books)
-                table.insert(requests, books[1].md5)
+                table.insert(requests, books[1].id)
                 return false
             end
 
             menu:loadCoversForPage(1)
-            assert.are.same({ "md5-1", "md5-6" }, requests)
+            assert.are.same({ "book-1", "book-6" }, requests)
         end)
 
         -- covers another search started downloading still show up once they download
@@ -434,11 +434,11 @@ describe("BookMenu", function()
             menu.page = 3
             menu:updateItems()
             helper.state.refreshes = {}
-            cacheCover("md5-11")
+            cacheCover("book-11")
             menu:onKindleFetchCoversDownloaded()
 
             assert.are.equal(2, #menu.item_group)
-            assert.are.equal("md5-11", menu.item_group[1].entry.book.md5)
+            assert.are.equal("book-11", menu.item_group[1].entry.book.id)
             -- once, and without the flash of a full refresh
             assert.are.equal(1, #helper.state.refreshes)
             assert.are.equal("ui", helper.state.refreshes[1][1])
@@ -452,7 +452,7 @@ describe("BookMenu", function()
         it("doesn't redraw the page when the covers that downloaded are all for another one", function()
             local menu = newMenu(11)
             for n = 1, 5 do
-                cacheCover("md5-" .. n)
+                cacheCover("book-" .. n)
             end
             menu:updateItems()
             helper.state.refreshes = {}
@@ -463,7 +463,7 @@ describe("BookMenu", function()
 
         it("does nothing when every cover is there", function()
             local menu = newMenu(1)
-            cacheCover("md5-1")
+            cacheCover("book-1")
             CoverCache.downloadMultiple = function()
                 error("should not download")
             end

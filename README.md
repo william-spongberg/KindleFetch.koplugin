@@ -129,7 +129,7 @@ kindlefetch.koplugin/
 │   ├── cache.lua              # Generic caching system with expiry, size limits, and timestamp-based cleanup
 │   ├── searchcache.lua        # Caches search results by query, page, and filter preferences (2 weeks by default, 100-entry limit)
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
-│   └── covercache.lua         # Downloads and caches book covers and full-size covers by MD5 hash (500-entry limit, persists across sessions, removing the oldest covers' files once full)
+│   └── covercache.lua         # Downloads and caches book covers and full-size covers by book (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
 │   ├── curlupdater.lua        # Checks curl version on Kindles and offers to install static curl (8.21.0) if it's older
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes

@@ -9,15 +9,15 @@ describe("LlgiAPI", function()
     local CurlUtil, UrlApi, LlgiAPI
 
     local function adsUrl(mirror)
-        return mirror .. "/ads.php?md5=" .. book.md5
+        return mirror .. "/ads.php?md5=" .. book.id
     end
 
     local function getUrl(mirror)
-        return mirror .. "/get.php?md5=" .. book.md5 .. "&key=ABC123"
+        return mirror .. "/get.php?md5=" .. book.id .. "&key=ABC123"
     end
 
     local function hasBook(mirror)
-        web.pages[adsUrl(mirror)] = fixtures.libgenAds(book.md5)
+        web.pages[adsUrl(mirror)] = fixtures.libgenAds(book.id)
     end
 
     local saved_filepath, opened_existing
@@ -44,7 +44,7 @@ describe("LlgiAPI", function()
     end
 
     local function progress()
-        return LlgiAPI.active_downloads[book.md5].progress_widget
+        return LlgiAPI.active_downloads[book.id].progress_widget
     end
 
     -- simulate curl noting down the headers it was sent, then writing the book and exiting
@@ -68,7 +68,7 @@ describe("LlgiAPI", function()
         helper.run("mkdir -p " .. helper.quote(data_dir .. "/settings"))
         filepath = data_dir .. "/Dune.epub"
         book = {
-            md5 = fixtures.DUNE.md5,
+            id = fixtures.DUNE.md5,
             title = "Dune",
             display_title = "Dune",
             image_url = fixtures.DUNE.image_url,
@@ -148,7 +148,7 @@ describe("LlgiAPI", function()
         end)
 
         it("does not download covers it already has", function()
-            fixtures.cacheCover(helper, book.md5)
+            fixtures.cacheCover(helper, book.id)
             CurlUtil.downloadMultiple = function()
                 error("should not download")
             end
@@ -161,7 +161,7 @@ describe("LlgiAPI", function()
             book.image_url = nil
             LlgiAPI:downloadBook(book, filepath, onResult)
 
-            assert.is_false(require("cache.covercache"):cacheExists(book.md5))
+            assert.is_false(require("cache.covercache"):cacheExists(book.id))
             assert.are.equal(1, #prompts)
         end)
 
@@ -170,7 +170,7 @@ describe("LlgiAPI", function()
             helper.runScheduled()
 
             assert.are.equal(1, #prompts)
-            assert.is_false(require("cache.covercache"):cacheExists(book.md5))
+            assert.is_false(require("cache.covercache"):cacheExists(book.id))
         end)
 
         it("downloads to the folder chosen in the prompt", function()
@@ -553,7 +553,7 @@ describe("LlgiAPI", function()
             assert.are.same({}, LlgiAPI:getActiveDownloads())
             assert.are.equal(MB, #helper.readFile(filepath))
             -- for reading crash.log from a device
-            assert.is_truthy(helper.logged("info", '^downloading "Dune" %(epub, .-, md5 %x+%) to '))
+            assert.is_truthy(helper.logged("info", '^downloading "Dune" %(epub, .-, id %x+%) to '))
             assert.is_truthy(helper.logged("info", '^downloaded "Dune": ' .. MB .. " bytes in %d+s$"))
         end)
 
@@ -613,7 +613,7 @@ describe("LlgiAPI", function()
             -- every mirror is down until they have been scraped again
             web.pages[adsUrl(mirrors[1])] = function()
                 if web.scrapes > 1 then
-                    return fixtures.libgenAds(book.md5)
+                    return fixtures.libgenAds(book.id)
                 end
             end
 
@@ -861,7 +861,7 @@ describe("LlgiAPI", function()
 
             local downloads = LlgiAPI:getActiveDownloads()
             assert.are.equal(1, #downloads)
-            assert.are.equal(book.md5, downloads[1].id)
+            assert.are.equal(book.id, downloads[1].id)
             assert.are.equal("Dune", downloads[1].title)
             assert.are.equal(filepath, downloads[1].filepath)
             assert.are.equal(progress(), downloads[1].widget)
@@ -872,7 +872,7 @@ describe("LlgiAPI", function()
             download()
             for i, title in ipairs({ "Zebra", "Apple" }) do
                 LlgiAPI.active_downloads["other" .. i] = {
-                    book = { md5 = "other" .. i, title = title },
+                    book = { id = "other" .. i, title = title },
                     progress_widget = {},
                     started = 1000 + (title == "Zebra" and 0 or 1000),
                 }
@@ -891,18 +891,18 @@ describe("LlgiAPI", function()
             local widget = progress()
             widget.hide_button.callback()
 
-            assert.is_true(LlgiAPI:showDownload(book.md5))
+            assert.is_true(LlgiAPI:showDownload(book.id))
             assert.is_true(widget.is_visible)
             assert.are.equal(widget.container, helper.lastShown())
 
             -- and nothing happens when it's showing already
             local shown = #helper.state.shown
-            assert.is_true(LlgiAPI:showDownload(book.md5))
+            assert.is_true(LlgiAPI:showDownload(book.id))
             assert.are.equal(shown, #helper.state.shown)
         end)
 
         it("can't have their progress shown once they're over", function()
-            assert.is_false(LlgiAPI:showDownload(book.md5))
+            assert.is_false(LlgiAPI:showDownload(book.id))
         end)
 
         it("can all be cancelled at once", function()

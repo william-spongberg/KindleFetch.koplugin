@@ -27,7 +27,7 @@ describe("Searching", function()
             preferred[file_type] = true
         end
         for _, book in ipairs(books) do
-            assert(book.md5:match("^%x+$") and #book.md5 == 32, "bad md5 " .. tostring(book.md5))
+            assert(book.id:match("^%x+$") and #book.id == 32, "bad id " .. tostring(book.id))
             assert(book.title ~= "", "book without a title")
             assert(preferred[book.file_type], book.title .. " is a " .. book.file_type)
         end
@@ -123,7 +123,7 @@ describe("Searching", function()
                 return widget.file and widget.file:find("kindlefetch_covers", 1, true)
             end, menu)
         end)
-        assert(CoverCache:cacheExists(on_first_page[1].md5) or cover, "covers weren't cached")
+        assert(CoverCache:cacheExists(on_first_page[1].id) or cover, "covers weren't cached")
         H.shot("search-covers")
     end)
 

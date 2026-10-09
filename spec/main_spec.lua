@@ -40,7 +40,7 @@ describe("KindleFetch", function()
 
     local function book(title, file_type)
         return {
-            md5 = title:lower(),
+            id = title:lower(),
             title = title,
             display_title = title,
             file_type = file_type or "epub",

@@ -75,7 +75,7 @@ describe("LlgiSearch", function()
             assert.is_truthy(helper.logged("info", "^page 1 from [%w%.]+: kept 2 of its 2 results$"))
             assert.is_truthy(helper.logged("info", '^found 2 books for "dune"$'))
             assert.are.same({
-                md5 = "24778aacb1d0844950bf463c145b3d21",
+                id = "24778aacb1d0844950bf463c145b3d21",
                 image_url = mirrors[1] .. "/fictioncovers/2509000/24778aacb1d0844950bf463c145b3d21_small.jpg",
                 title = "Dune",
                 display_title = "Dune",
@@ -192,7 +192,7 @@ describe("LlgiSearch", function()
             })
             local book = LlgiSearch:search("dune", 1)[1]
 
-            assert.are.equal("abc", book.md5)
+            assert.are.equal("abc", book.id)
             assert.are.equal("epub", book.file_type)
             assert.are.equal("Unknown author", book.authors)
             assert.are.equal("0", book.file_size)
@@ -613,8 +613,8 @@ describe("LlgiSearch", function()
             assert.is_nil(err)
             assert.is_true(#books > 0, "no books found")
             for _, book in ipairs(books) do
-                assert.matches("^%x+$", book.md5)
-                assert.are.equal(32, #book.md5)
+                assert.matches("^%x+$", book.id)
+                assert.are.equal(32, #book.id)
                 assert.is_true(#book.title > 0)
                 local preferred = {}
                 for _, file_type in ipairs(require("settings.settings"):getPreferredFileTypes()) do
