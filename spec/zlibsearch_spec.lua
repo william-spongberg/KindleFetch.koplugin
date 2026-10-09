@@ -281,6 +281,55 @@ describe("ZlibSearch", function()
             end
         end)
 
+        -- as each link goes to one of its servers, picked at random, and asking for the same book's again doesn't
+        -- count again
+        describe("once the server a link went to has failed", function()
+            local hosts
+
+            before_each(function()
+                hosts = {}
+                web.pages[FILE_URL] = function()
+                    local host = table.remove(hosts, 1) or "dl-failed.example"
+                    return string.format('{"success":1,"file":{"downloadLink":"https://%s/1984.epub"}}', host)
+                end
+            end)
+
+            local function linksAskedFor()
+                local count = 0
+                for _, request in ipairs(web.requests) do
+                    if request.url == FILE_URL then
+                        count = count + 1
+                    end
+                end
+                return count
+            end
+
+            it("asks for links until one goes to another server", function()
+                hosts = { "dl-failed.example", "dl-failed.example", "dl-other.example" }
+
+                local url = ZlibSearch.findDownloadLink(zlib_book, true, "https://dl-failed.example/1984.epub?t=1")
+                assert.are.equal("https://dl-other.example/1984.epub", url)
+                assert.are.equal(3, linksAskedFor())
+            end)
+
+            it("gives the last link it was given once it has asked a few times", function()
+                local url = ZlibSearch.findDownloadLink(zlib_book, true, "https://dl-failed.example/1984.epub?t=1")
+                assert.are.equal("https://dl-failed.example/1984.epub", url)
+                assert.are.equal(4, linksAskedFor())
+            end)
+
+            it(
+                "asks even when the account has downloaded as many books as it can today, as it doesn't count",
+                function()
+                    profile(10, 10)
+                    hosts = { "dl-other.example" }
+
+                    local url = ZlibSearch.findDownloadLink(zlib_book, true, "https://dl-failed.example/1984.epub?t=1")
+                    assert.are.equal("https://dl-other.example/1984.epub", url)
+                end
+            )
+        end)
+
         it("says why Z-Library didn't give the link", function()
             web.pages[FILE_URL] = function()
                 return fixtures.zlibError("Invalid hash"), nil, 400

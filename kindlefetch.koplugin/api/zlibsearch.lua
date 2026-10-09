@@ -9,11 +9,17 @@ local ZlibSearch = {
     NAME = "Z-Library",
     -- searching it needs an account, logged into before searching (see ZlibLogin)
     NEEDS_LOGIN = true,
+    -- its download links each go to one of its servers, some of which can fail for a while, and asking it for the
+    -- same book's link again the same day doesn't count as another download (see findDownloadLink)
+    NEW_LINK_WHEN_SERVER_FAILS = true,
 }
 
 -- constants
 local SOURCE = "zlib"
 local RESULTS_PER_PAGE = 50
+-- how many times to ask for a link that goes to another server than one that failed, as each goes to one of them,
+-- picked at random
+local LINK_ASKS = 4
 
 -- the search for the query, as the form Z-Library's API is sent: in the languages, by their names (which is how
 -- Z-Library knows them, unless every one is chosen), and the file types, from the given page of its results
@@ -186,8 +192,9 @@ end
 
 -- the book's download link, which Z-Library only gives the account a few of a day, so it's only asked for while
 -- the account has any left (each one it gives counts, whether or not the book downloads, but not the same book's
--- again the same day). otherwise nil, and why not (HttpUtil.CANCELLED when called off)
-function ZlibSearch.findDownloadLink(book)
+-- again the same day). when the book failed to download from failed_url, a link to another of its servers. otherwise
+-- nil, and why not (HttpUtil.CANCELLED when called off)
+function ZlibSearch.findDownloadLink(book, _, failed_url)
     local profile, err = ZlibAccount:request("/eapi/user/profile")
     if not profile then
         return nil, err
@@ -195,7 +202,8 @@ function ZlibSearch.findDownloadLink(book)
     local user = type(profile.user) == "table" and profile.user or {}
     local downloaded, limit = tonumber(user.downloads_today), tonumber(user.downloads_limit)
     if downloaded and limit then
-        if downloaded >= limit then
+        -- unless it's this book's link that's asked for again, which doesn't count again
+        if downloaded >= limit and not failed_url then
             LogUtil.warn(string.format("the account has downloaded the %d books a day Z-Library allows", limit))
             return nil,
                 string.format(
@@ -206,15 +214,23 @@ function ZlibSearch.findDownloadLink(book)
         LogUtil.info(string.format("the account can download %d more of its %d books today", limit - downloaded, limit))
     end
 
-    local data
-    data, err = ZlibAccount:request(string.format("/eapi/book/%d/%s/file", book.zlib_id, book.hash))
-    if not data then
-        return nil, err
-    end
-    local link = type(data.file) == "table" and data.file.downloadLink
-    if not StringUtil.isSafeUrl(link) then
-        LogUtil.warn("Z-Library didn't give a download link that can be used")
-        return nil, "Z-Library didn't give a download link"
+    local failed_site = failed_url and LogUtil.site(failed_url)
+    local link
+    for _ = 1, failed_site and LINK_ASKS or 1 do
+        local data
+        data, err = ZlibAccount:request(string.format("/eapi/book/%d/%s/file", book.zlib_id, book.hash))
+        if not data then
+            return nil, err
+        end
+        link = type(data.file) == "table" and data.file.downloadLink
+        if not StringUtil.isSafeUrl(link) then
+            LogUtil.warn("Z-Library didn't give a download link that can be used")
+            return nil, "Z-Library didn't give a download link"
+        end
+        if LogUtil.site(link) ~= failed_site then
+            break
+        end
+        LogUtil.info("Z-Library's link went to", failed_site, "again, which failed, so asking for another")
     end
     return link
 end

@@ -906,6 +906,89 @@ describe("Downloader", function()
         end)
     end)
 
+    -- whose download links each go to one of its servers, some of which can fail for a while
+    describe("a book found on Z-Library", function()
+        local links
+
+        -- curl being answered with the HTTP status, and giving up
+        local function serverAnswered(status)
+            helper.writeFile(spawned[#spawned].headers_file, "HTTP/2 " .. status .. " \r\ncontent-length: 0\r\n\r\n")
+            helper.writeFile(spawned[#spawned].exit_file, "22")
+        end
+
+        before_each(function()
+            local account = { email = "reader@example.com", user_id = 42, user_key = "abc" }
+            require("settings.settings"):setZlibAccount(account)
+            book = {
+                source = "zlib",
+                id = "zlib_7",
+                zlib_id = 7,
+                hash = "abc123",
+                title = "1984",
+                display_title = "1984",
+                file_type = "epub",
+            }
+            -- Z-Library's address, as if looked up already (see UrlApi)
+            require("cache.urlcache"):set({ "https://z-lib.example" }, "zlib")
+            web.pages["https://z-lib.example/eapi/user/profile"] =
+                '{"success":1,"user":{"downloads_today":1,"downloads_limit":10}}'
+            links = 0
+            web.pages["https://z-lib.example/eapi/book/7/abc123/file"] = function()
+                links = links + 1
+                return string.format('{"success":1,"file":{"downloadLink":"https://dl%d.example/1984.epub"}}', links)
+            end
+        end)
+
+        it("asks for another link once the server the link went to fails", function()
+            download()
+            assert.are.equal("https://dl1.example/1984.epub", spawned[1].url)
+            serverAnswered(522)
+            helper.tick()
+
+            assert.are.equal(2, links)
+            assert.are.equal("https://dl2.example/1984.epub", spawned[2].url)
+            assert.are.same({}, results)
+            assert.is_truthy(helper.logged("info", "^asking for another download link"))
+            assert.are.equal("Waiting for Z-Library...", progress().status_widget.text)
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
+            assert.are.equal(MB, #helper.readFile(filepath))
+        end)
+
+        it("asks for another link when the server doesn't answer at all", function()
+            download()
+            helper.writeFile(spawned[1].exit_file, "7")
+            helper.tick()
+
+            assert.are.equal(2, #spawned)
+        end)
+
+        it("gives up when the server the second link went to fails too", function()
+            download()
+            serverAnswered(522)
+            helper.tick()
+            serverAnswered(522)
+            helper.runScheduled()
+
+            assert.are.equal(2, links)
+            assert.are.same({
+                { ok = false, err = "Z-Library is too busy to send books right now, try again in a few minutes" },
+            }, results)
+        end)
+
+        -- which another link to it wouldn't change
+        it("doesn't ask for another link when the book isn't there", function()
+            download()
+            serverAnswered(404)
+            helper.runScheduled()
+
+            assert.are.equal(1, links)
+            assert.are.same({ { ok = false, err = "HTTP error response (HTTP 404)" } }, results)
+        end)
+    end)
+
     describe("active downloads", function()
         it("lists downloads in progress", function()
             download()

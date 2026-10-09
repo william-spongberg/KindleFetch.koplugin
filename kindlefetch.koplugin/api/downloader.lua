@@ -22,6 +22,10 @@ local DOWNLOAD_POLL_INTERVAL = 0.5
 local DOWNLOAD_STALL_TIME = 30
 -- and once it hasn't for this many, the progress says it has stalled, as it may be a while before curl tries again
 local STALL_NOTICE_TIME = 10
+-- what curl gives up with when the server a book is downloaded from doesn't answer, or stops sending it, rather than
+-- e.g. the device's storage being full: couldn't find it or connect to it, nothing arrived for a while, nothing came
+-- back, or the connection broke
+local SERVER_FAILURES = { [6] = true, [7] = true, [28] = true, [52] = true, [56] = true }
 
 local function hasProxy()
     local proxy_url = os.getenv("PROXY_URL")
@@ -179,6 +183,14 @@ local function pollDownload(transfer)
             return
         end
 
+        -- or ask for another link once, from a site whose links each go to one of its servers, when the one the link
+        -- went to failed
+        if transfer.relink and (http_status and http_status >= 500 or SERVER_FAILURES[exit_code]) then
+            LogUtil.info("asking for another download link, as the server the link went to failed")
+            transfer.relink()
+            return
+        end
+
         FileUtil.removeFile(part_path)
         local err = exit_code == 0 and "download produced empty file" or CurlUtil.explainExitCode(exit_code)
         if http_status then
@@ -211,7 +223,8 @@ local function pollDownload(transfer)
     end)
 end
 
-function Downloader:_startDownload(book, filepath, callback, retrying)
+-- failed_url is the link the book failed to download from, when asking for another (see transfer.relink)
+function Downloader:_startDownload(book, filepath, callback, retrying, failed_url)
     local source = Sources[book.source]
     LogUtil.info(
         string.format(
@@ -263,7 +276,8 @@ function Downloader:_startDownload(book, filepath, callback, retrying)
     -- mean trying several mirrors, and let Cancel call it off. an error is passed on, rather than left to Trapper,
     -- which would leave the progress showing
     HttpUtil.trap_widget = progress_widget
-    local looked_up, download_url, lookup_err, mirror_failed = pcall(source.findDownloadLink, book, retrying)
+    local looked_up, download_url, lookup_err, mirror_failed =
+        pcall(source.findDownloadLink, book, retrying, failed_url)
     HttpUtil.trap_widget = nil
     progress_widget.dismiss_callback = nil
     if not looked_up then
@@ -306,6 +320,21 @@ function Downloader:_startDownload(book, filepath, callback, retrying)
         end
         UIManager:forceRePaint()
         callback(ok, err, filepath)
+    end
+    -- the site's links each go to one of its servers, so it can give another link once, rather than the download
+    -- failing with the server it went to (see pollDownload)
+    if source.NEW_LINK_WHEN_SERVER_FAILS and not retrying then
+        transfer.relink = function()
+            progress_widget:close()
+            Downloader.active_downloads[book.id] = nil
+            FileUtil.removeFile(headers_file)
+            FileUtil.removeFile(part_path)
+            UIManager:forceRePaint()
+            -- looking the link up without holding KOReader up, as when the download was started
+            Trapper:wrap(function()
+                self:_startDownload(book, filepath, callback, true, transfer.download_url)
+            end)
+        end
     end
 
     -- whatever is left of an earlier download of a book of the same name, e.g. one KOReader closed during, which

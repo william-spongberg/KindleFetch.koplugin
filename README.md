@@ -201,7 +201,7 @@ kindlefetch.koplugin/
    - The book's cover is fetched if it isn't cached already
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Curl fetches the ads page using the book's MD5 hash to obtain a download URL, in the background (where pages are fetched with curl), so KOReader carries on while the mirrors answer, and Cancel calls it off
-   - For a book on Z-Library, its API is asked how many more books the account can download today, and then for the book's download link, which counts as one of them
+   - For a book on Z-Library, its API is asked how many more books the account can download today, and then for the book's download link, which counts as one of them. Each link goes to one of Z-Library's servers, picked at random, some of which can fail for a while, so if the one it went to fails, Z-Library is asked for links until one goes to another server (which doesn't count again)
    - For a book on Internet Archive, the list of its files is fetched instead, and the file in the best format for its file type is downloaded, e.g. a PDF of a scan's text rather than one of only its pictures
    - File size is read from the headers of the download itself for progress calculation, without a separate request
    - A curl process is spawned to download the file in the background, to a `.part` file next to where the book will be saved, so half a book never shows up in your library
