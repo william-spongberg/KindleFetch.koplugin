@@ -2,18 +2,18 @@
 
 <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/stars/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github star tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/downloads/william-spongberg/KindleFetch.koplugin/total.svg" height="25px" alt="Github downloads tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/v/release/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github release version tracker"></a>
 
-Download books from Library Genesis and Internet Archive directly to your Kindle (or any e-reader running KOReader), entirely within the KOReader app.
+Download books from Library Genesis, Internet Archive and Z-Library directly to your Kindle (or any e-reader running KOReader), entirely within the KOReader app.
 
 ## Overview
 
-KindleFetch integrates Library Genesis and Internet Archive into KOReader, allowing you to search for and download books without leaving your e-reader. The plugin handles the entire workflow - from search queries to file downloads - with an intuitive interface and robust error handling.
+KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KOReader, allowing you to search for and download books without leaving your e-reader. The plugin handles the entire workflow - from search queries to file downloads - with an intuitive interface and robust error handling.
 
 ## Features
 
-- **Book Search + Downloads**: Search Library Genesis or Internet Archive from your device with simple text input and download with a tap; searches run in the background and can be cancelled, and books you have already downloaded are marked in the results
+- **Book Search + Downloads**: Search Library Genesis, Internet Archive or Z-Library (once logged in to your account) from your device with simple text input and download with a tap; searches run in the background and can be cancelled, and books you have already downloaded are marked in the results
 - **Caching**: Minimise network requests and improve performance
   - Search results (2 week expiry by default, 100 entries max)
-  - Mirror URLs (1 week expiry by default)
+  - Library Genesis' mirrors and Z-Library's addresses (1 week expiry by default)
   - Book covers (500 entries max, the oldest removed to make room)
 - **Preferences**: Filter results by preferred languages, file types, and book types (on Library Genesis)
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders until each one arrives; tap a cover in the download prompt to see it full size
@@ -38,7 +38,9 @@ KindleFetch integrates Library Genesis and Internet Archive into KOReader, allow
 
 ### Downloading books
 
-#### Search → Kindle Fetch → Search Library Genesis, or Search Internet Archive
+#### Search → Kindle Fetch → Search Library Genesis, Search Internet Archive, or Search Z-Library
+
+Z-Library can only be searched with an account: the first time, Kindle Fetch asks for its email and password, and keeps the key Z-Library logs it in with rather than your password (you can log out in the settings). Z-Library limits how many books an account can download a day; once they've all been downloaded, Kindle Fetch says so, rather than asking for another.
 
 Internet Archive only has the books that anyone can download, rather than borrow, which Kindle Fetch can't do: mostly older books, many of them scans, whose EPUBs were made by reading the scanned pages, which can leave mistakes in them. Its search doesn't say how big each book is, so the size shows once the download starts, and a large one can be cancelled straight away.
 
@@ -93,7 +95,7 @@ Downloaded books are saved to the download folder in the settings, unless you ch
 
 <img width="350" alt="Preferred file types" src="docs/screenshots/17-settings-file-types.png" />
 
-- **Preferred Book Types**: Filter Library Genesis' results by fiction, non-fiction, comics, magazines, scientific articles, or standards (default: all of them, which the settings show as All); Internet Archive doesn't sort its books into these
+- **Preferred Book Types**: Filter Library Genesis' results by fiction, non-fiction, comics, magazines, scientific articles, or standards (default: all of them, which the settings show as All); the other sites don't sort their books into these
 
 <img width="350" alt="Preferred book types" src="docs/screenshots/18-settings-book-types.png" />
 
@@ -103,7 +105,7 @@ When a search finds books, but none in the languages and file types chosen, Kind
 
 - **Check for Updates Automatically**: Check for plugin and curl updates at most once a day while connected (default: enabled)
 
-- **Keep Searches For / Keep Mirrors For**: How long search results (default: 14 days) and Library Genesis mirror URLs (default: 7 days) are cached
+- **Keep Searches For / Keep Mirrors For**: How long search results (default: 14 days), and Library Genesis' mirrors and Z-Library's addresses (default: 7 days) are cached
 
 <img width="350" alt="How long searches are kept" src="docs/screenshots/20-settings-cache.png" />
 
@@ -126,6 +128,7 @@ kindlefetch.koplugin/
 │   ├── lglisearch.lua         # Searches Library Genesis and finds its download links; parses HTML, filters by preferences and caches results
 │   ├── iasearch.lua           # Searches Internet Archive's books that anyone can download, and finds their files, with its search API
 │   ├── zlibaccount.lua        # Logs in to Z-Library, keeping the key it logs in with rather than the password, and asks its API as the account
+│   ├── zlibsearch.lua         # Searches Z-Library and finds its download links with the API its app uses, while the account can download more today
 │   └── urlapi.lua             # Scrapes Wikipedia to discover the current Library Genesis mirrors and Z-Library addresses
 ├── ui/
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination
@@ -171,7 +174,7 @@ kindlefetch.koplugin/
    - Book cover loading can be toggled on/off (for efficiency)
    - All settings are persisted and applied to future searches
 
-2. **Search Phase** (`LlgiSearch`, `IaSearch`)
+2. **Search Phase** (`LlgiSearch`, `IaSearch`, `ZlibSearch`)
    - User enters a search query via InputDialog, or chooses one of the last 10 from its Recent button
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
@@ -181,6 +184,7 @@ kindlefetch.koplugin/
    - Results are cached (2 weeks by default, 100 entries max) to minimise requests
    - Search results are displayed in a menu, marking the books that are in the download folder already
    - When Library Genesis lists results but none are in the preferred languages and file types, the plugin says how many it listed, and offers the settings or to keep searching through the rest
+   - Z-Library (`ZlibSearch`) is searched with the API its own app uses, as the account logged into, in the preferred languages and file types, 50 books at a time. As it moves between addresses as they're taken down, they're looked up on its Wikipedia page, like Library Genesis' mirrors (kept for a week by default), and the next is asked when one doesn't answer
    - Internet Archive (`IaSearch`) is searched with its search API for the books with each word searched for in their title or author's name, in the preferred languages (or no known language) and the formats of the preferred file types, that anyone can download, the most downloaded first, 50 at a time. Each is given the first of the preferred file types it's in, as most are in several
 
 3. **Cover Loading**
@@ -197,6 +201,7 @@ kindlefetch.koplugin/
    - The book's cover is fetched if it isn't cached already
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Curl fetches the ads page using the book's MD5 hash to obtain a download URL, in the background (where pages are fetched with curl), so KOReader carries on while the mirrors answer, and Cancel calls it off
+   - For a book on Z-Library, its API is asked how many more books the account can download today, and then for the book's download link, which counts as one of them
    - For a book on Internet Archive, the list of its files is fetched instead, and the file in the best format for its file type is downloaded, e.g. a PDF of a scan's text rather than one of only its pictures
    - File size is read from the headers of the download itself for progress calculation, without a separate request
    - A curl process is spawned to download the file in the background, to a `.part` file next to where the book will be saved, so half a book never shows up in your library
@@ -210,7 +215,7 @@ kindlefetch.koplugin/
    - Failed mirrors are removed from cache; if all cached URLs fail they are re-scraped from Wikipedia
    - The mirror that last answered a search or gave a download link is tried first from then on, rather than asking the ones before it, which may be too busy, every time
    - If Wikipedia answers without listing any mirrors (e.g. once its page has been rearranged), the mirrors known when the plugin was released are used
-   - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything
+   - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything. Z-Library's addresses are only taken from the website row of its Wikipedia page, and only those named as its addresses have been (such as z-lib.sk or 1lib.sk), as your password is sent to them when logging in
    - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes
    - Curl exit codes are mapped to human-readable error messages, and what went wrong is shown in a message that stays until it's dismissed
 
@@ -226,7 +231,7 @@ If a search, book cover or book download fails, the plugin automatically retries
 
 ## Attribution
 
-This plugin is forked from [justrals/KindleFetch](https://github.com/justrals/KindleFetch). It uses a similar underlying logic, but focuses on easy UX and simplicity. The choice was made to only support downloads from Library Genesis due to limitations and complexity surrounding Z-Library downloads, and as Anna's Archive now blocks automated access.
+This plugin is forked from [justrals/KindleFetch](https://github.com/justrals/KindleFetch). It uses a similar underlying logic, but focuses on easy UX and simplicity. Anna's Archive isn't supported, as it now blocks automated access.
 
 ## License
 
@@ -234,7 +239,7 @@ MIT
 
 ## Disclaimer
 
-This plugin facilitates downloading books from Library Genesis and Internet Archive. Ensure you have the legal right to download any content and respect copyright laws in your jurisdiction. The authors assume no liability for misuse.
+This plugin facilitates downloading books from Library Genesis, Internet Archive and Z-Library. Ensure you have the legal right to download any content and respect copyright laws in your jurisdiction. The authors assume no liability for misuse.
 
 ## Contributing
 

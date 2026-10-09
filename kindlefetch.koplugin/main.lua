@@ -20,6 +20,8 @@ local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
 local WaitingMessage = require("ui.waitingmessage")
+local ZlibLogin = require("ui.zliblogin")
+local ZlibAccount = require("api.zlibaccount")
 local SearchCache = require("cache.searchcache")
 local UrlCache = require("cache.urlcache")
 local CurlUpdater = require("updater.curlupdater")
@@ -197,6 +199,12 @@ function KindleFetch:addToMainMenu(menu_items)
                 end,
             },
             {
+                text = string.format(_("Search %s"), Sources.zlib.NAME),
+                callback = function()
+                    self:setupUI("zlib")
+                end,
+            },
+            {
                 -- where a download that was hidden can be shown again, without finding its book again
                 text_func = function()
                     local count = #Downloader:getActiveDownloads()
@@ -286,10 +294,26 @@ function KindleFetch:showRecentSearches()
     UIManager:show(dialog)
 end
 
--- open the search box, for searching the site source names (see Sources)
+-- whether the site can only be searched once logged into, and isn't. then logs in, calling on_logged_in once it has
+local function needsLogin(source, on_logged_in)
+    if not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn() then
+        return false
+    end
+    LogUtil.info("logging in to", Sources[source].NAME, "before searching it")
+    ZlibLogin.show(on_logged_in)
+    return true
+end
+
+-- open the search box, for searching the site source names (see Sources), once logged into it where it needs that
 function KindleFetch:setupUI(source)
     -- grab self reference for callbacks
     local this = self
+    local function openOnceLoggedIn()
+        this:setupUI(source)
+    end
+    if needsLogin(source, openOnceLoggedIn) then
+        return
+    end
     self.source = source
 
     self.search_box = InputDialog:new {
@@ -346,6 +370,14 @@ function KindleFetch:performSearch()
     if turned_off then
         LogUtil.warn("every", turned_off, "is turned off, so there's nothing to search for")
         NotifyUtil.error(string.format(_("Turn on at least one %s in Kindle Fetch's settings first."), turned_off))
+        return
+    end
+
+    -- e.g. once Z-Library has logged Kindle Fetch out (see ZlibAccount:request)
+    local function searchOnceLoggedIn()
+        self:performSearch()
+    end
+    if needsLogin(self.source, searchOnceLoggedIn) then
         return
     end
 

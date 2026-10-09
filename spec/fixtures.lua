@@ -271,4 +271,39 @@ function fixtures.zlibError(message)
     })
 end
 
+-- Z-Library's answer to a search, with the books, and the page after this one (or false on the last)
+function fixtures.zlibResults(books, next_page, total)
+    return require("dkjson").encode({
+        success = 1,
+        books = books,
+        exactBooksCount = total or #books,
+        pagination = {
+            limit = 50,
+            current = 1,
+            before = false,
+            next = next_page or false,
+            total_items = total or #books,
+            total_pages = 1,
+        },
+    })
+end
+
+-- a book as Z-Library describes it in its results (trimmed down to what the plugin reads, and a few more)
+fixtures.ZLIB_1984 = {
+    id = 15846732,
+    content_type = "book",
+    title = "Orwell, George - 1984 (Penguin)",
+    author = "George Orwell [Orwell, George]",
+    year = 2004,
+    publisher = "Penguin UK",
+    language = "English",
+    cover = "https://covers.example/covers299/1984.jpg",
+    filesize = 2158260,
+    filesizeString = "2.06 MB",
+    extension = "epub",
+    md5 = "9d4f939243175e76e973a1555ed70ecc",
+    hash = "728638",
+    dl = "/dl/knMa5dywnD",
+}
+
 return fixtures
