@@ -8,6 +8,8 @@ local NotifyUtil = require("util.notifyutil")
 local SearchCache = require("cache.searchcache")
 local UrlCache = require("cache.urlcache")
 local CoverCache = require("cache.covercache")
+local ZlibAccount = require("api.zlibaccount")
+local ZlibLogin = require("ui.zliblogin")
 local _ = require("gettext")
 
 local SettingsPage = {}
@@ -141,6 +143,12 @@ function SettingsPage:settingsItems()
             end,
         },
         {
+            text = _("Z-Library Account: ") .. (ZlibAccount:getEmail() or _("Not logged in")),
+            callback = function()
+                this:changeZlibAccount()
+            end,
+        },
+        {
             text = _("Preferred Languages: ") .. describeChosen(KindleFetchSettings:getAvailableLanguages(), languages),
             callback = function()
                 this:changeLanguages()
@@ -230,6 +238,26 @@ end
 function SettingsPage:changeCheckForUpdates()
     KindleFetchSettings:setCheckForUpdates(not KindleFetchSettings:getCheckForUpdates())
     self:refresh()
+end
+
+-- log in to Z-Library, or out of the account logged into
+function SettingsPage:changeZlibAccount()
+    local this = self
+    if not ZlibAccount:isLoggedIn() then
+        ZlibLogin.show(function()
+            this:refresh()
+        end)
+        return
+    end
+
+    UIManager:show(ConfirmBox:new {
+        text = string.format(_("Log out of Z-Library (%s)?"), ZlibAccount:getEmail()),
+        ok_text = _("Log out"),
+        ok_callback = function()
+            ZlibAccount:logout()
+            this:refresh()
+        end,
+    })
 end
 
 function SettingsPage:changeDownloadFolder()

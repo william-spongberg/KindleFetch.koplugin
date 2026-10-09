@@ -374,6 +374,24 @@ local function createStubs(state)
         end,
     }
 
+    -- KOReader's dialog with several boxes to type in, where what's typed in each is kept as its field's text
+    stubs.multiinputdialog = {
+        new = function(_, o)
+            o = o or {}
+            o.getFields = function(self)
+                local texts = {}
+                for _, field in ipairs(self.fields) do
+                    table.insert(texts, field.text)
+                end
+                return texts
+            end
+            o.onShowKeyboard = function(self)
+                self.keyboard_shown = true
+            end
+            return o
+        end,
+    }
+
     stubs.notification = {
         SOURCE_ALWAYS_SHOW = 1,
         notify = function(_, text)
@@ -582,6 +600,7 @@ local MODULE_STUBS = {
     ["luasettings"] = "luasettings",
     ["ui/uimanager"] = "uimanager",
     ["ui/widget/inputdialog"] = "inputdialog",
+    ["ui/widget/multiinputdialog"] = "multiinputdialog",
     ["ui/widget/notification"] = "notification",
     ["util"] = "util",
     ["ui/network/manager"] = "network",

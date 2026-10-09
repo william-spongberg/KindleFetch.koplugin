@@ -78,6 +78,8 @@ Downloaded books are saved to the download folder in the settings, unless you ch
 
 <img width="350" alt="Choosing the download folder" src="docs/screenshots/15-settings-download-folder.png" />
 
+- **Z-Library Account**: Log in to the Z-Library account to search it with, or out of the one logged into. Kindle Fetch keeps the key Z-Library logs it in with, rather than your password
+
 - **Preferred Languages**: Choose the languages of the books shown in search results (default: English)
 
 <img width="350" alt="Preferred languages" src="docs/screenshots/16-settings-languages.png" />
@@ -130,6 +132,7 @@ kindlefetch.koplugin/
 │   ├── coverplaceholder.lua   # Placeholder shown in place of a cover while it downloads
 │   ├── downloadprompt.lua     # Dialog showing a book's details and cover (full size when tapped), where to save it, and a Download button
 │   ├── waitingmessage.lua     # Message saying what's being waited for, with a Cancel button that calls the wait off
+│   ├── zliblogin.lua          # Dialog asking for the email and password of a Z-Library account, and logging in with them
 │   └── downloadprogress.lua   # Renders a centered progress widget with cancel and hide buttons
 ├── cache/
 │   ├── cache.lua              # Generic caching system with expiry, size limits, and timestamp-based cleanup
