@@ -115,6 +115,12 @@ function KindleFetch:onDispatcherRegisterActions()
         title = string.format(_("Kindle Fetch: search %s"), Sources.archive.NAME),
         general = true,
     })
+    Dispatcher:registerAction("kindlefetch_zlib_action", {
+        category = "none",
+        event = "KindleFetchZlib",
+        title = string.format(_("Kindle Fetch: search %s"), Sources.zlib.NAME),
+        general = true,
+    })
 end
 
 -- cancel downloads when KOReader exits or restarts, so curl isn't left running and partial books are removed
@@ -132,6 +138,10 @@ function KindleFetch:onKindleFetch()
 end
 function KindleFetch:onKindleFetchArchive()
     self:setupUI("archive")
+    return true
+end
+function KindleFetch:onKindleFetchZlib()
+    self:setupUI("zlib")
     return true
 end
 

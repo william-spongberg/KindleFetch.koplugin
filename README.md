@@ -20,7 +20,7 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
 - **Download Progress**: Visual download progress bar with real-time file size information, saying what it's waiting for until the book starts to arrive, and when the download has stalled
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes
 - **Read Now**: Offers to open a book as soon as it has downloaded
-- **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch for Library Genesis, or Kindle Fetch: search Internet Archive, in KOReader's gesture manager)
+- **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch for Library Genesis, or Kindle Fetch: search Internet Archive or Z-Library, in KOReader's gesture manager)
 - **Automatic Curl Updates**: Offers to install curl 8.21.0, the latest static build, on Kindles with an older one, and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
 - **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes, then offers to restart KOReader to use the new version (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails

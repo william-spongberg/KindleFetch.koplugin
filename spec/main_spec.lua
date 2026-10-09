@@ -403,6 +403,15 @@ describe("KindleFetch", function()
             assert.are.equal("Search Library Genesis", plugin.search_box.title)
         end)
 
+        it("registers a dispatcher action for searching Z-Library", function()
+            local plugin = openUI()
+            local action = helper.state.actions.kindlefetch_zlib_action
+            assert.are.equal("Kindle Fetch: search Z-Library", action.title)
+
+            assert.is_true(plugin["on" .. action.event](plugin))
+            assert.are.equal("Search Z-Library", plugin.search_box.title)
+        end)
+
         it("registers a dispatcher action for searching Internet Archive", function()
             local plugin = openUI()
             local action = helper.state.actions.kindlefetch_archive_action
