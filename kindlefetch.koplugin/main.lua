@@ -181,6 +181,12 @@ function KindleFetch:addToMainMenu(menu_items)
                 end,
             },
             {
+                text = string.format(_("Search %s"), Sources.archive.NAME),
+                callback = function()
+                    self:setupUI("archive")
+                end,
+            },
+            {
                 -- where a download that was hidden can be shown again, without finding its book again
                 text_func = function()
                     local count = #Downloader:getActiveDownloads()

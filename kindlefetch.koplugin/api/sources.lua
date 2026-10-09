@@ -4,4 +4,5 @@
 -- types chosen in the settings
 return {
     libgen = require("api.lglisearch"),
+    archive = require("api.iasearch"),
 }

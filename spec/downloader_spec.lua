@@ -856,6 +856,56 @@ describe("Downloader", function()
         end)
     end)
 
+    -- the same way as from Library Genesis, but with the link looked up on the site the book was found on
+    describe("a book found on Internet Archive", function()
+        before_each(function()
+            book = {
+                source = "archive",
+                id = "archive_emma00aust",
+                identifier = "emma00aust",
+                title = "Emma",
+                display_title = "Emma",
+                file_type = "epub",
+            }
+            web.pages["https://archive.org/metadata/emma00aust/files"] = fixtures.archiveFiles({
+                { name = "emma00aust.epub", format = "EPUB" },
+            })
+        end)
+
+        it("downloads it from there, saying so while it waits", function()
+            download()
+
+            assert.are.equal("https://archive.org/download/emma00aust/emma00aust.epub", spawned[1].url)
+            assert.are.equal("Waiting for Internet Archive...", progress().status_widget.text)
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
+        end)
+
+        it("says Internet Archive is too busy when its servers fail to send the book", function()
+            download()
+            helper.writeFile(spawned[1].headers_file, "HTTP/2 503 \r\ncontent-length: 212\r\n\r\n")
+            helper.writeFile(spawned[1].exit_file, "22")
+            helper.runScheduled()
+
+            assert.are.same({
+                {
+                    ok = false,
+                    err = "Internet Archive is too busy to send books right now, try again in a few minutes",
+                },
+            }, results)
+        end)
+
+        it("says why it couldn't find the link, without looking it up again", function()
+            web.pages["https://archive.org/metadata/emma00aust/files"] = "{}"
+            download()
+
+            assert.are.same({ { ok = false, err = "Internet Archive no longer has this book as EPUB" } }, results)
+            assert.are.equal(0, #spawned)
+            assert.are.equal(1, #web.fetched)
+        end)
+    end)
+
     describe("active downloads", function()
         it("lists downloads in progress", function()
             download()

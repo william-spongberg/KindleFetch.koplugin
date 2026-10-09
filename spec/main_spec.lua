@@ -2,6 +2,8 @@ local helper = require("helper")
 
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
+    -- what was searched for on Internet Archive, rather than Library Genesis
+    local archive_searches
     local cancelled_downloads, curl_check_user_requested, leftovers_removed
     -- the downloads the downloader says are in progress, and those it was asked to show the progress of
     local active_downloads, downloads_shown
@@ -59,9 +61,9 @@ describe("KindleFetch", function()
         error("no button " .. text)
     end
 
-    -- open the search dialog and search for query
-    local function search(plugin, query)
-        plugin:setupUI("libgen")
+    -- open the search dialog for the site (Library Genesis unless given) and search for query
+    local function search(plugin, query, source)
+        plugin:setupUI(source or "libgen")
         plugin.search_box.input_text = query
         button(plugin.search_box, "Search").callback()
     end
@@ -91,6 +93,7 @@ describe("KindleFetch", function()
             recent_searches = {},
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
+        archive_searches = {}
         saved = {}
 
         helper.stub("settings.settings", {
@@ -179,6 +182,18 @@ describe("KindleFetch", function()
             end,
             isCached = function(_, query, page)
                 return saved[query .. " " .. page] == true
+            end,
+        })
+        -- which finds the same books, but has no book types
+        helper.stub("api.iasearch", {
+            NAME = "Internet Archive",
+            search = function(_, query, page)
+                table.insert(archive_searches, { query, page })
+                local result = search_results[page] or { {} }
+                return result[1], result[2], result[3], result[4]
+            end,
+            isCached = function()
+                return false
             end,
         })
         cancelled_downloads = 0
@@ -503,6 +518,14 @@ describe("KindleFetch", function()
             assert.are.equal(plugin.search_box, helper.lastShown())
         end)
 
+        it("opens the search dialog for Internet Archive", function()
+            local plugin = openUI()
+            menuItem(plugin, "Search Internet Archive").callback()
+
+            assert.are.equal("Search Internet Archive", plugin.search_box.title)
+            assert.are.equal(plugin.search_box, helper.lastShown())
+        end)
+
         it("opens the settings", function()
             menuItem(openUI(), "Settings").callback()
             assert.are.equal(1, settings_shown)
@@ -613,6 +636,34 @@ describe("KindleFetch", function()
             assert.are.equal(0, #searches)
         end)
 
+        it("searches the site the search box is for", function()
+            search_results[1] = { { book("Emma") } }
+            search(openUI(), "emma", "archive")
+
+            assert.are.same({ { "emma", 1 } }, archive_searches)
+            assert.are.same({}, searches)
+            assert.are.same({ "Emma" }, itemTexts(menus[1]))
+        end)
+
+        -- which it doesn't have
+        it("searches Internet Archive with every book type turned off", function()
+            settings.book_types = {}
+            search(openUI(), "emma", "archive")
+
+            assert.are.same({ { "emma", 1 } }, archive_searches)
+            assert.is_nil(helper.lastError())
+        end)
+
+        it("loads more books from the site the search was on", function()
+            search_results[1] = { { book("Emma") }, nil, 2 }
+            search_results[2] = { { book("Emma, volume 2") } }
+            search(openUI(), "emma", "archive")
+            menus[1].item_table[2].callback()
+
+            assert.are.same({ { "emma", 1 }, { "emma", 2 } }, archive_searches)
+            assert.are.same({}, searches)
+        end)
+
         -- as nothing could be found
         for _, preference in ipairs({
             { "languages", "language" },
@@ -669,6 +720,11 @@ describe("KindleFetch", function()
             local function message()
                 return helper.state.shown[2]
             end
+
+            it("says which site it's searching", function()
+                search(openUI(), "emma", "archive")
+                assert.are.equal("Searching Internet Archive for\n“emma”...", message().title)
+            end)
 
             it("says it's searching until the books are found, with a button to call it off", function()
                 search_results[1] = { { book("Dune") } }
@@ -841,6 +897,17 @@ describe("KindleFetch", function()
 
                 explanation.ok_callback()
                 assert.are.equal(1, settings_shown)
+            end)
+
+            it("says which site listed them", function()
+                search_results[1] = { {}, nil, nil, 37 }
+                search(openUI(), "emma", "archive")
+
+                assert.are.equal(
+                    "Internet Archive listed 37 results, but none in the languages and file types chosen in Kindle "
+                        .. "Fetch's settings.",
+                    helper.lastShown().text
+                )
             end)
 
             it("offers to keep searching while there are more results to look through", function()
