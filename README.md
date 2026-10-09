@@ -123,6 +123,7 @@ kindlefetch.koplugin/
 │   ├── sources.lua            # The sites books can be searched for and downloaded from
 │   ├── lglisearch.lua         # Searches Library Genesis and finds its download links; parses HTML, filters by preferences and caches results
 │   ├── iasearch.lua           # Searches Internet Archive's books that anyone can download, and finds their files, with its search API
+│   ├── zlibaccount.lua        # Logs in to Z-Library, keeping the key it logs in with rather than the password, and asks its API as the account
 │   └── urlapi.lua             # Scrapes Wikipedia to discover the current Library Genesis mirrors and Z-Library addresses
 ├── ui/
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination

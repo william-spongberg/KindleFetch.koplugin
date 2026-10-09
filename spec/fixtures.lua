@@ -3,33 +3,40 @@
 local fixtures = {}
 
 -- Mirrors are scraped from the live Wikipedia pages, while every other page is served from web.pages
--- (url -> html, or a function returning html, and the HTTP status or what went wrong when it says) so specs don't
--- contact the sites themselves, unless web.live is set.
+-- (url -> html, or a function given the request's form and cookies, see HttpUtil.getBody, returning html, and the
+-- HTTP status or what went wrong when it says) so specs don't contact the sites themselves, unless web.live is set.
+-- web.requests keeps each request's form and cookies too
 function fixtures.fakeWeb(helper)
     local web = {
         pages = {},
         fetched = {},
+        requests = {},
         scrapes = 0,
         wikipedia_down = false,
     }
     helper.useLiveHttp()
     local HttpUtil = require("util.httputil")
     local fetchLive = HttpUtil.getBody
-    HttpUtil.getBody = function(url)
+    HttpUtil.getBody = function(url, opts)
         table.insert(web.fetched, url)
+        table.insert(web.requests, { url = url, form = opts and opts.form, cookies = opts and opts.cookies })
         if url:find("wikipedia.org", 1, true) then
             if web.wikipedia_down then
                 return nil, "could not resolve host"
             end
             web.scrapes = web.scrapes + 1
+            -- or a page given in its place
+            if web.pages[url] then
+                return web.pages[url]
+            end
             return fetchLive(url)
         end
         if web.live then
-            return fetchLive(url)
+            return fetchLive(url, opts)
         end
         local page, err, status = web.pages[url], nil, nil
         if type(page) == "function" then
-            page, err, status = page()
+            page, err, status = page(opts or {})
         end
         if page or err then
             return page, err, status
@@ -240,5 +247,28 @@ fixtures.ARCHIVE_EMMA = {
     language = "eng",
     format = { "Abbyy GZ", "DjVuTXT", "Djvu XML", "EPUB", "Item Tile", "Metadata", "Text PDF" },
 }
+
+-- Z-Library's answer to logging in, with the user id and key that log in as the account from then on
+function fixtures.zlibLogin(user_id, user_key)
+    return require("dkjson").encode({
+        success = 1,
+        user = {
+            id = user_id,
+            email = "reader@example.com",
+            name = "Reader",
+            remix_userkey = user_key,
+            downloads_today = 0,
+            downloads_limit = 10,
+        },
+    })
+end
+
+-- what Z-Library answers with when something's wrong, e.g. "Please login"
+function fixtures.zlibError(message)
+    return require("dkjson").encode({
+        success = 0,
+        error = message,
+    })
+end
 
 return fixtures
