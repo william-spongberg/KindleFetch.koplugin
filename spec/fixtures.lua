@@ -61,6 +61,37 @@ function fixtures.scrapeMirrors(web, getUrls, site)
     return mirrors
 end
 
+-- the website row of the infobox on Wikipedia's Z-Library page, linking to each of the sites given (e.g.
+-- "z-lib.example"), as it does to its addresses, along with those on Tor and I2P, as the real page does
+function fixtures.wikipediaZlib(sites)
+    local items = {}
+    for _, site in ipairs(sites) do
+        table.insert(
+            items,
+            '<li><a rel="mw:ExtLink nofollow" href="https://'
+                .. site
+                .. '/" class="external free">https://'
+                .. site
+                .. '/</a><sup class="reference"><a href="./Z-Library#cite_note-1">[1]</a></sup></li>'
+        )
+    end
+    table.insert(
+        items,
+        "<li><span>bookszlibb74ugqojhzhg2a63w5i2atv5bqarulgczawnbmsb6s6qead.onion</span> (accessing via "
+            .. '<a href="https://en.wikipedia.org/wiki/Tor_(network)">Tor</a>)</li>'
+    )
+    table.insert(
+        items,
+        '<li><a href="http://zlib24th6ptyb4ibzn3tj2cndqafs6rhm4ed4gruxztaaco35lka.b32.i2p">I2P</a></li>'
+    )
+    return '<html><body><table class="infobox vcard"><tbody><tr><th scope="row" class="infobox-label">Type of site</th>'
+        .. '<td class="infobox-data">Shadow library</td></tr><tr><th scope="row" class="infobox-label">Website</th>'
+        .. '<td class="infobox-data url"><div class="plainlist"><ul>'
+        .. table.concat(items)
+        .. "</ul></div></td></tr></tbody></table>"
+        .. '<p>It was previously at <a href="https://z-lib.org/">z-lib.org</a>, until it was seized.</p></body></html>'
+end
+
 local function cell(value)
     return "<td>" .. (value or "") .. "</td>\n"
 end

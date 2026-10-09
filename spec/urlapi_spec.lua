@@ -137,4 +137,84 @@ describe("UrlApi", function()
             end)
         end)
     end)
+
+    -- which it moves between as they're taken down
+    describe("Z-Library's addresses", function()
+        -- Wikipedia answering with the page
+        local function wikipediaAnswers(page)
+            http.request = function(request)
+                table.insert(http.requests, request.url)
+                request.sink(page)
+                return 1, 200
+            end
+        end
+
+        it("are looked up on Wikipedia", function()
+            local urls = UrlApi:getZlibUrls()
+            assert.is_not_nil(urls, "no Z-Library addresses found on Wikipedia")
+            assert.is_true(#urls > 0)
+            for _, url in ipairs(urls) do
+                -- the site's root, not a link to a page on it
+                assert.matches("^https://[%w%-]+%.%a+$", url)
+            end
+            assert.are.equal("https://en.wikipedia.org/wiki/Z-Library", http.requests[1])
+            assert.are.same({ "Looking up Z-Library mirrors..." }, helper.state.notifications)
+        end)
+
+        it("are cached apart from Library Genesis' mirrors", function()
+            wikipediaAnswers(require("fixtures").wikipediaZlib({ "z-lib.example" }))
+            UrlApi:getZlibUrls()
+
+            assert.are.same({ "https://z-lib.example" }, UrlApi:getZlibUrls())
+            assert.are.equal(1, #http.requests)
+            assert.is_nil(require("cache.urlcache"):get("libgen"))
+        end)
+
+        -- rather than those on Tor or I2P, which need software of their own to reach, or ones that aren't Z-Library's,
+        -- as the page can be edited by anyone, and the account's password is sent to them when logging in
+        it(
+            "are only the names of sites on the web, from the infobox's website row, named as Z-Library's are",
+            function()
+                wikipediaAnswers(require("fixtures").wikipediaZlib({
+                    "z-lib.sk",
+                    "Z-Library.example",
+                    "zlibrary-global.se",
+                    "1lib.sk",
+                    "singlelogin.re",
+                    "z-lib.sk",
+                    "evil.example",
+                    "z-lib.evil.example",
+                    "z-lib.sk/steal?from=you",
+                    'z-lib.sk" bad="',
+                }))
+
+                assert.are.same({
+                    "https://z-lib.sk",
+                    "https://z-library.example",
+                    "https://zlibrary-global.se",
+                    "https://1lib.sk",
+                    "https://singlelogin.re",
+                }, UrlApi:getZlibUrls())
+            end
+        )
+
+        it("are the one known when the plugin was written, when Wikipedia answers without any", function()
+            wikipediaAnswers("<html><body>Page not found</body></html>")
+
+            assert.are.same({ "https://z-lib.sk" }, UrlApi:getZlibUrls())
+            assert.is_truthy(helper.logged("warn", "^using the mirrors known when KindleFetch was written"))
+        end)
+
+        it("can have the one that answered tried first, and those that failed removed", function()
+            wikipediaAnswers(
+                require("fixtures").wikipediaZlib({ "z-lib.example", "z-library.example", "1lib.example" })
+            )
+            UrlApi:getZlibUrls()
+
+            UrlApi:preferZlibUrl("https://1lib.example")
+            UrlApi:deleteZlibUrl("https://z-lib.example")
+            assert.are.same({ "https://1lib.example", "https://z-library.example" }, UrlApi:getZlibUrls())
+            assert.are.equal(1, #http.requests)
+        end)
+    end)
 end)
