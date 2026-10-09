@@ -458,6 +458,14 @@ local function createStubs(state)
         end,
     }
     stubs.ltn12 = {
+        -- what's sent, which here is kept as it is, so specs can read it
+        source = {
+            string = function(text)
+                return {
+                    text = text,
+                }
+            end,
+        },
         sink = {
             table = function(t)
                 return function(chunk)
