@@ -1,0 +1,98 @@
+local H = require("helpers")
+
+describe("Internet Archive", function()
+    after_each(H.closeAll)
+    -- the book downloaded, which is removed once it has been read, as other tests find the book they download by
+    -- looking for one in the folder
+    local downloaded
+    after_each(function()
+        if downloaded then
+            H.removeBook(downloaded)
+            downloaded = nil
+        end
+    end)
+
+    -- Project Gutenberg's own copy of Jane Austen's Pride and Prejudice, a small epub, rather than one made from a
+    -- scan, which can be hundreds of megabytes
+    local function isGutenbergEpub(book)
+        return book.file_type == "epub"
+            and book.identifier:find("gut$") ~= nil
+            and book.title:lower() == "pride and prejudice"
+            and book.authors:lower():find("austen", 1, true) ~= nil
+    end
+
+    it("finds books that anyone can download, and shows their covers", function()
+        local menu = H.search(H.BOOK_QUERY, "Internet Archive")
+
+        local books = H.books(menu)
+        assert(#books >= 10, "only found " .. #books .. " books")
+        local preferred = {}
+        for _, file_type in ipairs(require("settings.settings"):getPreferredFileTypes()) do
+            preferred[file_type] = true
+        end
+        for _, book in ipairs(books) do
+            H.eq("archive", book.source, "source")
+            assert(book.id == "archive_" .. book.identifier, "bad id " .. tostring(book.id))
+            assert(book.title ~= "", "book without a title")
+            assert(preferred[book.file_type], book.title .. " is a " .. book.file_type)
+        end
+        H.eq(H.BOOK_QUERY .. " · " .. #books .. "+ books", menu.title, "title")
+
+        -- covers download in the background, then the menu is redrawn with them
+        H.waitFor("covers to be shown", 90, function()
+            return H.find(function(widget)
+                return widget.file and widget.file:find("kindlefetch_covers", 1, true)
+            end, menu)
+        end)
+        H.shot("archive-search-results")
+    end)
+
+    it("downloads a book and opens it", function()
+        local menu = H.search(H.BOOK_QUERY, "Internet Archive")
+        local book
+        for _, found in ipairs(H.books(menu)) do
+            if isGutenbergEpub(found) then
+                book = found
+                break
+            end
+        end
+        assert(book, "Project Gutenberg's Pride and Prejudice wasn't found")
+
+        H.tapBook(menu, book)
+        H.waitFor("the download prompt", 60, function()
+            return H.findButton("Download")
+        end)
+        H.shot("archive-download-prompt")
+        H.tapButton("Download")
+        if H.poll(2, function()
+            return H.findButton("Overwrite")
+        end) then
+            H.tapButton("Overwrite")
+        end
+
+        H.waitFor("the download to finish", 300, function()
+            local failure = H.errorShown()
+            if failure then
+                error(failure, 0)
+            end
+            return H.findButton("Read now")
+        end)
+
+        local path = H.books_dir .. "/" .. book.title .. ".epub"
+        downloaded = path
+        local file = io.open(path, "rb")
+        assert(file, "no book at " .. path)
+        -- an epub is a zip file
+        H.eq("PK", file:read(2), "start of the book")
+        file:close()
+
+        H.tapButton("Read now")
+        local ReaderUI = require("apps/reader/readerui")
+        local reader = H.waitFor("the book to open", 120, function()
+            return ReaderUI.instance and ReaderUI.instance.document and ReaderUI.instance
+        end)
+        H.eq(path, reader.document.file, "book opened")
+        assert(reader.document:getPageCount() > 0, "the book has no pages")
+        H.shot("archive-reading")
+    end)
+end)

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs KindleFetch's end-to-end tests in a real KOReader, without a window, for each emulated device.
-# These search Library Genesis and download real books, so they need internet access and aren't run in CI.
+# These search Library Genesis and Internet Archive and download real books, so they need internet access and
+# aren't run in CI.
 #
 # Usage: e2e/run.sh [-p profile]... [-k koreader_dir] [filter]
 #   -p profile       device to emulate (kindle, kindle-paperwhite, kobo-aura-one, android), can be repeated;
@@ -18,7 +19,7 @@ profiles=()
 koreader_dir=""
 
 usage() {
-    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while getopts "p:k:h" opt; do
