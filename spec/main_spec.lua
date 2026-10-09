@@ -3,7 +3,7 @@ local helper = require("helper")
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
     local cancelled_downloads, curl_check_user_requested, leftovers_removed
-    -- the downloads LlgiAPI says are in progress, and those it was asked to show the progress of
+    -- the downloads the downloader says are in progress, and those it was asked to show the progress of
     local active_downloads, downloads_shown
     -- whether searches can be called off, and the widget that calls each one off when tapped (false without one)
     local can_cancel, trap_widgets
@@ -61,7 +61,7 @@ describe("KindleFetch", function()
 
     -- open the search dialog and search for query
     local function search(plugin, query)
-        plugin:setupUI()
+        plugin:setupUI("libgen")
         plugin.search_box.input_text = query
         button(plugin.search_box, "Search").callback()
     end
@@ -164,6 +164,8 @@ describe("KindleFetch", function()
             end,
         })
         helper.stub("api.lglisearch", {
+            NAME = "Library Genesis",
+            HAS_BOOK_TYPES = true,
             search = function(_, query, page)
                 table.insert(searches, { query, page })
                 table.insert(trap_widgets, require("util.httputil").trap_widget or false)
@@ -197,7 +199,7 @@ describe("KindleFetch", function()
         }
         helper.stub("apps/filemanager/filemanager", FileManager)
         helper.stub("apps/reader/readerui", ReaderUI)
-        helper.stub("api.lgliapi", {
+        helper.stub("api.downloader", {
             cancelAllDownloads = function()
                 cancelled_downloads = cancelled_downloads + 1
             end,
@@ -531,7 +533,7 @@ describe("KindleFetch", function()
     describe("searching", function()
         it("can be cancelled", function()
             local plugin = openUI()
-            plugin:setupUI()
+            plugin:setupUI("libgen")
             plugin.search_box.buttons[1][1].callback()
 
             assert.is_true(helper.wasClosed(plugin.search_box))
@@ -540,7 +542,7 @@ describe("KindleFetch", function()
 
         it("starts from the keyboard's enter key as well as the Search button", function()
             local plugin = openUI()
-            plugin:setupUI()
+            plugin:setupUI("libgen")
 
             local search_button = button(plugin.search_box, "Search")
             assert.is_true(search_button.is_enter_default)
@@ -564,7 +566,7 @@ describe("KindleFetch", function()
                 settings.recent_searches = { "emma", "dune" }
                 search_results[1] = { { book("Emma") } }
                 local plugin = openUI()
-                plugin:setupUI()
+                plugin:setupUI("libgen")
                 assert.is_true(button(plugin.search_box, "Recent").enabled)
                 button(plugin.search_box, "Recent").callback()
 
@@ -581,7 +583,7 @@ describe("KindleFetch", function()
 
             it("can't be chosen before there are any", function()
                 local plugin = openUI()
-                plugin:setupUI()
+                plugin:setupUI("libgen")
                 assert.is_false(button(plugin.search_box, "Recent").enabled)
 
                 -- until something has been searched for from the search box that's open

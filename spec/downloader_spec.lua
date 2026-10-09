@@ -2,11 +2,11 @@ local helper = require("helper")
 local fixtures = require("fixtures")
 
 -- mirrors are scraped from the live Wikipedia page, so these need internet access
-describe("LlgiAPI", function()
+describe("Downloader", function()
     local MB = 1024 * 1024
     local data_dir, filepath, book, web, mirrors, prompts, spawned, running, killed, results, remote_size
     local cover_downloads
-    local CurlUtil, UrlApi, LlgiAPI
+    local CurlUtil, UrlApi, Downloader
 
     local function adsUrl(mirror)
         return mirror .. "/ads.php?md5=" .. book.id
@@ -37,14 +37,14 @@ describe("LlgiAPI", function()
     -- ask to download the book, then confirm the download prompt
     local function download()
         local shown = #prompts
-        LlgiAPI:downloadBook(book, filepath, onResult, onOpenExisting)
+        Downloader:downloadBook(book, filepath, onResult, onOpenExisting)
         if #prompts > shown then
             prompts[#prompts].on_download(prompts[#prompts].filepath)
         end
     end
 
     local function progress()
-        return LlgiAPI.active_downloads[book.id].progress_widget
+        return Downloader.active_downloads[book.id].progress_widget
     end
 
     -- simulate curl noting down the headers it was sent, then writing the book and exiting
@@ -68,6 +68,7 @@ describe("LlgiAPI", function()
         helper.run("mkdir -p " .. helper.quote(data_dir .. "/settings"))
         filepath = data_dir .. "/Dune.epub"
         book = {
+            source = "libgen",
             id = fixtures.DUNE.md5,
             title = "Dune",
             display_title = "Dune",
@@ -126,8 +127,8 @@ describe("LlgiAPI", function()
         })
 
         UrlApi = require("api.urlapi")
-        LlgiAPI = require("api.lgliapi")
-        LlgiAPI.active_downloads = {}
+        Downloader = require("api.downloader")
+        Downloader.active_downloads = {}
 
         mirrors = fixtures.scrapeMirrors(web, function(api)
             return api:getLibgenUrls()
@@ -139,7 +140,7 @@ describe("LlgiAPI", function()
 
     describe("downloadBook", function()
         it("asks where to save the book, getting its cover in the background", function()
-            LlgiAPI:downloadBook(book, filepath, onResult)
+            Downloader:downloadBook(book, filepath, onResult)
 
             assert.are.equal(1, #prompts)
             assert.are.equal(filepath, prompts[1].filepath)
@@ -153,20 +154,20 @@ describe("LlgiAPI", function()
                 error("should not download")
             end
 
-            LlgiAPI:downloadBook(book, filepath, onResult)
+            Downloader:downloadBook(book, filepath, onResult)
             assert.are.equal(1, #prompts)
         end)
 
         it("still offers the download when the book has no cover", function()
             book.image_url = nil
-            LlgiAPI:downloadBook(book, filepath, onResult)
+            Downloader:downloadBook(book, filepath, onResult)
 
             assert.is_false(require("cache.covercache"):cacheExists(book.id))
             assert.are.equal(1, #prompts)
         end)
 
         it("still offers the download when the cover cannot be fetched", function()
-            LlgiAPI:downloadBook(book, filepath, onResult)
+            Downloader:downloadBook(book, filepath, onResult)
             helper.runScheduled()
 
             assert.are.equal(1, #prompts)
@@ -174,14 +175,14 @@ describe("LlgiAPI", function()
         end)
 
         it("downloads to the folder chosen in the prompt", function()
-            LlgiAPI:downloadBook(book, filepath, onResult)
+            Downloader:downloadBook(book, filepath, onResult)
             prompts[1].on_download(data_dir .. "/Books/Dune.epub")
 
             assert.are.equal(data_dir .. "/Books/Dune.epub.part", spawned[1].path)
         end)
 
         it("says where the book was saved", function()
-            LlgiAPI:downloadBook(book, filepath, onResult)
+            Downloader:downloadBook(book, filepath, onResult)
             filepath = data_dir .. "/Books/Dune.epub"
             prompts[1].on_download(filepath)
 
@@ -243,7 +244,7 @@ describe("LlgiAPI", function()
             end)
 
             it("only offers to open it when it can be", function()
-                LlgiAPI:downloadBook(book, filepath, onResult)
+                Downloader:downloadBook(book, filepath, onResult)
                 prompts[#prompts].on_download(filepath)
 
                 assert.are.equal("Overwrite", helper.lastShown().ok_text)
@@ -251,7 +252,7 @@ describe("LlgiAPI", function()
             end)
 
             it("doesn't ask when another folder is chosen in the prompt", function()
-                LlgiAPI:downloadBook(book, filepath, onResult, onOpenExisting)
+                Downloader:downloadBook(book, filepath, onResult, onOpenExisting)
                 prompts[#prompts].on_download(data_dir .. "/Books/Dune.epub")
 
                 assert.is_nil(helper.lastShown().ok_text)
@@ -342,7 +343,7 @@ describe("LlgiAPI", function()
                 download()
                 assert.are.same({ { ok = false, err = "cancelled" } }, results)
                 assert.are.equal(0, #spawned)
-                assert.are.same({}, LlgiAPI:getActiveDownloads())
+                assert.are.same({}, Downloader:getActiveDownloads())
                 assert.is_nil(HttpUtil.trap_widget)
                 -- none are dropped, or looked up again
                 HttpUtil.getBody = getBody
@@ -360,7 +361,7 @@ describe("LlgiAPI", function()
                 download()
                 assert.are.same({ { ok = false, err = "something went wrong, see crash.log" } }, results)
                 assert.is_true(helper.wasClosed(widget.container))
-                assert.are.same({}, LlgiAPI:getActiveDownloads())
+                assert.are.same({}, Downloader:getActiveDownloads())
                 assert.is_nil(HttpUtil.trap_widget)
                 assert.is_truthy(helper.logged("err", "^looking up the download link went wrong:.*unexpected"))
             end)
@@ -550,7 +551,7 @@ describe("LlgiAPI", function()
             assert.are.same({ { ok = true } }, results)
             assert.are.equal(1, widget.bar_widget.percentage)
             assert.is_true(helper.wasClosed(widget.container))
-            assert.are.same({}, LlgiAPI:getActiveDownloads())
+            assert.are.same({}, Downloader:getActiveDownloads())
             assert.are.equal(MB, #helper.readFile(filepath))
             -- for reading crash.log from a device
             assert.is_truthy(helper.logged("info", '^downloading "Dune" %(epub, .-, id %x+%) to '))
@@ -621,7 +622,7 @@ describe("LlgiAPI", function()
             assert.are.equal(2, web.scrapes)
             assert.are.equal(1, #spawned)
             assert.are.same({}, results)
-            assert.are.equal(1, #LlgiAPI:getActiveDownloads())
+            assert.are.equal(1, #Downloader:getActiveDownloads())
 
             curlWrote(MB, 0)
             helper.runScheduled()
@@ -635,7 +636,7 @@ describe("LlgiAPI", function()
 
             download()
             assert.are.same({ { ok = false, err = "no Library Genesis download link found" } }, results)
-            assert.are.same({}, LlgiAPI:getActiveDownloads())
+            assert.are.same({}, Downloader:getActiveDownloads())
             -- the mirrors answered, so they aren't looked up again
             assert.are.equal(1, web.scrapes)
         end)
@@ -712,7 +713,7 @@ describe("LlgiAPI", function()
 
             download()
             assert.are.same({ { ok = false, err = "unable to launch curl" } }, results)
-            assert.are.same({}, LlgiAPI:getActiveDownloads())
+            assert.are.same({}, Downloader:getActiveDownloads())
         end)
 
         it("fails and removes the partial file when curl fails", function()
@@ -859,7 +860,7 @@ describe("LlgiAPI", function()
         it("lists downloads in progress", function()
             download()
 
-            local downloads = LlgiAPI:getActiveDownloads()
+            local downloads = Downloader:getActiveDownloads()
             assert.are.equal(1, #downloads)
             assert.are.equal(book.id, downloads[1].id)
             assert.are.equal("Dune", downloads[1].title)
@@ -871,7 +872,7 @@ describe("LlgiAPI", function()
             helper.state.time = 3000
             download()
             for i, title in ipairs({ "Zebra", "Apple" }) do
-                LlgiAPI.active_downloads["other" .. i] = {
+                Downloader.active_downloads["other" .. i] = {
                     book = { id = "other" .. i, title = title },
                     progress_widget = {},
                     started = 1000 + (title == "Zebra" and 0 or 1000),
@@ -879,7 +880,7 @@ describe("LlgiAPI", function()
             end
 
             local titles = {}
-            for _, active_download in ipairs(LlgiAPI:getActiveDownloads()) do
+            for _, active_download in ipairs(Downloader:getActiveDownloads()) do
                 table.insert(titles, active_download.title)
             end
             assert.are.same({ "Zebra", "Apple", "Dune" }, titles)
@@ -891,18 +892,18 @@ describe("LlgiAPI", function()
             local widget = progress()
             widget.hide_button.callback()
 
-            assert.is_true(LlgiAPI:showDownload(book.id))
+            assert.is_true(Downloader:showDownload(book.id))
             assert.is_true(widget.is_visible)
             assert.are.equal(widget.container, helper.lastShown())
 
             -- and nothing happens when it's showing already
             local shown = #helper.state.shown
-            assert.is_true(LlgiAPI:showDownload(book.id))
+            assert.is_true(Downloader:showDownload(book.id))
             assert.are.equal(shown, #helper.state.shown)
         end)
 
         it("can't have their progress shown once they're over", function()
-            assert.is_false(LlgiAPI:showDownload(book.id))
+            assert.is_false(Downloader:showDownload(book.id))
         end)
 
         it("can all be cancelled at once", function()
@@ -910,13 +911,13 @@ describe("LlgiAPI", function()
             local widget = progress()
             curlWrote(MB / 2)
 
-            LlgiAPI:cancelAllDownloads()
+            Downloader:cancelAllDownloads()
             assert.is_true(widget.cancelled)
             assert.are.same({ spawned[1].pid }, killed)
             assert.is_true(helper.wasClosed(widget.container))
             assert.is_false(helper.exists(filepath .. ".part"))
             assert.is_false(helper.exists(spawned[1].headers_file))
-            assert.are.same({}, LlgiAPI:getActiveDownloads())
+            assert.are.same({}, Downloader:getActiveDownloads())
 
             helper.runScheduled()
             assert.are.same({ { ok = false, err = "cancelled" } }, results)

@@ -75,6 +75,7 @@ describe("LlgiSearch", function()
             assert.is_truthy(helper.logged("info", "^page 1 from [%w%.]+: kept 2 of its 2 results$"))
             assert.is_truthy(helper.logged("info", '^found 2 books for "dune"$'))
             assert.are.same({
+                source = "libgen",
                 id = "24778aacb1d0844950bf463c145b3d21",
                 image_url = mirrors[1] .. "/fictioncovers/2509000/24778aacb1d0844950bf463c145b3d21_small.jpg",
                 title = "Dune",

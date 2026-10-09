@@ -117,8 +117,9 @@ kindlefetch.koplugin/
 │   ├── settings.lua           # Persistent storage and management of user preferences
 │   └── settingspage.lua       # UI for configuring user preferences, and clearing the caches
 ├── api/
-│   ├── lgliapi.lua            # Handles Library Genesis downloads with progress tracking, proxy fallback, and error recovery
-│   ├── lglisearch.lua         # Searches Library Genesis; parses HTML, filters by preferences and caches results
+│   ├── downloader.lua         # Downloads books from the site they were found on, with progress tracking, proxy fallback, and error recovery
+│   ├── sources.lua            # The sites books can be searched for and downloaded from
+│   ├── lglisearch.lua         # Searches Library Genesis and finds its download links; parses HTML, filters by preferences and caches results
 │   └── urlapi.lua             # Scrapes Wikipedia to discover current Library Genesis mirror URLs
 ├── ui/
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination
