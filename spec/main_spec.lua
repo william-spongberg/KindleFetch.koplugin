@@ -375,6 +375,17 @@ describe("KindleFetch", function()
             -- KOReader calls the on<Event> handler for the action's event
             assert.is_true(plugin["on" .. event](plugin))
             assert.are.equal(plugin.search_box, helper.lastShown())
+            assert.are.equal("Search Library Genesis", plugin.search_box.title)
+        end)
+
+        it("registers a dispatcher action for searching Internet Archive", function()
+            local plugin = openUI()
+            local action = helper.state.actions.kindlefetch_archive_action
+            assert.are.equal("Kindle Fetch: search Internet Archive", action.title)
+
+            assert.is_true(plugin["on" .. action.event](plugin))
+            assert.are.equal(plugin.search_box, helper.lastShown())
+            assert.are.equal("Search Internet Archive", plugin.search_box.title)
         end)
 
         it("checks for updates once the UI is ready", function()

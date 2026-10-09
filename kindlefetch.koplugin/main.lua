@@ -107,6 +107,12 @@ function KindleFetch:onDispatcherRegisterActions()
         title = _("Kindle Fetch"),
         general = true,
     })
+    Dispatcher:registerAction("kindlefetch_archive_action", {
+        category = "none",
+        event = "KindleFetchArchive",
+        title = string.format(_("Kindle Fetch: search %s"), Sources.archive.NAME),
+        general = true,
+    })
 end
 
 -- cancel downloads when KOReader exits or restarts, so curl isn't left running and partial books are removed
@@ -117,9 +123,13 @@ function KindleFetch:onExit()
 end
 KindleFetch.onRestart = KindleFetch.onExit
 
--- sent by the dispatcher action, e.g. when a gesture is assigned to it
+-- sent by the dispatcher actions, e.g. when a gesture is assigned to one
 function KindleFetch:onKindleFetch()
     self:setupUI("libgen")
+    return true
+end
+function KindleFetch:onKindleFetchArchive()
+    self:setupUI("archive")
     return true
 end
 
