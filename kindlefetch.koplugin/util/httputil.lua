@@ -20,6 +20,9 @@ HttpUtil.trap_widget = nil
 -- large and Library Genesis sends them slowly, so the second is generous
 local ANSWER_TIMEOUT = 10
 local PAGE_TIMEOUT = 60
+-- how long a file can take to download with KOReader's own HTTP, in seconds: much longer than a page, as a file can
+-- be several megabytes, and an e-reader's Wi-Fi slow
+local FILE_TIMEOUT = 300
 
 -- whether requests made from inside Trapper:wrap can be called off (see trap_widget), which those made with curl can
 function HttpUtil.canCancel()
@@ -197,6 +200,54 @@ function HttpUtil.getBody(url, opts)
     end
 
     return nil, err, status
+end
+
+-- download a file with KOReader's own HTTP, leaving nothing behind if it doesn't download
+local function downloadWithKOReader(url, path)
+    local file, open_err = io.open(path, "wb")
+    if not file then
+        return nil, "could not write the file: " .. tostring(open_err)
+    end
+
+    socketutil:set_timeout(ANSWER_TIMEOUT, FILE_TIMEOUT)
+    local ok, status = http.request {
+        url = url,
+        headers = {
+            ["User-Agent"] = "Mozilla/5.0",
+        },
+        sink = socketutil.file_sink(file),
+        redirect = true,
+    }
+    socketutil:reset_timeout()
+    -- which KOReader's sink has done once the whole file has arrived, but not when none of it did
+    if io.type(file) == "file" then
+        file:close()
+    end
+
+    if ok and status == 200 then
+        return true
+    end
+    FileUtil.removeFile(path)
+    -- status is the HTTP status code, or what went wrong if there wasn't a response
+    if not ok then
+        return nil, tostring(status or "no response")
+    end
+    return nil, string.format("%s (%s)", CurlUtil.getErrorMeaning(22), tostring(status))
+end
+
+-- download a file to path, with curl where it can fetch (see CurlUtil.canFetch), otherwise with KOReader's own HTTP,
+-- as a Kindle's own curl is too old to connect to many sites, such as GitHub. either way, KOReader is held up until
+-- it has downloaded. returns true, or nil and what went wrong
+function HttpUtil.downloadFile(url, path)
+    LogUtil.debug("downloading", url, "to", path)
+    if not CurlUtil.canFetch() then
+        return downloadWithKOReader(url, path)
+    end
+    local ok, err = CurlUtil.download(url, path, false, false)
+    if not ok then
+        return nil, err
+    end
+    return true
 end
 
 return HttpUtil

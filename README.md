@@ -21,7 +21,7 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch for Library Genesis, or Kindle Fetch: search Internet Archive or Z-Library, in KOReader's gesture manager)
-- **Automatic Curl Updates**: Offers to install curl 8.21.0, the latest static build, on Kindles with an older one, and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
+- **Automatic Curl Updates**: Offers to install curl 8.21.0, the latest static build, on Kindles with an older one (downloading it with KOReader's own HTTP, as a Kindle's own curl can be too old to connect to GitHub), and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
 - **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes, then offers to restart KOReader to use the new version (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually
 - **Automatic Retry Logic**: Fallback to other available urls if connection fails
 - **Safe File Handling**: Automatic filename sanitisation and directory management, asking before downloading over a book that's already there
@@ -111,6 +111,38 @@ When a search finds books, but none in the languages and file types chosen, Kind
 
 - **Clear Cache**: Forget the searches (and the recent ones the search box offers), mirrors and book covers that have been saved, e.g. if results look out of date
 
+## Troubleshooting
+
+### Updating curl fails
+
+Kindle Fetch downloads the new curl from GitHub with KOReader's own HTTP, as a Kindle's own curl can be too old to connect to it. If updating it fails all the same, curl can be updated by hand:
+
+1. On a computer, download [`curl-armhf`](https://github.com/moparisthebest/static-curl/releases/download/v8.21.0/curl-armhf), and copy it to the Kindle over USB, next to its `documents` folder
+
+2. On the Kindle, open a terminal: KOReader's own (**Tools → More tools → Terminal emulator**), kterm, or SSH with KOReader's SSH server (**Settings → Network → SSH server**)
+
+3. Check that it runs on the Kindle, which should say `curl 8.21.0`:
+
+   ```sh
+   cp /mnt/us/curl-armhf /tmp/curl && chmod +x /tmp/curl && /tmp/curl --version
+   ```
+
+4. Install it, keeping the old one as `/usr/bin/curl.system.bak`, then restart KOReader:
+
+   ```sh
+   mntroot rw
+   [ -f /usr/bin/curl.system.bak ] || cp /usr/bin/curl /usr/bin/curl.system.bak
+   cp /tmp/curl /usr/bin/curl
+   chmod 755 /usr/bin/curl
+   mntroot ro
+   ```
+
+To put the old curl back, run `mntroot rw`, then `cp /usr/bin/curl.system.bak /usr/bin/curl`, then `mntroot ro`.
+
+### Anything else
+
+KOReader's `crash.log`, in its `koreader` folder, says what Kindle Fetch was doing when something went wrong: attach it to an [issue](https://github.com/william-spongberg/KindleFetch.koplugin/issues).
+
 ## How It Works
 
 ### Architecture
@@ -143,11 +175,11 @@ kindlefetch.koplugin/
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
 │   └── covercache.lua         # Downloads and caches book covers and full-size covers by book (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
-│   ├── curlupdater.lua        # Checks curl version on Kindles and offers to install static curl (8.21.0) if it's older
+│   ├── curlupdater.lua        # Checks curl version on Kindles and offers to install static curl (8.21.0) if it's older, downloading it with KOReader's own HTTP
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes
 └── util/
     ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
-    ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback; posts forms and sends cookies, giving them to curl in a file rather than on its command line
+    ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback; posts forms and sends cookies, giving them to curl in a file rather than on its command line; downloads files with curl, or KOReader's own HTTP where curl can't connect
     ├── fileutil.lua           # File operations (size, creation, deletion, validation) and directory checks
     ├── stringutil.lua         # String utilities (trimming, validation, cleaning titles and file names, HTML entity conversion, checking web addresses)
     ├── logutil.lua            # Logger wrapper

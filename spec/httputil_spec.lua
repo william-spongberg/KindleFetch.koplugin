@@ -374,4 +374,73 @@ describe("HttpUtil", function()
             end)
         end)
     end)
+
+    describe("downloading a file", function()
+        local path
+
+        before_each(function()
+            path = data_dir .. "/curl-armhf"
+        end)
+
+        -- as a Kindle's own curl is too old to connect to many sites, such as GitHub (#57)
+        it("downloads it with KOReader's own HTTP where curl can't fetch, following redirects", function()
+            respond({ "\127ELF\0binary", 1, 200 })
+
+            assert.is_true(HttpUtil.downloadFile("https://github.example/releases/curl-armhf", path))
+            assert.are.equal("\127ELF\0binary", helper.readFile(path))
+            assert.are.equal("https://github.example/releases/curl-armhf", requests[1].url)
+            assert.are.equal("Mozilla/5.0", requests[1].headers["User-Agent"])
+            assert.is_true(requests[1].redirect)
+        end)
+
+        -- as a file can be several megabytes, and an e-reader's Wi-Fi slow
+        it(
+            "waits 10 seconds for an answer and five minutes for the file, then puts KOReader's timeouts back",
+            function()
+                respond({ "binary", 1, 200 })
+                HttpUtil.downloadFile("https://github.example/curl-armhf", path)
+
+                assert.are.same({ 10, 300 }, requests[1].timeouts)
+                assert.is_nil(helper.state.http_timeouts)
+            end
+        )
+
+        it("leaves nothing behind when the download fails", function()
+            respond({ "", nil, "timeout" })
+
+            local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
+            assert.is_nil(ok)
+            assert.are.equal("timeout", err)
+            assert.is_false(helper.exists(path))
+        end)
+
+        -- rather than keeping the page saying what's wrong in place of the file
+        it("leaves nothing behind when the site answers with an error", function()
+            respond({ "<html>Not Found</html>", 1, 404 })
+
+            local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
+            assert.is_nil(ok)
+            assert.are.equal("HTTP error response (404)", err)
+            assert.is_false(helper.exists(path))
+        end)
+
+        it("downloads it with curl where curl can fetch", function()
+            helper.stubCommand(
+                "curl --version",
+                "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1\n"
+            )
+            local CurlUtil = require("util.curlutil")
+            local download
+            CurlUtil.download = function(url, filepath, use_proxy, background)
+                download = { url, filepath, use_proxy, background }
+                return false, "request timed out"
+            end
+
+            local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
+            assert.is_nil(ok)
+            assert.are.equal("request timed out", err)
+            assert.are.same({ "https://github.example/curl-armhf", path, false, false }, download)
+            assert.are.equal(0, #requests)
+        end)
+    end)
 end)

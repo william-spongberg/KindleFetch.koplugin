@@ -1,7 +1,7 @@
 local helper = require("helper")
 
 describe("CurlUpdater", function()
-    local data_dir, CurlUtil, CurlUpdater
+    local data_dir, CurlUtil, HttpUtil, CurlUpdater
 
     local function installedCurl(version)
         helper.stubCommand(
@@ -19,6 +19,7 @@ describe("CurlUpdater", function()
         data_dir = helper.tmpdir("data")
         helper.state.data_dir = data_dir
         CurlUtil = require("util.curlutil")
+        HttpUtil = require("util.httputil")
         CurlUpdater = require("updater.curlupdater")
     end)
 
@@ -125,7 +126,7 @@ describe("CurlUpdater", function()
         end
 
         before_each(function()
-            CurlUtil.download = function(_, filepath)
+            HttpUtil.downloadFile = function(_, filepath)
                 helper.writeFile(filepath, "curl binary")
                 return true
             end
@@ -235,14 +236,15 @@ describe("CurlUpdater", function()
     end)
 
     describe("updating", function()
-        it("downloads the static curl build into the plugin's tmp dir", function()
+        -- with KOReader's own HTTP, as the Kindle's own curl is too old to connect to GitHub (#57)
+        it("downloads the static curl build into the plugin's tmp dir, saying why it couldn't", function()
             local download
-            CurlUtil.download = function(url, filepath)
+            HttpUtil.downloadFile = function(url, filepath)
                 download = {
                     url = url,
                     filepath = filepath,
                 }
-                return false, "could not resolve host"
+                return nil, "could not resolve host"
             end
 
             installedCurl("7.68.0")
@@ -253,7 +255,23 @@ describe("CurlUpdater", function()
                 url = "https://github.com/moparisthebest/static-curl/releases/download/v8.21.0/curl-armhf",
                 filepath = data_dir .. "/cache/kindlefetch/curl-armhf",
             }, download)
-            assert.are.equal("Failed to download curl update", helper.lastError())
+            assert.are.equal("Failed to download curl update: could not resolve host", helper.lastError())
+        end)
+
+        -- which holds KOReader up until it has
+        it("says it's downloading curl until it has", function()
+            local message
+            HttpUtil.downloadFile = function()
+                message = helper.lastShown()
+                return nil, "request timed out"
+            end
+
+            installedCurl("7.68.0")
+            CurlUpdater.checkVersion()
+            helper.state.shown[1].buttons[1][2].callback()
+
+            assert.are.equal("Downloading curl 8.21.0...", message.text)
+            assert.is_true(helper.wasClosed(message))
         end)
     end)
 end)

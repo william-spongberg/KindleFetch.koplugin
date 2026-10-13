@@ -546,6 +546,16 @@ local function createStubs(state)
         table_sink = function(t)
             return stubs.ltn12.sink.table(t)
         end,
+        -- writes what arrives to the file, which, unlike KOReader's, isn't closed, as the stand-ins for luasocket
+        -- here don't say when the last of it has arrived
+        file_sink = function(handle)
+            return function(chunk)
+                if chunk then
+                    handle:write(chunk)
+                end
+                return 1
+            end
+        end,
     }
 
     -- widgets

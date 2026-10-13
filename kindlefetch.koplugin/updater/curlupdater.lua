@@ -1,7 +1,9 @@
 local Device = require("device")
 local UIManager = require("ui/uimanager")
 local InputDialog = require("ui/widget/inputdialog")
+local InfoMessage = require("ui/widget/infomessage")
 local CurlUtil = require("util.curlutil")
+local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
@@ -31,18 +33,24 @@ end
 -- https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
 local function updateCurl()
     LogUtil.info("installing static curl " .. MIN_VERSION)
-    NotifyUtil.info("Updating curl...")
 
-    -- download curl
+    -- download curl, with KOReader's own HTTP, as the Kindle's own curl can be too old to connect to GitHub (#57). that
+    -- holds KOReader up until it has downloaded, so say what it's waiting for
     local curl_filename = "curl-armhf"
     local curl_path = PathUtil.getTmpPath() .. "/" .. curl_filename
     local download_url = string.format(CURL_REPO_URL .. "/releases/download/v%s/%s", MIN_VERSION, curl_filename)
 
     LogUtil.debug("downloading static curl", download_url)
-    local success, err = CurlUtil.download(download_url, curl_path, false, false)
+    local message = InfoMessage:new {
+        text = string.format(_("Downloading curl %s..."), MIN_VERSION),
+    }
+    UIManager:show(message)
+    UIManager:forceRePaint()
+    local success, err = HttpUtil.downloadFile(download_url, curl_path)
+    UIManager:close(message)
     if not success then
         LogUtil.warn("could not download static curl from", download_url, "error:", err)
-        NotifyUtil.error("Failed to download curl update")
+        NotifyUtil.error("Failed to download curl update: " .. tostring(err))
         return false
     end
 
