@@ -151,7 +151,7 @@ end
 -- the full-size cover once it has downloaded (after the cover was first enlarged), otherwise the thumbnail from
 -- the search results
 function DownloadPrompt:coverFile()
-    return CoverCache:getFullSize(self.book) or CoverCache:get(self.book.md5)
+    return CoverCache:getFullSize(self.book) or CoverCache:get(self.book.id)
 end
 
 -- which of its covers the book has, and which are still coming, to tell when that has changed

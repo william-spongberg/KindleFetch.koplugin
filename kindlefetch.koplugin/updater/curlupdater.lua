@@ -121,7 +121,7 @@ end
 local function promptCurlUpdate(current_version, min_version)
     local message = string.format(
         "curl v%s is installed.\nMinimum required: v%s\n\nUntil curl is updated, searches are slower and can't be "
-            .. "called off, and books and their covers may not download from Library Genesis.\n\nUpdate curl now?",
+            .. "called off, and books and their covers may not download.\n\nUpdate curl now?",
         current_version,
         min_version
     )

@@ -205,10 +205,10 @@ function H.isPublicDomain(book)
     return title == "pride and prejudice" and (authors == "austen, jane" or authors == "jane austen")
 end
 
--- search Library Genesis from KindleFetch's search dialog, returning the results menu
--- open the search dialog, type query and tap Search, returning KindleFetch and the dialog
-function H.startSearch(query)
-    H.openMainMenu({ "Kindle Fetch", "Search Library Genesis" })
+-- open the search dialog for the site (Library Genesis unless given), type query and tap Search, returning
+-- KindleFetch and the dialog
+function H.startSearch(query, site)
+    H.openMainMenu({ "Kindle Fetch", "Search " .. (site or "Library Genesis") })
     local plugin = H.plugin()
     local dialog = H.waitFor("the search dialog", 10, function()
         return plugin.search_box and H.isShown(plugin.search_box) and plugin.search_box
@@ -219,9 +219,9 @@ function H.startSearch(query)
     return plugin, dialog
 end
 
--- search for query, returning the menu of books once they're found
-function H.search(query)
-    local plugin = H.startSearch(query)
+-- search the site (Library Genesis unless given) for query, returning the menu of books once they're found
+function H.search(query, site)
+    local plugin = H.startSearch(query, site)
     return H.waitFor("search results", 120, function()
         local failure = H.errorShown() or H.messageSaying("No books found") or H.messageSaying("but none in the")
         if failure then
@@ -297,6 +297,13 @@ function H.tapBook(menu, book)
     H.tapMenuEntry(menu, function(item)
         return item.book == book
     end)
+end
+
+-- remove a downloaded book, and what KOReader noted down about it while it was read
+function H.removeBook(path)
+    os.remove(path)
+    local sidecar = path:gsub("%.[^./]+$", ".sdr")
+    os.execute("rm -rf '" .. sidecar:gsub("'", "'\\''") .. "'")
 end
 
 -- close everything but the file manager

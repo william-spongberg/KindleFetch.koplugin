@@ -14,8 +14,8 @@ local SettingsPage = require("settings.settingspage")
 local util = require("util")
 local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
-local LlgiSearch = require("api.lglisearch")
-local LlgiAPI = require("api.lgliapi")
+local Sources = require("api.sources")
+local Downloader = require("api.downloader")
 local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
@@ -107,19 +107,29 @@ function KindleFetch:onDispatcherRegisterActions()
         title = _("Kindle Fetch"),
         general = true,
     })
+    Dispatcher:registerAction("kindlefetch_archive_action", {
+        category = "none",
+        event = "KindleFetchArchive",
+        title = string.format(_("Kindle Fetch: search %s"), Sources.archive.NAME),
+        general = true,
+    })
 end
 
 -- cancel downloads when KOReader exits or restarts, so curl isn't left running and partial books are removed
 -- (without returning true, so the event still reaches the rest of KOReader)
 function KindleFetch:onExit()
     LogUtil.debug("cancelling downloads before exiting")
-    LlgiAPI:cancelAllDownloads()
+    Downloader:cancelAllDownloads()
 end
 KindleFetch.onRestart = KindleFetch.onExit
 
--- sent by the dispatcher action, e.g. when a gesture is assigned to it
+-- sent by the dispatcher actions, e.g. when a gesture is assigned to one
 function KindleFetch:onKindleFetch()
-    self:setupUI()
+    self:setupUI("libgen")
+    return true
+end
+function KindleFetch:onKindleFetchArchive()
+    self:setupUI("archive")
     return true
 end
 
@@ -175,19 +185,25 @@ function KindleFetch:addToMainMenu(menu_items)
         sorting_hint = "search",
         sub_item_table = {
             {
-                text = _("Search Library Genesis"),
+                text = string.format(_("Search %s"), Sources.libgen.NAME),
                 callback = function()
-                    self:setupUI()
+                    self:setupUI("libgen")
+                end,
+            },
+            {
+                text = string.format(_("Search %s"), Sources.archive.NAME),
+                callback = function()
+                    self:setupUI("archive")
                 end,
             },
             {
                 -- where a download that was hidden can be shown again, without finding its book again
                 text_func = function()
-                    local count = #LlgiAPI:getActiveDownloads()
+                    local count = #Downloader:getActiveDownloads()
                     return count > 0 and string.format(_("Downloads (%d)"), count) or _("Downloads")
                 end,
                 enabled_func = function()
-                    return #LlgiAPI:getActiveDownloads() > 0
+                    return #Downloader:getActiveDownloads() > 0
                 end,
                 callback = function()
                     self:showDownloads()
@@ -211,13 +227,13 @@ end
 
 -- show the progress of the download in progress, or list them to choose from when there are several
 function KindleFetch:showDownloads()
-    local downloads = LlgiAPI:getActiveDownloads()
+    local downloads = Downloader:getActiveDownloads()
     if #downloads == 0 then
         NotifyUtil.info(_("No downloads in progress"))
         return
     end
     if #downloads == 1 then
-        LlgiAPI:showDownload(downloads[1].id)
+        Downloader:showDownload(downloads[1].id)
         return
     end
 
@@ -233,7 +249,7 @@ function KindleFetch:showDownloads()
                 text = download.title .. " · " .. progress,
                 callback = function()
                     UIManager:close(dialog)
-                    LlgiAPI:showDownload(download.id)
+                    Downloader:showDownload(download.id)
                 end,
             },
         })
@@ -270,12 +286,14 @@ function KindleFetch:showRecentSearches()
     UIManager:show(dialog)
 end
 
-function KindleFetch:setupUI()
+-- open the search box, for searching the site source names (see Sources)
+function KindleFetch:setupUI(source)
     -- grab self reference for callbacks
     local this = self
+    self.source = source
 
     self.search_box = InputDialog:new {
-        title = "Search Library Genesis",
+        title = string.format(_("Search %s"), Sources[source].NAME),
         input_type = "text",
         buttons = {
             {
@@ -319,10 +337,12 @@ function KindleFetch:performSearch()
         return
     end
 
-    -- nothing can be found with every language, file type or book type turned off
+    -- nothing can be found with every language, file type or book type (where the site has them) turned off
     local turned_off = #KindleFetchSettings:getPreferredLanguages() == 0 and _("language")
         or #KindleFetchSettings:getPreferredFileTypes() == 0 and _("file type")
-        or #KindleFetchSettings:getPreferredBookTypes() == 0 and _("book type")
+        or Sources[self.source].HAS_BOOK_TYPES
+            and #KindleFetchSettings:getPreferredBookTypes() == 0
+            and _("book type")
     if turned_off then
         LogUtil.warn("every", turned_off, "is turned off, so there's nothing to search for")
         NotifyUtil.error(string.format(_("Turn on at least one %s in Kindle Fetch's settings first."), turned_off))
@@ -339,7 +359,7 @@ function KindleFetch:performSearch()
     -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once
     -- connected,
     -- unless the results are saved from an earlier search
-    if not NetworkMgr:isConnected() and not LlgiSearch:isCached(query, 1) then
+    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, 1) then
         NetworkMgr:runWhenConnected(function()
             self:performSearch()
         end)
@@ -350,12 +370,12 @@ function KindleFetch:performSearch()
     self:searchFrom(query, 1)
 end
 
--- search from a page of Library Genesis' results, and show the books found
+-- search from a page of the site's results, and show the books found
 function KindleFetch:searchFrom(query, page)
     self.current_search_query = query
     -- saying what's being searched for, as the search box is behind it, on a line of its own, so the message covers
     -- the search box's own buttons however short the search
-    local waiting_text = string.format(_("Searching Library Genesis for\n“%s”..."), query)
+    local waiting_text = string.format(_("Searching %s for\n“%s”..."), Sources[self.source].NAME, query)
     self:searchInBackground(query, page, waiting_text, function(books, err, next_page, results_read)
         self.books = books
         self.next_page = next_page
@@ -380,8 +400,8 @@ function KindleFetch:searchFrom(query, page)
     end)
 end
 
--- say that no books were found, and why when it's known: Library Genesis may have listed plenty, all in other
--- languages or file types than those chosen in the settings
+-- say that no books were found, and why when it's known: the site may have listed plenty, all in other languages or
+-- file types than those chosen in the settings
 function KindleFetch:explainNoBooks(query, results_read, next_page)
     if results_read == 0 then
         NotifyUtil.message(_("No books found"))
@@ -390,10 +410,8 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
 
     UIManager:show(ConfirmBox:new {
         text = string.format(
-            _(
-                "Library Genesis listed %d results, but none in the languages and file types chosen in Kindle "
-                    .. "Fetch's settings."
-            ),
+            _("%s listed %d results, but none in the languages and file types chosen in Kindle Fetch's settings."),
+            Sources[self.source].NAME,
             results_read
         ),
         ok_text = _("Settings"),
@@ -416,7 +434,7 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
 end
 
 function KindleFetch:search(query, page)
-    local books, err, next_page, results_read = LlgiSearch:search(query, page)
+    local books, err, next_page, results_read = Sources[self.source]:search(query, page)
 
     if not books or type(books) ~= "table" then
         return nil, err
@@ -458,14 +476,14 @@ local function waitingMessage(text)
     return message
 end
 
--- search without holding up the rest of KOReader while Library Genesis answers, where that's possible (see
+-- search without holding up the rest of KOReader while the site answers, where that's possible (see
 -- HttpUtil), showing waiting_text until it has. calls on_done with what search returned, unless the search was
 -- called off before finding anything, with the message's Cancel button
 function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
     Trapper:wrap(function()
         -- results saved from an earlier search are there straight away
         local message
-        if not LlgiSearch:isCached(query, page) then
+        if not Sources[self.source]:isCached(query, page) then
             message = waitingMessage(waiting_text)
             UIManager:show(message)
             -- so that a second tap on what started the search doesn't land on the message
@@ -538,10 +556,10 @@ end
 -- books showing, as working out that name means reading which file systems are mounted, until a download finishes
 function KindleFetch:isDownloaded(book)
     self.downloaded = self.downloaded or {}
-    if self.downloaded[book.md5] == nil then
-        self.downloaded[book.md5] = FileUtil.isValidFile(buildDownloadPath(book)) or false
+    if self.downloaded[book.id] == nil then
+        self.downloaded[book.id] = FileUtil.isValidFile(buildDownloadPath(book)) or false
     end
-    return self.downloaded[book.md5]
+    return self.downloaded[book.id]
 end
 
 function KindleFetch:showBooks(books)
@@ -592,14 +610,14 @@ function KindleFetch:loadMoreBooks()
     end
 
     -- turn on wifi first if need be, unless the next page is saved from an earlier search
-    if not NetworkMgr:isConnected() and not LlgiSearch:isCached(self.current_search_query, self.next_page) then
+    local query = self.current_search_query
+    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, self.next_page) then
         NetworkMgr:runWhenConnected(function()
             self:loadMoreBooks()
         end)
         return
     end
 
-    local query = self.current_search_query
     local waiting_text = _("Loading more books...")
     self:searchInBackground(query, self.next_page, waiting_text, function(books, err, next_page, results_read)
         if err then
@@ -671,7 +689,7 @@ end
 
 function KindleFetch:downloadBook(book)
     local filepath = buildDownloadPath(book)
-    LlgiAPI:downloadBook(book, filepath, function(ok, err, saved_filepath)
+    Downloader:downloadBook(book, filepath, function(ok, err, saved_filepath)
         if ok then
             LogUtil.debug("downloaded book to", saved_filepath)
             -- so it's marked as downloaded in the results behind

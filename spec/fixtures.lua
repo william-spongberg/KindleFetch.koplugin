@@ -3,8 +3,8 @@
 local fixtures = {}
 
 -- Mirrors are scraped from the live Wikipedia pages, while every other page is served from web.pages
--- (url -> html, or a function returning html) so specs don't contact the mirrors themselves, unless
--- web.live is set.
+-- (url -> html, or a function returning html, and the HTTP status or what went wrong when it says) so specs don't
+-- contact the sites themselves, unless web.live is set.
 function fixtures.fakeWeb(helper)
     local web = {
         pages = {},
@@ -27,27 +27,27 @@ function fixtures.fakeWeb(helper)
         if web.live then
             return fetchLive(url)
         end
-        local page = web.pages[url]
+        local page, err, status = web.pages[url], nil, nil
         if type(page) == "function" then
-            page = page()
+            page, err, status = page()
         end
-        if page then
-            return page
+        if page or err then
+            return page, err, status
         end
         return nil, "failed to connect to server"
     end
     return web
 end
 
--- add a downloaded cover for md5 to the cover cache
-function fixtures.cacheCover(helper, md5)
+-- add a downloaded cover for the book with the id to the cover cache
+function fixtures.cacheCover(helper, id)
     local CurlUtil = require("util.curlutil")
     local download = CurlUtil.download
     CurlUtil.download = function(_, path)
         helper.writeFile(path, "jpeg")
         return true
     end
-    require("cache.covercache"):download(md5, "https://covers.example/" .. md5 .. ".jpg")
+    require("cache.covercache"):download(id, "https://covers.example/" .. id .. ".jpg")
     CurlUtil.download = download
 end
 
@@ -180,5 +180,34 @@ function fixtures.libgenAds(md5)
         .. md5
         .. [[&key=ABC123"><h2>GET</h2></a></td></tr></table></body></html>]]
 end
+
+-- Internet Archive's answer to a search (advancedsearch.php), with the books as its docs, and how many results
+-- there are altogether
+function fixtures.archiveResults(docs, total)
+    return require("dkjson").encode({
+        responseHeader = { status = 0 },
+        response = {
+            numFound = total or #docs,
+            start = 0,
+            docs = docs,
+        },
+    })
+end
+
+-- the list of the files in a book's folder on Internet Archive (metadata/<identifier>/files)
+function fixtures.archiveFiles(files)
+    return require("dkjson").encode({
+        result = files,
+    })
+end
+
+fixtures.ARCHIVE_EMMA = {
+    identifier = "emma00aust",
+    title = "Emma : a novel",
+    creator = { "Austen, Jane, 1775-1817", "Thomson, Hugh" },
+    year = 1816,
+    language = "eng",
+    format = { "Abbyy GZ", "DjVuTXT", "Djvu XML", "EPUB", "Item Tile", "Metadata", "Text PDF" },
+}
 
 return fixtures

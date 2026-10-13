@@ -11,7 +11,7 @@ describe("DownloadPrompt", function()
     end
 
     local function cacheCover()
-        fixtures.cacheCover(helper, book.md5)
+        fixtures.cacheCover(helper, book.id)
     end
 
     -- the group with the book's title, authors and details, beside the cover if there is one
@@ -41,7 +41,7 @@ describe("DownloadPrompt", function()
         data_dir = helper.tmpdir("data")
         helper.state.data_dir = data_dir
         book = {
-            md5 = fixtures.DUNE.md5,
+            id = fixtures.DUNE.md5,
             display_title = "Dune",
             authors = "Frank Herbert",
             year = "1990",
@@ -323,7 +323,7 @@ describe("DownloadPrompt", function()
 
                 prompt.cover_container:onTapCover()
                 assert.are.same({ "https://libgen.example/fictioncovers/1000/dune.jpg" }, runs[1].urls)
-                assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
+                assert.are.equal(CoverCache:get(book.id), prompt.fullscreen_file)
                 -- saying so until it arrives, as the thumbnail shows until then
                 local notice = loadingNotices()[1]
                 assert.is_false(notice.timeout)
@@ -335,7 +335,7 @@ describe("DownloadPrompt", function()
                 prompt.cover_container:onTapCover()
                 local thumbnail = prompt.fullscreen_container
 
-                fixtures.cacheCover(helper, book.md5 .. "_full")
+                fixtures.cacheCover(helper, book.id .. "_full")
                 prompt.outer_container:onKindleFetchCoversDownloaded()
                 assert.is_true(helper.wasClosed(thumbnail))
                 assert.is_true(prompt.fullscreen_cover_shown)
@@ -359,7 +359,7 @@ describe("DownloadPrompt", function()
 
                 prompt.outer_container:onKindleFetchCoversDownloaded()
                 assert.is_false(helper.wasClosed(thumbnail))
-                assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
+                assert.are.equal(CoverCache:get(book.id), prompt.fullscreen_file)
                 assert.is_false(helper.wasClosed(loadingNotices()[1]))
             end)
 
@@ -371,7 +371,7 @@ describe("DownloadPrompt", function()
                 helper.tick()
                 prompt.outer_container:onKindleFetchCoversDownloaded()
                 assert.is_true(prompt.fullscreen_cover_shown)
-                assert.are.equal(CoverCache:get(book.md5), prompt.fullscreen_file)
+                assert.are.equal(CoverCache:get(book.id), prompt.fullscreen_file)
                 assert.is_true(helper.wasClosed(loadingNotices()[1]))
             end)
 

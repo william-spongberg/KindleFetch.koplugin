@@ -10,11 +10,13 @@ return KindleFetchCache:new {
     -- each search is around 25KB, and the whole cache is read and written at once
     max_entries = 100,
 
+    -- the site searched (see Sources), as each finds different books
     makeKey = function(...)
         LogUtil.debug("data for makeKey:", ...)
-        local query, page, languages, file_types, book_types = ...
+        local source, query, page, languages, file_types, book_types = ...
 
         return table.concat({
+            source,
             query,
             tostring(page),
             table.concat(languages, ","),

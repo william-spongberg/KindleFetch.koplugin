@@ -6,9 +6,15 @@ local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
 local UrlApi = require("api.urlapi")
 
-local LlgiSearch = {}
+-- searches Library Genesis, and finds its books' download links (see Sources)
+local LlgiSearch = {
+    NAME = "Library Genesis",
+    -- searches are narrowed down to the book types chosen in the settings, which are Library Genesis' topics
+    HAS_BOOK_TYPES = true,
+}
 
 -- constants
+local SOURCE = "libgen"
 local RESULTS_PER_PAGE = 100
 -- Library Genesis can't filter by language or file type, so a page of results may have few books to show.
 -- Searches read its pages until they have this many books...
@@ -25,6 +31,7 @@ local TOPICS = {
     standards = "s",
 }
 local BLOCKED_ERROR = "Library Genesis is blocking automated searches right now, try again later"
+local BUSY_ERROR = "Library Genesis is too busy to send books right now, try again in a few minutes"
 
 local function stripTags(html)
     return StringUtil.trim(StringUtil.collapseWhitespace(html:gsub("<[^>]+>", " ")))
@@ -67,9 +74,12 @@ local function parseBook(row, base_url)
         return nil
     end
 
-    local book = {}
-    book.md5 = cells[10]:match("md5=(%x+)")
-    book.md5 = book.md5 and book.md5:lower()
+    -- the file's md5, which is how Library Genesis finds it again for downloading
+    local book = {
+        source = SOURCE,
+    }
+    book.id = cells[10]:match("md5=(%x+)")
+    book.id = book.id and book.id:lower()
 
     local image_path = cells[1]:match('src="([^"]+)"')
     if image_path then
@@ -102,8 +112,8 @@ local function parseBook(row, base_url)
     local file_size = stripTags(cells[8])
     book.file_size = file_size ~= "" and file_size or "0"
 
-    -- at minimum need title + md5 + file type for a valid book
-    if not (book.title and book.title ~= "" and book.md5 and book.file_type) then
+    -- at minimum need title + id + file type for a valid book
+    if not (book.title and book.title ~= "" and book.id and book.file_type) then
         LogUtil.warn("skipped book with missing features")
         return nil
     end
@@ -277,6 +287,7 @@ end
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
 function LlgiSearch:isCached(query, page)
     local cached = SearchCache:get(
+        SOURCE,
         query,
         page,
         KindleFetchSettings:getPreferredLanguages(),
@@ -305,7 +316,7 @@ function LlgiSearch:search(query, page)
             table.concat(book_types, "/")
         )
     )
-    local cached = SearchCache:get(query, page, languages, file_types, book_types)
+    local cached = SearchCache:get(SOURCE, query, page, languages, file_types, book_types)
     if cached and cached.books then
         LogUtil.info("showing", #cached.books, "books saved from an earlier search")
         return cached.books, nil, cached.next_page
@@ -342,8 +353,8 @@ function LlgiSearch:search(query, page)
         )
         results_read = results_read + results
         for _, book in ipairs(page_books) do
-            if not seen[book.md5] then
-                seen[book.md5] = true
+            if not seen[book.id] then
+                seen[book.id] = true
                 table.insert(books, book)
             end
         end
@@ -371,9 +382,96 @@ function LlgiSearch:search(query, page)
         SearchCache:set({
             books = books,
             next_page = next_page,
-        }, query, page, languages, file_types, book_types)
+        }, SOURCE, query, page, languages, file_types, book_types)
     end
     return books, nil, next_page, results_read
+end
+
+-- whether a mirror's download page says its database is refusing connections, as it does while it's very busy.
+-- the mirrors share the database, so they all say so at once
+local function isBusy(html)
+    return html:find("Could not connect to the database", 1, true) ~= nil
+        or html:find("max_user_connections", 1, true) ~= nil
+end
+
+-- the book's download link, from the first mirror whose download page has one, looked up on Wikipedia again
+-- when retrying. otherwise nil, and why not (HttpUtil.CANCELLED when called off), and whether a mirror failed,
+-- rather than not having the book
+function LlgiSearch.findDownloadLink(book, retrying)
+    -- get urls from cache, or scrape them from wikipedia again when retrying
+    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(retrying)
+    if not base_urls then
+        if urls_err == HttpUtil.CANCELLED then
+            return nil, urls_err
+        end
+        return nil,
+            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or "no Library Genesis urls available"
+    end
+
+    -- try each libgen url
+    local download_url, found_on
+    local last_err
+    -- mirrors that didn't answer at all, which may be down, or the device may be offline
+    local unanswered = {}
+    local answered = false
+    local mirror_failed = false
+    local busy = false
+    for _, url in ipairs(base_urls) do
+        -- load ads page (to get key for download page)
+        -- (the book's id is its md5)
+        local ads_page = string.format("%s/ads.php?md5=%s", url, book.id)
+        local html, err, status = HttpUtil.getBody(ads_page)
+        -- called off, which says nothing about the mirrors
+        if err == HttpUtil.CANCELLED then
+            return nil, err
+        end
+        answered = answered or html ~= nil or status ~= nil
+
+        -- find download url with key linked in ads page
+        if html then
+            local download_path = html:match('href="([^"]*get%.php[^"]*)"')
+
+            if download_path and download_path ~= "" then
+                download_url = url .. "/" .. download_path:gsub("^/", "")
+                found_on = url
+
+                LogUtil.info("found the download link on", LogUtil.site(url))
+
+                break
+            else
+                LogUtil.warn(
+                    "no download link on",
+                    LogUtil.site(url) .. "'s download page (" .. #html .. " bytes):",
+                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                )
+                last_err = "no Library Genesis download link found"
+                busy = busy or isBusy(html)
+            end
+        elseif status then
+            -- it answered with an error
+            last_err = err
+            mirror_failed = true
+            UrlApi:deleteLibgenUrl(url)
+        else
+            table.insert(unanswered, url)
+            last_err = err
+            mirror_failed = true
+        end
+    end
+
+    -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
+    -- are down. otherwise the device may be offline, so keep them
+    if answered or retrying then
+        for _, url in ipairs(unanswered) do
+            UrlApi:deleteLibgenUrl(url)
+        end
+    end
+
+    if download_url then
+        UrlApi:preferLibgenUrl(found_on)
+        return download_url
+    end
+    return nil, busy and BUSY_ERROR or last_err or "all Library Genesis mirrors failed", mirror_failed
 end
 
 return LlgiSearch
