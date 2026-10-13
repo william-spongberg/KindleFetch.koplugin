@@ -175,6 +175,9 @@ function KindleFetch:init()
     then
         update_check_scheduled = true
         UIManager:scheduleIn(0.1, function()
+            -- the next check waits a day from here, whether or not the latest release can be looked up: on a Kindle
+            -- whose curl is too old to look it up, updating curl was offered every time KOReader started (#57)
+            KindleFetchSettings:setLastUpdateCheck(os.time())
             -- check curl is at min version
             CurlUpdater.checkVersion()
             -- check for updates

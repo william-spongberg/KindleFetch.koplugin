@@ -191,7 +191,7 @@ kindlefetch.koplugin/
 ### Workflow
 
 0. **Initialization**
-   - Unless turned off in settings, updates are checked for at most once a day while connected, or manually via Kindle Fetch → Check for updates
+   - Unless turned off in settings, updates are checked for at most once a day while connected (whether or not the latest release could be looked up), or manually via Kindle Fetch → Check for updates
    - The latest release is looked up in the background, so KOReader can be used meanwhile
    - A curl or plugin update that is turned down is only offered again by checking manually
    - On Kindles, curl version is checked; user is prompted to update if version is below 8.21.0
