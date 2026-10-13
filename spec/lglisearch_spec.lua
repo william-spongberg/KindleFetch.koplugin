@@ -414,6 +414,22 @@ describe("LlgiSearch", function()
                 assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
             end)
 
+            -- which can be carried on from once it isn't
+            it("keeps the books found when Library Genesis is too busy for a later page", function()
+                results(mirrors[1], fullPage(1, 3), 1, 10)
+                for _, mirror in ipairs(mirrors) do
+                    web.pages[searchUrl(mirror, 2)] = function()
+                        return fixtures.LIBGEN_BUSY, nil, 500
+                    end
+                end
+
+                local books, err, next_page = LlgiSearch:search("dune", 1)
+                assert.is_nil(err)
+                assert.are.equal(3, #books)
+                assert.are.equal(2, next_page)
+                assert.are.equal(1, web.scrapes)
+            end)
+
             it("reads at most five pages at a time", function()
                 for page = 1, 6 do
                     results(mirrors[1], fullPage(page, 1), page, 10)
@@ -621,6 +637,41 @@ describe("LlgiSearch", function()
             assert.are.equal("failed to connect to server", err)
             assert.are.equal(2, web.scrapes)
             assert.are.equal(2 * #mirrors, #searches())
+        end)
+
+        -- which its mirrors all say at once, as they share it, rather than that each sent something unexpected, which
+        -- forgot every mirror
+        describe("while Library Genesis' database is too busy", function()
+            local function busy(mirror)
+                web.pages[searchUrl(mirror)] = function()
+                    return fixtures.LIBGEN_BUSY, nil, 500
+                end
+            end
+
+            it("says so, keeping the mirrors rather than looking them up again", function()
+                for _, mirror in ipairs(mirrors) do
+                    busy(mirror)
+                end
+
+                local books, err = LlgiSearch:search("dune", 1)
+                assert.is_nil(books)
+                assert.are.equal("Library Genesis is too busy to search right now, try again in a few minutes", err)
+                assert.are.equal(#mirrors, #searches())
+                assert.are.equal(1, web.scrapes)
+                assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
+                assert.is_truthy(helper.logged("warn", "found Library Genesis' database too busy %(HTTP 500%)$"))
+                assert.is_nil(helper.logged("warn", "^unexpected search page"))
+            end)
+
+            it("searches a mirror that isn't too busy, keeping the one that was", function()
+                busy(mirrors[1])
+                results(mirrors[2], { fixtures.DUNE })
+
+                assert.are.equal(1, #LlgiSearch:search("dune", 1))
+                local remaining = require("api.urlapi"):getLibgenUrls()
+                assert.are.equal(#mirrors, #remaining)
+                assert.are.equal(mirrors[2], remaining[1])
+            end)
         end)
 
         it("says when searches are blocked by ddos protection", function()
