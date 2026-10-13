@@ -113,6 +113,9 @@ describe("KindleFetch", function()
             getLastUpdateCheck = function()
                 return settings.last_update_check
             end,
+            setLastUpdateCheck = function(_, time)
+                settings.last_update_check = time
+            end,
             getLastVersion = function()
                 return settings.last_version
             end,
@@ -458,6 +461,22 @@ describe("KindleFetch", function()
             -- KOReader has been restarted a second later
             KindleFetch = dofile("kindlefetch.koplugin/main.lua")
             helper.state.time = 2000001
+            openUI()
+            helper.runScheduled()
+            assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
+        end)
+
+        -- even when the latest release couldn't be looked up, as on a Kindle whose curl is too old to, which offered to
+        -- update curl every time KOReader started (#57)
+        it("waits a day after checking for updates, whether or not they could be looked up", function()
+            helper.state.time = 2000000
+            openUI()
+            helper.runScheduled()
+            assert.are.equal(2000000, settings.last_update_check)
+
+            -- KOReader has been restarted an hour later
+            KindleFetch = dofile("kindlefetch.koplugin/main.lua")
+            helper.state.time = 2000000 + 60 * 60
             openUI()
             helper.runScheduled()
             assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)

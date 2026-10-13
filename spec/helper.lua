@@ -546,6 +546,31 @@ local function createStubs(state)
         table_sink = function(t)
             return stubs.ltn12.sink.table(t)
         end,
+        -- writes what arrives to the file, which, unlike KOReader's, isn't closed, as the stand-ins for luasocket
+        -- here don't say when the last of it has arrived
+        file_sink = function(handle)
+            return function(chunk)
+                if chunk then
+                    handle:write(chunk)
+                end
+                return 1
+            end
+        end,
+    }
+
+    -- KOReader's hashes, worked out with sha256sum instead
+    stubs.sha2 = {
+        sha256 = function(message)
+            local path = os.tmpname()
+            local f = assert(io.open(path, "wb"))
+            f:write(message)
+            f:close()
+            local pipe = real_popen("sha256sum " .. quote(path))
+            local digest = pipe:read("*l"):match("^(%x+)")
+            pipe:close()
+            os.remove(path)
+            return digest
+        end,
     }
 
     -- widgets
@@ -610,6 +635,7 @@ local MODULE_STUBS = {
     ["socket.http"] = "http",
     ["ltn12"] = "ltn12",
     ["socketutil"] = "socketutil",
+    ["ffi/sha2"] = "sha2",
     ["json"] = "json",
     ["ui/trapper"] = "trapper",
     ["ui/widget/menu"] = "Menu",

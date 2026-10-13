@@ -1,7 +1,7 @@
 local helper = require("helper")
 
 describe("CurlUpdater", function()
-    local data_dir, CurlUtil, CurlUpdater
+    local data_dir, CurlUtil, HttpUtil, CurlUpdater
 
     local function installedCurl(version)
         helper.stubCommand(
@@ -19,6 +19,7 @@ describe("CurlUpdater", function()
         data_dir = helper.tmpdir("data")
         helper.state.data_dir = data_dir
         CurlUtil = require("util.curlutil")
+        HttpUtil = require("util.httputil")
         CurlUpdater = require("updater.curlupdater")
     end)
 
@@ -109,6 +110,7 @@ describe("CurlUpdater", function()
                 backup = "cp '/usr/bin/curl' '/usr/bin/curl.system.bak'",
                 install = "/curl-armhf' '/usr/bin/curl'",
                 permissions = "chmod 755 '/usr/bin/curl'",
+                restore = "cp '/usr/bin/curl.system.bak' '/usr/bin/curl'",
             }
             for step, pattern in pairs(steps) do
                 helper.stubExecute(pattern, function()
@@ -124,11 +126,19 @@ describe("CurlUpdater", function()
             helper.lastShown().buttons[1][2].callback()
         end
 
+        -- what the newly installed curl says when asked its version
+        local function newCurlSays(output)
+            helper.stubCommand("'/usr/bin/curl' --version", output)
+        end
+
         before_each(function()
-            CurlUtil.download = function(_, filepath)
+            HttpUtil.downloadFile = function(_, filepath)
                 helper.writeFile(filepath, "curl binary")
                 return true
             end
+            -- as if this were the build that was released, which runs
+            CurlUpdater.SHA256 = require("ffi/sha2").sha256("curl binary")
+            newCurlSays("curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1\n")
         end)
 
         it("backs up the system curl, then installs the static build", function()
@@ -227,6 +237,58 @@ describe("CurlUpdater", function()
             assert.are.equal("8.21.0", CurlUtil.getVersion())
         end)
 
+        -- as it's run as root once installed
+        it("only installs the build that was released", function()
+            stubInstall()
+            HttpUtil.downloadFile = function(_, filepath)
+                helper.writeFile(filepath, "something else")
+                return true
+            end
+            acceptUpdate()
+
+            assert.are.same({}, commands)
+            assert.is_false(helper.exists(data_dir .. "/cache/kindlefetch/curl-armhf"))
+            assert.are.equal(
+                "Failed to download curl update: what downloaded isn't the curl 8.21.0 that was released",
+                helper.lastError()
+            )
+        end)
+
+        -- so there's still a curl that runs
+        it("puts the old curl back when the new one doesn't run on this Kindle", function()
+            stubInstall()
+            newCurlSays("/usr/bin/curl: line 1: syntax error: unexpected word\n")
+            acceptUpdate()
+
+            assert.are.same(
+                { "chmod", "remount_rw", "find_backup", "install", "permissions", "restore", "remount_ro" },
+                commands
+            )
+            assert.are.equal(
+                "The new curl doesn't run on this Kindle, so the old one has been put back",
+                helper.lastError()
+            )
+            -- saying what it said instead, for crash.log
+            assert.is_truthy(helper.logged("warn", "^the new curl doesn't run on this Kindle, saying .*syntax error"))
+            assert.is_nil(helper.lastNotification())
+        end)
+
+        it("says where the old curl is when it can't be put back", function()
+            stubInstall({ restore = true })
+            newCurlSays("Illegal instruction\n")
+            acceptUpdate()
+
+            assert.are.same(
+                { "chmod", "remount_rw", "find_backup", "install", "permissions", "restore", "remount_ro" },
+                commands
+            )
+            assert.are.equal(
+                "The new curl doesn't run on this Kindle, and the old one couldn't be put back from "
+                    .. "/usr/bin/curl.system.bak",
+                helper.lastError()
+            )
+        end)
+
         it("carries on when the installed curl's permissions cannot be set", function()
             stubInstall({ permissions = true })
             acceptUpdate()
@@ -235,14 +297,15 @@ describe("CurlUpdater", function()
     end)
 
     describe("updating", function()
-        it("downloads the static curl build into the plugin's tmp dir", function()
+        -- with KOReader's own HTTP, as the Kindle's own curl is too old to connect to GitHub (#57)
+        it("downloads the static curl build into the plugin's tmp dir, saying why it couldn't", function()
             local download
-            CurlUtil.download = function(url, filepath)
+            HttpUtil.downloadFile = function(url, filepath)
                 download = {
                     url = url,
                     filepath = filepath,
                 }
-                return false, "could not resolve host"
+                return nil, "could not resolve host"
             end
 
             installedCurl("7.68.0")
@@ -253,7 +316,36 @@ describe("CurlUpdater", function()
                 url = "https://github.com/moparisthebest/static-curl/releases/download/v8.21.0/curl-armhf",
                 filepath = data_dir .. "/cache/kindlefetch/curl-armhf",
             }, download)
-            assert.are.equal("Failed to download curl update", helper.lastError())
+            assert.are.equal("Failed to download curl update: could not resolve host", helper.lastError())
+        end)
+
+        -- so a newer curl isn't asked for without its SHA-256, which no Kindle would then install
+        it("knows the SHA-256 of the static curl build on GitHub", function()
+            helper.stubs.http.request = helper.useLiveHttp().request
+            local path = data_dir .. "/curl-armhf"
+            local url = string.format(
+                "https://github.com/moparisthebest/static-curl/releases/download/v%s/curl-armhf",
+                CurlUtil.MIN_VERSION
+            )
+
+            assert.is_true(HttpUtil.downloadFile(url, path))
+            assert.are.equal(CurlUpdater.SHA256, require("ffi/sha2").sha256(helper.readFile(path)))
+        end)
+
+        -- which holds KOReader up until it has
+        it("says it's downloading curl until it has", function()
+            local message
+            HttpUtil.downloadFile = function()
+                message = helper.lastShown()
+                return nil, "request timed out"
+            end
+
+            installedCurl("7.68.0")
+            CurlUpdater.checkVersion()
+            helper.state.shown[1].buttons[1][2].callback()
+
+            assert.are.equal("Downloading curl 8.21.0...", message.text)
+            assert.is_true(helper.wasClosed(message))
         end)
     end)
 end)
