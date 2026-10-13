@@ -205,6 +205,12 @@ local function isBlocked(html)
     return html:find("DDoS%-Guard") or html:find("Checking your browser", 1, true) or html:find("cf-chl", 1, true)
 end
 
+-- whether the page is Library Genesis' results: with a table of them, or, when there are none to list (for a
+-- search that found nothing, or a page past its last), saying how many files it found, as every page of them does
+local function isResultsPage(html)
+    return html:find('id="tablelibgen"', 1, true) ~= nil or html:find(">%s*Files%s*<span[^>]*>%s*%d+%s*</span>") ~= nil
+end
+
 -- fetch a page of results from the first mirror that works, returning its html and the mirror
 local function fetchResults(params, refresh)
     local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(refresh)
@@ -228,7 +234,7 @@ local function fetchResults(params, refresh)
         end
         answered = answered or html ~= nil or status ~= nil
 
-        if html and html:find('id="tablelibgen"', 1, true) then
+        if html and isResultsPage(html) then
             for _, unanswered_url in ipairs(unanswered) do
                 UrlApi:deleteLibgenUrl(unanswered_url)
             end

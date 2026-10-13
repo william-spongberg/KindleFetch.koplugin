@@ -104,6 +104,15 @@ describe("Searching", function()
         end
     end)
 
+    -- rather than that the mirrors failed, as Library Genesis sends no table of results when it has none
+    it("says when no books were found", function()
+        H.startSearch("qzxqzxqzx vwvwvw")
+        H.waitFor("the message saying no books were found", 120, function()
+            assert(not H.errorShown(), H.errorShown())
+            return H.messageSaying("No books found")
+        end)
+    end)
+
     it("shows book covers once they have downloaded", function()
         local CoverCache = require("cache.covercache")
         local menu = H.search(H.SEARCH_QUERY)

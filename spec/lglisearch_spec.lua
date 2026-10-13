@@ -514,6 +514,20 @@ describe("LlgiSearch", function()
             assert.are.equal(1, #LlgiSearch:search("dune", 1))
         end)
 
+        -- which Library Genesis sends without a table of results, rather than with an empty one
+        it("finds no books when Library Genesis has none, without finding fault with the mirror", function()
+            web.pages[searchUrl(mirrors[1])] = fixtures.libgenNoResults(0)
+
+            local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
+            assert.are.same({}, books)
+            assert.is_nil(err)
+            assert.is_nil(next_page)
+            assert.are.equal(0, results_read)
+            assert.are.equal(1, #searches())
+            assert.are.equal(1, web.scrapes)
+            assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
+        end)
+
         it("tries the next mirror and forgets ones that fail", function()
             results(mirrors[2], { fixtures.DUNE })
 

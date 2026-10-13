@@ -188,6 +188,17 @@ function fixtures.libgenResults(books)
         .. "</tbody></table></body></html>"
 end
 
+-- Library Genesis' search page when there are no results on it to list, as for a search that found nothing, or a
+-- page past its last: there's no table of results (only its style), but it says how many files were found, in a tab
+-- that pages with results have too
+function fixtures.libgenNoResults(files)
+    return "<html><head><title>Library Genesis</title><style>#tablelibgen td { margin: 0; }</style></head><body>"
+        .. '<ul class="nav nav-tabs"><li class="nav-item"> <a class="nav-link active " '
+        .. 'href="/index.php?req=dune&curtab=f">Files <span class="badge badge-primary">'
+        .. (files or 0)
+        .. "</span></a> </li></ul></body></html>"
+end
+
 fixtures.DUNE = {
     md5 = "24778aacb1d0844950bf463c145b3d21",
     cover = "/fictioncovers/2509000/24778aacb1d0844950bf463c145b3d21_small.jpg",
