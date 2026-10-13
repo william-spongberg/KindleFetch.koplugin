@@ -669,6 +669,25 @@ describe("Downloader", function()
             assert.are.equal(getUrl(mirrors[2]), spawned[1].url)
         end)
 
+        -- as when the network is blocking them, as many internet providers do (#55)
+        it("says when none of the mirrors can be found on this network", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[adsUrl(mirror)] = function()
+                    return nil, "could not resolve host"
+                end
+            end
+
+            download()
+            assert.are.same({
+                {
+                    ok = false,
+                    err = "none of Library Genesis' sites can be found on this network, which may be blocking "
+                        .. "them. Try another Wi-Fi network or DNS server",
+                },
+            }, results)
+            assert.are.equal(2, web.scrapes)
+        end)
+
         it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()
             web.wikipedia_down = true
 

@@ -215,6 +215,11 @@ function fixtures.libgenNoResults(files)
         .. "</span></a> </li></ul></body></html>"
 end
 
+-- what Library Genesis' mirrors send in place of their search results while its database is refusing connections,
+-- as it does while it's very busy (with HTTP 500), word for word
+fixtures.LIBGEN_BUSY = "\u{FEFF} Could not connect to the database 3306. User 'libgen_read' has exceeded the "
+    .. "'max_user_connections' resource (current value: 300) <a href=''>Report an error</a>."
+
 fixtures.DUNE = {
     md5 = "24778aacb1d0844950bf463c145b3d21",
     cover = "/fictioncovers/2509000/24778aacb1d0844950bf463c145b3d21_small.jpg",

@@ -67,6 +67,21 @@ describe("HttpUtil", function()
         assert.are.equal(403, status)
     end)
 
+    -- as curl says it, so it can be told apart from other failures, e.g. when the network blocks a site (#55)
+    it("says that a site's name couldn't be looked up as curl does", function()
+        for _, said in ipairs({
+            "host or service not provided, or not known",
+            "No address associated with hostname",
+            "temporary failure in name resolution",
+        }) do
+            respond({ "", nil, said })
+            local body, err = HttpUtil.getBody("https://libgen.example")
+            assert.is_nil(body)
+            assert.are.equal("could not resolve host", err)
+            assert.are.equal(HttpUtil.UNRESOLVED, err)
+        end
+    end)
+
     it("returns the error when the request fails, and logs it", function()
         respond({ "", nil, "timeout" })
 
@@ -415,6 +430,14 @@ describe("HttpUtil", function()
         end)
 
         -- rather than keeping the page saying what's wrong in place of the file
+        it("says that the site's name couldn't be looked up as curl does", function()
+            respond({ "", nil, "No address associated with hostname" })
+
+            local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
+            assert.is_nil(ok)
+            assert.are.equal("could not resolve host", err)
+        end)
+
         it("leaves nothing behind when the site answers with an error", function()
             respond({ "<html>Not Found</html>", 1, 404 })
 

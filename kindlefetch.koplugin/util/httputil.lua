@@ -14,6 +14,9 @@ HttpUtil.CANCELLED = "request cancelled"
 -- a widget on screen that calls off the request being waited for when tapped, such as a message saying what's
 -- being waited for. set by whoever started the requests from inside Trapper:wrap, and cleared by them after
 HttpUtil.trap_widget = nil
+-- the error when a site's name couldn't be looked up, as when the network blocks the site: curl's, which what
+-- KOReader's own HTTP says for it is turned into (see explainFailure)
+HttpUtil.UNRESOLVED = CurlUtil.getErrorMeaning(6)
 
 -- constants
 -- how long a site can take to answer, and then to send the whole page, in seconds. pages of search results are
@@ -23,6 +26,24 @@ local PAGE_TIMEOUT = 60
 -- how long a file can take to download with KOReader's own HTTP, in seconds: much longer than a page, as a file can
 -- be several megabytes, and an e-reader's Wi-Fi slow
 local FILE_TIMEOUT = 300
+
+-- what KOReader's own HTTP says when a site's name couldn't be looked up, in lower case
+local UNRESOLVED_ERRORS = {
+    ["host or service not provided, or not known"] = true,
+    ["no address associated with hostname"] = true,
+    ["name or service not known"] = true,
+    ["temporary failure in name resolution"] = true,
+    ["host not found"] = true,
+}
+
+-- what went wrong when KOReader's own HTTP had no answer, as curl says it when it's that a name couldn't be looked up
+local function explainFailure(err)
+    err = tostring(err or "no response")
+    if UNRESOLVED_ERRORS[err:lower()] then
+        return HttpUtil.UNRESOLVED
+    end
+    return err
+end
 
 -- whether requests made from inside Trapper:wrap can be called off (see trap_widget), which those made with curl can
 function HttpUtil.canCancel()
@@ -155,7 +176,7 @@ function HttpUtil.requestBody(request_url, proxy_url, opts)
     -- status is the HTTP status code, or what went wrong if there wasn't a response
     local body = table.concat(response_body)
     if not ok then
-        return nil, tostring(status or "no response")
+        return nil, explainFailure(status)
     end
     if body == "" then
         return nil, "empty response (HTTP " .. tostring(status) .. ")", status
@@ -230,7 +251,7 @@ local function downloadWithKOReader(url, path)
     FileUtil.removeFile(path)
     -- status is the HTTP status code, or what went wrong if there wasn't a response
     if not ok then
-        return nil, tostring(status or "no response")
+        return nil, explainFailure(status)
     end
     return nil, string.format("%s (%s)", CurlUtil.getErrorMeaning(22), tostring(status))
 end

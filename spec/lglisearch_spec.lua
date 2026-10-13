@@ -414,6 +414,22 @@ describe("LlgiSearch", function()
                 assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
             end)
 
+            -- which can be carried on from once it isn't
+            it("keeps the books found when Library Genesis is too busy for a later page", function()
+                results(mirrors[1], fullPage(1, 3), 1, 10)
+                for _, mirror in ipairs(mirrors) do
+                    web.pages[searchUrl(mirror, 2)] = function()
+                        return fixtures.LIBGEN_BUSY, nil, 500
+                    end
+                end
+
+                local books, err, next_page = LlgiSearch:search("dune", 1)
+                assert.is_nil(err)
+                assert.are.equal(3, #books)
+                assert.are.equal(2, next_page)
+                assert.are.equal(1, web.scrapes)
+            end)
+
             it("reads at most five pages at a time", function()
                 for page = 1, 6 do
                     results(mirrors[1], fullPage(page, 1), page, 10)
@@ -623,6 +639,41 @@ describe("LlgiSearch", function()
             assert.are.equal(2 * #mirrors, #searches())
         end)
 
+        -- which its mirrors all say at once, as they share it, rather than that each sent something unexpected, which
+        -- forgot every mirror
+        describe("while Library Genesis' database is too busy", function()
+            local function busy(mirror)
+                web.pages[searchUrl(mirror)] = function()
+                    return fixtures.LIBGEN_BUSY, nil, 500
+                end
+            end
+
+            it("says so, keeping the mirrors rather than looking them up again", function()
+                for _, mirror in ipairs(mirrors) do
+                    busy(mirror)
+                end
+
+                local books, err = LlgiSearch:search("dune", 1)
+                assert.is_nil(books)
+                assert.are.equal("Library Genesis is too busy to search right now, try again in a few minutes", err)
+                assert.are.equal(#mirrors, #searches())
+                assert.are.equal(1, web.scrapes)
+                assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
+                assert.is_truthy(helper.logged("warn", "found Library Genesis' database too busy %(HTTP 500%)$"))
+                assert.is_nil(helper.logged("warn", "^unexpected search page"))
+            end)
+
+            it("searches a mirror that isn't too busy, keeping the one that was", function()
+                busy(mirrors[1])
+                results(mirrors[2], { fixtures.DUNE })
+
+                assert.are.equal(1, #LlgiSearch:search("dune", 1))
+                local remaining = require("api.urlapi"):getLibgenUrls()
+                assert.are.equal(#mirrors, #remaining)
+                assert.are.equal(mirrors[2], remaining[1])
+            end)
+        end)
+
         it("says when searches are blocked by ddos protection", function()
             for _, mirror in ipairs(mirrors) do
                 web.pages[searchUrl(mirror)] =
@@ -635,6 +686,50 @@ describe("LlgiSearch", function()
             -- the mirrors work, so they are kept and not scraped again
             assert.are.equal(1, web.scrapes)
             assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
+        end)
+
+        -- rather than that the last one's name couldn't be looked up: Wikipedia answered, so the device is online, and
+        -- most likely the network is blocking them, as many internet providers do (#55)
+        it("says when none of the mirrors can be found on this network", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[searchUrl(mirror)] = function()
+                    return nil, "could not resolve host"
+                end
+            end
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal(
+                "none of Library Genesis' sites can be found on this network, which may be blocking them. Try "
+                    .. "another Wi-Fi network or DNS server",
+                err
+            )
+            assert.are.equal(2, web.scrapes)
+            assert.is_truthy(helper.logged("warn", "^none of the mirrors' names could be looked up"))
+        end)
+
+        -- when it's less clear that the network is blocking them
+        it("says what went wrong with the last mirror when only some can't be found", function()
+            web.pages[searchUrl(mirrors[1])] = function()
+                return nil, "could not resolve host"
+            end
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal("failed to connect to server", err)
+        end)
+
+        it("says there's no internet connection when Wikipedia can't be found either", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[searchUrl(mirror)] = function()
+                    return nil, "could not resolve host"
+                end
+            end
+            web.wikipedia_down = true
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal("no internet connection", err)
         end)
 
         it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()

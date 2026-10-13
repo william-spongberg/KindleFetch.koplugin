@@ -113,6 +113,14 @@ When a search finds books, but none in the languages and file types chosen, Kind
 
 ## Troubleshooting
 
+### None of Library Genesis' sites can be found on this network
+
+Kindle Fetch looks Library Genesis' sites up on Wikipedia, then searches them in turn. When Wikipedia answers, but none of the sites can be found, the network or its internet provider is most likely blocking Library Genesis, as many do. To check, open one of them, such as [libgen.li](https://libgen.li), on a phone or computer on the same network. If it doesn't open there either, try:
+
+- another Wi-Fi network, such as a phone's hotspot
+- another DNS server on your router, such as 1.1.1.1 or 8.8.8.8, as the Kindle uses the one its Wi-Fi network gives it
+- a proxy (see [Environment Variables](#environment-variables)) or VPN
+
 ### Updating curl fails
 
 Kindle Fetch downloads the new curl from GitHub with KOReader's own HTTP, as a Kindle's own curl can be too old to connect to it. If updating it fails all the same, curl can be updated by hand:
@@ -245,6 +253,8 @@ kindlefetch.koplugin/
    - Wi-Fi is turned on before searching if it's off
    - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or failed downloads are deleted
    - Failed mirrors are removed from cache; if all cached URLs fail they are re-scraped from Wikipedia
+   - When none of Library Genesis' sites can be found, though Wikipedia can, as when the network is blocking them, the plugin says so, rather than only that the last couldn't be found (see [Troubleshooting](#troubleshooting))
+   - When Library Genesis' database is too busy for its mirrors to search or give download links, which they all say at once as they share it, the plugin says so, keeping the mirrors rather than looking them up again
    - The mirror that last answered a search or gave a download link is tried first from then on, rather than asking the ones before it, which may be too busy, every time
    - If Wikipedia answers without listing any mirrors (e.g. once its page has been rearranged), the mirrors known when the plugin was released are used
    - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything. Z-Library's addresses are only taken from the website row of its Wikipedia page, and only those named as its addresses have been (such as z-lib.sk or 1lib.sk), as your password is sent to them when logging in
