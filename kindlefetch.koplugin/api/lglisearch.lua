@@ -35,6 +35,8 @@ local TOPICS = {
 }
 local BLOCKED_ERROR = "Library Genesis is blocking automated searches right now, try again later"
 local BUSY_ERROR = "Library Genesis is too busy to send books right now, try again in a few minutes"
+local UNFOUND_ERROR = "none of Library Genesis' sites can be found on this network, which may be blocking them. Try "
+    .. "another Wi-Fi network or DNS server"
 
 local function stripTags(html)
     return StringUtil.trim(StringUtil.collapseWhitespace(html:gsub("<[^>]+>", " ")))
@@ -219,6 +221,16 @@ local function isBlocked(html)
     return html:find("DDoS%-Guard") or html:find("Checking your browser", 1, true) or html:find("cf-chl", 1, true)
 end
 
+-- why no mirror answered, when none of their names could be looked up just after the mirrors were looked up on
+-- Wikipedia, so the device is online: most likely the network is blocking them, as many internet providers do,
+-- rather than every one being down (#55). nil when that's less clear, to say what went wrong with the last instead
+local function explainUnfound(unresolved, base_urls, just_looked_up)
+    if just_looked_up and #base_urls > 0 and unresolved == #base_urls then
+        LogUtil.warn("none of the mirrors' names could be looked up, though Wikipedia's could")
+        return UNFOUND_ERROR
+    end
+end
+
 -- whether the page is Library Genesis' results: with a table of them, or, when there are none to list (for a
 -- search that found nothing, or a page past its last), saying how many files it found, as every page of them does
 local function isResultsPage(html)
@@ -237,8 +249,10 @@ local function fetchResults(params, refresh)
     end
 
     local last_err
-    -- mirrors that didn't answer at all, which may be down, or the device may be offline
+    -- mirrors that didn't answer at all, which may be down, or the device may be offline, and how many of them
+    -- couldn't even have their names looked up
     local unanswered = {}
+    local unresolved = 0
     local answered = false
     for _, url in ipairs(base_urls) do
         local html, err, status = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
@@ -284,6 +298,9 @@ local function fetchResults(params, refresh)
         else
             table.insert(unanswered, url)
             last_err = err
+            if err == HttpUtil.UNRESOLVED then
+                unresolved = unresolved + 1
+            end
         end
     end
 
@@ -301,7 +318,7 @@ local function fetchResults(params, refresh)
         return fetchResults(params, true)
     end
 
-    return nil, last_err or "all Library Genesis mirrors failed"
+    return nil, explainUnfound(unresolved, base_urls, refresh) or last_err or "all Library Genesis mirrors failed"
 end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
@@ -431,8 +448,10 @@ function LlgiSearch.findDownloadLink(book, retrying)
     -- try each libgen url
     local download_url, found_on
     local last_err
-    -- mirrors that didn't answer at all, which may be down, or the device may be offline
+    -- mirrors that didn't answer at all, which may be down, or the device may be offline, and how many of them
+    -- couldn't even have their names looked up
     local unanswered = {}
+    local unresolved = 0
     local answered = false
     local mirror_failed = false
     local busy = false
@@ -476,6 +495,9 @@ function LlgiSearch.findDownloadLink(book, retrying)
             table.insert(unanswered, url)
             last_err = err
             mirror_failed = true
+            if err == HttpUtil.UNRESOLVED then
+                unresolved = unresolved + 1
+            end
         end
     end
 
@@ -491,7 +513,12 @@ function LlgiSearch.findDownloadLink(book, retrying)
         UrlApi:preferLibgenUrl(found_on)
         return download_url
     end
-    return nil, busy and BUSY_ERROR or last_err or "all Library Genesis mirrors failed", mirror_failed
+    return nil,
+        explainUnfound(unresolved, base_urls, retrying)
+            or busy and BUSY_ERROR
+            or last_err
+            or "all Library Genesis mirrors failed",
+        mirror_failed
 end
 
 return LlgiSearch

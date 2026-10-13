@@ -637,6 +637,50 @@ describe("LlgiSearch", function()
             assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
         end)
 
+        -- rather than that the last one's name couldn't be looked up: Wikipedia answered, so the device is online, and
+        -- most likely the network is blocking them, as many internet providers do (#55)
+        it("says when none of the mirrors can be found on this network", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[searchUrl(mirror)] = function()
+                    return nil, "could not resolve host"
+                end
+            end
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal(
+                "none of Library Genesis' sites can be found on this network, which may be blocking them. Try "
+                    .. "another Wi-Fi network or DNS server",
+                err
+            )
+            assert.are.equal(2, web.scrapes)
+            assert.is_truthy(helper.logged("warn", "^none of the mirrors' names could be looked up"))
+        end)
+
+        -- when it's less clear that the network is blocking them
+        it("says what went wrong with the last mirror when only some can't be found", function()
+            web.pages[searchUrl(mirrors[1])] = function()
+                return nil, "could not resolve host"
+            end
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal("failed to connect to server", err)
+        end)
+
+        it("says there's no internet connection when Wikipedia can't be found either", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[searchUrl(mirror)] = function()
+                    return nil, "could not resolve host"
+                end
+            end
+            web.wikipedia_down = true
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal("no internet connection", err)
+        end)
+
         it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()
             web.wikipedia_down = true
 
