@@ -51,7 +51,7 @@ Copy the `kindlefetch.koplugin` folder into KOReader's `plugins` folder on the d
 
 ## Tests
 
-The unit tests in `spec/` run with [busted](https://lunarmodules.github.io/busted/) on LuaJIT, with KOReader's modules stubbed in `spec/helper.lua`, so KOReader doesn't need to be installed. Some tests need `zip`, `unzip` and internet access, as they scrape the live Wikipedia and Library Genesis pages, and search Internet Archive. They run on every push, along with a coverage report. Those that log in to Z-Library and search it are skipped unless `KINDLEFETCH_ZLIB_EMAIL` and `KINDLEFETCH_ZLIB_PASSWORD` give an account to log in with, which CI doesn't have.
+The unit tests in `spec/` run with [busted](https://lunarmodules.github.io/busted/) on LuaJIT, with KOReader's modules stubbed in `spec/helper.lua`, so KOReader doesn't need to be installed. Some tests need `zip`, `unzip`, `sha256sum` and internet access, as they scrape the live Wikipedia and Library Genesis pages, search Internet Archive, and download the static curl build that's installed on Kindles from GitHub. They run on every push, along with a coverage report. Those that log in to Z-Library and search it are skipped unless `KINDLEFETCH_ZLIB_EMAIL` and `KINDLEFETCH_ZLIB_PASSWORD` give an account to log in with, which CI doesn't have.
 
 If you don't have LuaJIT and luarocks, [hererocks](https://github.com/luarocks/hererocks) installs both into your home folder:
 

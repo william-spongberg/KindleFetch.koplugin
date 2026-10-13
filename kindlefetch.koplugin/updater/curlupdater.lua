@@ -9,13 +9,39 @@ local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
 local PathUtil = require("util.pathutil")
 local KindleFetchSettings = require("settings.settings")
+local sha2 = require("ffi/sha2")
 local _ = require("gettext")
 
 -- constants
 local MIN_VERSION = CurlUtil.MIN_VERSION
 local CURL_REPO_URL = "https://github.com/moparisthebest/static-curl"
 
-local CurlUpdater = {}
+local CurlUpdater = {
+    -- the SHA-256 of that release's curl-armhf, as GitHub lists it, so nothing else is installed as the Kindle's
+    -- curl: to change along with CurlUtil.MIN_VERSION
+    SHA256 = "e34d59a37903cdfc1d7807ae3b8659f708d1f44eff68790f716d33e257b101b7",
+}
+
+-- the SHA-256 of the file at path, or nil if it can't be read
+local function sha256(path)
+    local f = io.open(path, "rb")
+    if not f then
+        return nil
+    end
+    local content = f:read("*a")
+    f:close()
+    return sha2.sha256(content)
+end
+
+-- the version the curl at path says it is, and what it said, which when it can't run says why
+local function runVersion(path)
+    local pipe = io.popen(CurlUtil.shellQuote(path) .. " --version 2>&1")
+    local said = pipe and pipe:read("*l")
+    if pipe then
+        pipe:close()
+    end
+    return said and said:match("^curl%s+([%d%.]+)"), said
+end
 
 -- remount root as read-only, returning false if it could not be
 local function remountReadOnly()
@@ -47,6 +73,11 @@ local function updateCurl()
     UIManager:show(message)
     UIManager:forceRePaint()
     local success, err = HttpUtil.downloadFile(download_url, curl_path)
+    -- it's run as root once installed, so only the build that was released, not anything sent in its place
+    if success and sha256(curl_path) ~= CurlUpdater.SHA256 then
+        os.remove(curl_path)
+        success, err = false, "what downloaded isn't the curl " .. MIN_VERSION .. " that was released"
+    end
     UIManager:close(message)
     if not success then
         LogUtil.warn("could not download static curl from", download_url, "error:", err)
@@ -110,6 +141,27 @@ local function updateCurl()
     -- set permissions
     if os.execute(string.format("chmod 755 %s", CurlUtil.shellQuote(system_curl))) ~= 0 then
         LogUtil.warn("failed to set curl permissions (continuing anyway)")
+    end
+
+    -- check it runs on this Kindle, putting the old one back if not, so there's still a curl that does
+    local installed_version, said = runVersion(system_curl)
+    if installed_version ~= MIN_VERSION then
+        LogUtil.warn("the new curl doesn't run on this Kindle, saying", said, "so putting the old one back")
+        local restored = os.execute(
+            string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(backup_curl), CurlUtil.shellQuote(system_curl))
+        ) == 0
+        remountReadOnly()
+        -- whichever is there now
+        CurlUtil.forgetVersion()
+        if restored then
+            NotifyUtil.error("The new curl doesn't run on this Kindle, so the old one has been put back")
+        else
+            LogUtil.err("could not put the old curl back from", backup_curl)
+            NotifyUtil.error(
+                "The new curl doesn't run on this Kindle, and the old one couldn't be put back from " .. backup_curl
+            )
+        end
+        return false
     end
 
     if not remountReadOnly() then
