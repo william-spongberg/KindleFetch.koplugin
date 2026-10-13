@@ -177,15 +177,42 @@ function fixtures.libgenRow(book)
     return "<tr>\n" .. table.concat(cells) .. "</tr>\n"
 end
 
-function fixtures.libgenResults(books)
+-- a page of Library Genesis' search results, with the books in its table. pages optionally gives how many pages of
+-- results it says there are, in the script that shows links to them (which it leaves out when there's only one), and
+-- page the one these are on
+function fixtures.libgenResults(books, pages, page)
     local rows = {}
     for _, book in ipairs(books) do
         table.insert(rows, fixtures.libgenRow(book))
     end
-    return '<html><head><title>Library Genesis</title></head><body><table class="table  table-striped" '
+    local paginator = ""
+    if pages then
+        paginator = string.format(
+            '<div style="text-align: center;" class="paginator" id="paginator_example_top"></div>'
+                .. '<script type="text/javascript">paginator_example_top = new Paginator("paginator_example_top", '
+                .. '%d, 25, %d, "/index.php?req=dune&res=100&curtab=f&order=&ordermode=desc&filesuns=all&page=" );'
+                .. "</script>",
+            pages,
+            page or 1
+        )
+    end
+    return "<html><head><title>Library Genesis</title></head><body>"
+        .. paginator
+        .. '<table class="table  table-striped" '
         .. 'id="tablelibgen"><thead><tr><th scope="col" class="first_col">Title</th></tr></thead><tbody>'
         .. table.concat(rows)
         .. "</tbody></table></body></html>"
+end
+
+-- Library Genesis' search page when there are no results on it to list, as for a search that found nothing, or a
+-- page past its last: there's no table of results (only its style), but it says how many files were found, in a tab
+-- that pages with results have too
+function fixtures.libgenNoResults(files)
+    return "<html><head><title>Library Genesis</title><style>#tablelibgen td { margin: 0; }</style></head><body>"
+        .. '<ul class="nav nav-tabs"><li class="nav-item"> <a class="nav-link active " '
+        .. 'href="/index.php?req=dune&curtab=f">Files <span class="badge badge-primary">'
+        .. (files or 0)
+        .. "</span></a> </li></ul></body></html>"
 end
 
 fixtures.DUNE = {
