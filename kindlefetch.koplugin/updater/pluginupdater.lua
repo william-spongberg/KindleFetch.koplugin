@@ -4,6 +4,7 @@ local InputDialog = require("ui/widget/inputdialog")
 local JSON = require("json")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
+local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
@@ -51,6 +52,19 @@ end
 -- look up the latest release on github in the background, as KOReader is in use and it can take a while. calls
 -- callback with its version and release notes, or with nothing if it couldn't be looked up
 local function fetchUpdateInfo(callback)
+    -- with KOReader's own HTTP where curl can't fetch, as a Kindle's own curl can be too old to connect to GitHub
+    -- (#57), which holds KOReader up until GitHub has answered (so it's only asked when checking for updates is)
+    if not CurlUtil.canFetch() then
+        local body, err = HttpUtil.getBody(REPO_VERSION_URL .. "/releases/latest")
+        if not body then
+            LogUtil.warn("could not look up the latest release on GitHub:", err)
+            callback(nil)
+            return
+        end
+        callback(parseUpdateInfo(body))
+        return
+    end
+
     local release_file = PathUtil.getTmpPath() .. "/latest_release.json"
     local pid, exit_file, err =
         CurlUtil.download(REPO_VERSION_URL .. "/releases/latest", release_file, false, true, CHECK_MAX_TIME)
@@ -112,8 +126,8 @@ local function downloadPluginRelease(version_str)
 
     LogUtil.debug("plugin download url", download_url)
 
-    -- download the release zip
-    local success, err = CurlUtil.download(download_url, zip_path, false, false)
+    -- download the release zip (with KOReader's own HTTP where curl can't fetch, as when looking the release up)
+    local success, err = HttpUtil.downloadFile(download_url, zip_path)
     if not success then
         LogUtil.warn("could not download KindleFetch", version_str, "from", download_url, "error:", err)
         return nil, err
@@ -279,6 +293,12 @@ end
 function PluginUpdater.checkForUpdates(user_requested)
     if Device:isSDL() then
         LogUtil.debug("running in emulator, skipping plugin version check")
+        return
+    end
+    -- without a curl that can look it up in the background, it's only looked up when asked to be, as KOReader's own
+    -- HTTP would hold KOReader up while it's in use (see fetchUpdateInfo)
+    if not user_requested and not CurlUtil.canFetch() then
+        LogUtil.info("only looking up the latest release when asked to check, as curl can't look it up")
         return
     end
     LogUtil.debug("checking for plugin updates from", REPO_VERSION_URL)

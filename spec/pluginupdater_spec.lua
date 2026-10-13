@@ -58,6 +58,11 @@ for _, layout in ipairs(LAYOUTS) do
             CurlUtil = require("util.curlutil")
             Settings = require("settings.settings")
             PluginUpdater = require("updater.pluginupdater")
+            -- a curl that can look the latest release up, unless a spec says there isn't one
+            helper.stubCommand(
+                "curl --version",
+                "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1\n"
+            )
 
             -- pretend to be curl, which looks up the latest release in the background and has finished by the
             -- time it's checked on
@@ -268,6 +273,51 @@ for _, layout in ipairs(LAYOUTS) do
                 assert.is_nil(Settings:getLastUpdateCheck())
             end)
 
+            -- as a Kindle's own curl can be too old to connect to GitHub (#57)
+            describe("where curl can't look up the latest release", function()
+                local requests
+
+                before_each(function()
+                    helper.stubCommand("curl --version", "")
+                    requests = {}
+                    helper.stubs.http.request = function(request)
+                        table.insert(requests, request.url)
+                        if not release_response then
+                            return nil, "No address associated with hostname"
+                        end
+                        request.sink(release_response)
+                        return 1, 200
+                    end
+                end)
+
+                it("looks it up with KOReader's own HTTP when asked to check for updates", function()
+                    latestRelease("v0.4")
+                    checkForUpdates(true)
+
+                    assert.are.same(
+                        { "https://api.github.com/repos/william-spongberg/KindleFetch.koplugin/releases/latest" },
+                        requests
+                    )
+                    assert.are.same({}, release_lookups)
+                    assert.are.equal("Update KindleFetch?", helper.lastShown().title)
+                end)
+
+                it("reports when it cannot be looked up", function()
+                    checkForUpdates(true)
+                    assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                end)
+
+                -- which would hold KOReader up while it's in use
+                it("doesn't look it up by itself", function()
+                    latestRelease("v0.4")
+                    checkForUpdates()
+
+                    assert.are.same({}, requests)
+                    assert.are.same({}, release_lookups)
+                    assert.are.equal(0, #helper.state.shown)
+                end)
+            end)
+
             describe("once an update is turned down", function()
                 before_each(function()
                     latestRelease("v0.4")
@@ -407,6 +457,32 @@ for _, layout in ipairs(LAYOUTS) do
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
                 assert.is_false(helper.exists(plugin_path .. ".backup"))
                 assert.are.equal("Failed to install update", helper.lastError())
+            end)
+
+            -- as a Kindle's own curl can be too old to connect to GitHub (#57)
+            it("downloads it with KOReader's own HTTP where curl can't", function()
+                helper.stubCommand("curl --version", "")
+                local requests = {}
+                helper.stubs.http.request = function(request)
+                    table.insert(requests, request.url)
+                    if request.url:find("/releases/latest", 1, true) then
+                        request.sink(release_response)
+                    else
+                        request.sink(helper.readFile(release_zip))
+                    end
+                    return 1, 200
+                end
+
+                checkForUpdates(true)
+                helper.lastShown().buttons[1][2].callback()
+
+                assert.are.same({
+                    "https://api.github.com/repos/william-spongberg/KindleFetch.koplugin/releases/latest",
+                    "https://github.com/william-spongberg/KindleFetch.koplugin/releases/download/v0.4/"
+                        .. "kindlefetch.koplugin.zip",
+                }, requests)
+                assert.is_nil(downloaded_url)
+                assert.are.equal("-- v0.4\n", helper.readFile(plugin_path .. "/main.lua"))
             end)
 
             it("keeps the installed plugin when the download leaves no file", function()
