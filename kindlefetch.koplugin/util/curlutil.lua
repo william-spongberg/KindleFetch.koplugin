@@ -362,11 +362,35 @@ function CurlUtil.applyProxy(curl_cmd)
     return string.format("%s %s", curl_cmd, CurlUtil.getProxyFlag(true))
 end
 
+-- a file curl can read more options from (see fetchCommand), for what mustn't be on its command line, where any
+-- program on the device can read it, such as a password: options is a list of each option's name and value, e.g.
+-- { { "data", "password=..." } }. nil when a value has a line break in it, which would end the option early
+function CurlUtil.createConfigFile(options)
+    local lines = {}
+    for _, option in ipairs(options) do
+        local name, value = option[1], tostring(option[2])
+        if value:find("%c") then
+            return nil
+        end
+        table.insert(lines, string.format('%s = "%s"', name, (value:gsub('[\\"]', "\\%0"))))
+    end
+
+    local config_file = tmpFile("curl_download", ".config")
+    local f = io.open(config_file, "w")
+    if not f then
+        return nil
+    end
+    f:write(table.concat(lines, "\n"), "\n")
+    f:close()
+    return config_file
+end
+
 -- a command that has curl fetch a web page into page_file, then print the HTTP status it ended with (000 when the
 -- site didn't answer) and curl's own exit code, e.g. "200 0". unlike a download, a page with an error status is
 -- kept, as what it says is of use. answer_timeout and page_timeout are how long, in seconds, the site can take to
--- answer and then to send the whole page
-function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_timeout)
+-- answer and then to send the whole page. config_file optionally gives curl more options (see createConfigFile),
+-- and is removed once curl has read it and finished, even if what's waiting for it has been called off
+function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_timeout, config_file)
     checkCurl()
 
     local cmd = string.format("curl -sL -o %s %s", CurlUtil.shellQuote(page_file), CurlUtil.shellQuote(url))
@@ -379,6 +403,15 @@ function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_t
     cmd = string.format("%s --connect-timeout %d --max-time %d", cmd, answer_timeout, page_timeout)
     if use_proxy then
         cmd = CurlUtil.applyProxy(cmd)
+    end
+    if config_file then
+        return string.format(
+            '(%s -K %s -w %s; exit_code=$?; rm -f %s; echo " $exit_code") 2>/dev/null',
+            cmd,
+            CurlUtil.shellQuote(config_file),
+            CurlUtil.shellQuote("%{http_code}"),
+            CurlUtil.shellQuote(config_file)
+        )
     end
 
     return string.format('(%s -w %s; echo " $?") 2>/dev/null', cmd, CurlUtil.shellQuote("%{http_code}"))

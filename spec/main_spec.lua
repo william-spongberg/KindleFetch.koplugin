@@ -2,8 +2,10 @@ local helper = require("helper")
 
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
-    -- what was searched for on Internet Archive, rather than Library Genesis
-    local archive_searches
+    -- what was searched for on Internet Archive and Z-Library, rather than Library Genesis
+    local archive_searches, zlib_searches
+    -- whether Z-Library is logged into, and what to do once the login dialog shown since has logged in
+    local zlib_logged_in, zlib_logins
     local cancelled_downloads, curl_check_user_requested, leftovers_removed
     -- the downloads the downloader says are in progress, and those it was asked to show the progress of
     local active_downloads, downloads_shown
@@ -93,7 +95,8 @@ describe("KindleFetch", function()
             recent_searches = {},
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
-        archive_searches = {}
+        archive_searches, zlib_searches = {}, {}
+        zlib_logged_in, zlib_logins = true, {}
         saved = {}
 
         helper.stub("settings.settings", {
@@ -194,6 +197,28 @@ describe("KindleFetch", function()
             end,
             isCached = function()
                 return false
+            end,
+        })
+        helper.stub("api.zlibsearch", {
+            NAME = "Z-Library",
+            NEEDS_LOGIN = true,
+            search = function(_, query, page)
+                table.insert(zlib_searches, { query, page })
+                local result = search_results[page] or { {} }
+                return result[1], result[2], result[3], result[4]
+            end,
+            isCached = function()
+                return false
+            end,
+        })
+        helper.stub("api.zlibaccount", {
+            isLoggedIn = function()
+                return zlib_logged_in
+            end,
+        })
+        helper.stub("ui.zliblogin", {
+            show = function(on_logged_in)
+                table.insert(zlib_logins, on_logged_in)
             end,
         })
         cancelled_downloads = 0
@@ -378,6 +403,15 @@ describe("KindleFetch", function()
             assert.are.equal("Search Library Genesis", plugin.search_box.title)
         end)
 
+        it("registers a dispatcher action for searching Z-Library", function()
+            local plugin = openUI()
+            local action = helper.state.actions.kindlefetch_zlib_action
+            assert.are.equal("Kindle Fetch: search Z-Library", action.title)
+
+            assert.is_true(plugin["on" .. action.event](plugin))
+            assert.are.equal("Search Z-Library", plugin.search_box.title)
+        end)
+
         it("registers a dispatcher action for searching Internet Archive", function()
             local plugin = openUI()
             local action = helper.state.actions.kindlefetch_archive_action
@@ -529,6 +563,28 @@ describe("KindleFetch", function()
             assert.are.equal(plugin.search_box, helper.lastShown())
         end)
 
+        it("opens the search dialog for Z-Library", function()
+            local plugin = openUI()
+            menuItem(plugin, "Search Z-Library").callback()
+
+            assert.are.equal("Search Z-Library", plugin.search_box.title)
+            assert.are.same({}, zlib_logins)
+        end)
+
+        -- as it can only be searched once logged into
+        it("logs in to Z-Library first, then opens its search dialog", function()
+            zlib_logged_in = false
+            local plugin = openUI()
+            menuItem(plugin, "Search Z-Library").callback()
+            assert.is_nil(plugin.search_box)
+            assert.are.equal(1, #zlib_logins)
+
+            zlib_logged_in = true
+            zlib_logins[1]()
+            assert.are.equal("Search Z-Library", plugin.search_box.title)
+            assert.are.equal(plugin.search_box, helper.lastShown())
+        end)
+
         it("opens the search dialog for Internet Archive", function()
             local plugin = openUI()
             menuItem(plugin, "Search Internet Archive").callback()
@@ -654,6 +710,25 @@ describe("KindleFetch", function()
             assert.are.same({ { "emma", 1 } }, archive_searches)
             assert.are.same({}, searches)
             assert.are.same({ "Emma" }, itemTexts(menus[1]))
+        end)
+
+        it("searches Z-Library as the site the search box is for", function()
+            search(openUI(), "1984", "zlib")
+            assert.are.same({ { "1984", 1 } }, zlib_searches)
+        end)
+
+        -- e.g. once Z-Library has logged Kindle Fetch out, which can be since the search box was opened
+        it("logs in to Z-Library again before searching it", function()
+            local plugin = openUI()
+            plugin:setupUI("zlib")
+            zlib_logged_in = false
+            plugin.search_box.input_text = "1984"
+            button(plugin.search_box, "Search").callback()
+            assert.are.same({}, zlib_searches)
+
+            zlib_logged_in = true
+            zlib_logins[1]()
+            assert.are.same({ { "1984", 1 } }, zlib_searches)
         end)
 
         -- which it doesn't have

@@ -176,6 +176,43 @@ describe("CurlUtil", function()
             assert.matches(data_dir .. "/settings/tmp/curl_download_", page_file, 1, true)
             assert.are_not.equal(page_file, CurlUtil.createPageFile())
         end)
+
+        -- for what mustn't be on its command line, where any program on the device can read it, such as a password
+        describe("with options from a file", function()
+            it("writes each option quoted, in a file of its own that's removed if KOReader closes first", function()
+                local config_file = CurlUtil.createConfigFile({
+                    { "cookie", "" },
+                    { "data", 'email=a%40b.c&note=say "hi" \\ bye' },
+                })
+
+                assert.matches(data_dir .. "/settings/tmp/curl_download_", config_file, 1, true)
+                assert.matches("%.config$", config_file)
+                assert.are.equal(
+                    'cookie = ""\ndata = "email=a%40b.c&note=say \\"hi\\" \\\\ bye"\n',
+                    helper.readFile(config_file)
+                )
+            end)
+
+            -- which would end the option early, and could start another
+            it("won't write a value with a line break in it", function()
+                assert.is_nil(CurlUtil.createConfigFile({ { "data", "a=1\noutput = /etc/passwd" } }))
+                assert.are.same({}, helper.readDir(data_dir .. "/settings/tmp"))
+            end)
+
+            it("has curl read them, then removes the file, still printing curl's exit code", function()
+                local config_file = CurlUtil.createConfigFile({ { "data", "password=secret" } })
+                local cmd = CurlUtil.fetchCommand("https://z-lib.example/login", "page", false, 10, 60, config_file)
+                assert.matches(" -K '" .. config_file .. "' -w '%{http_code}'", cmd, 1, true)
+                assert.is_nil(cmd:find("secret", 1, true))
+
+                -- in place of curl, something that answers with a status and exits as curl does when it times out
+                local pipe = io.popen((cmd:gsub("^%(curl ", "(sh -c 'printf 200; exit 28' ")))
+                local output = pipe:read("*a")
+                pipe:close()
+                assert.are.equal("200 28\n", output)
+                assert.is_false(helper.exists(config_file))
+            end)
+        end)
     end)
 
     describe("processes", function()

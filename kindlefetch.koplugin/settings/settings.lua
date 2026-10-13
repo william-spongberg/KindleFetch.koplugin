@@ -650,6 +650,30 @@ function KindleFetchSettings:clearRecentSearches()
     return KindleFetchSettings:setSetting("recent_searches", {})
 end
 
+-- zlib_account (the Z-Library account logged into: its email, and its user id and key, which log into it as the
+-- password does, and are kept instead)
+function KindleFetchSettings:getZlibAccount()
+    local account = KindleFetchSettings:getSetting("zlib_account")
+    if type(account) == "table" and account.user_id and account.user_key then
+        return account
+    end
+end
+-- or nil to forget it. not logged, as the key logs into the account
+function KindleFetchSettings:setZlibAccount(account)
+    local settings_file = getSettingsFile()
+    if account then
+        settings_file:saveSetting("zlib_account", {
+            email = account.email,
+            user_id = account.user_id,
+            user_key = account.user_key,
+        })
+    else
+        settings_file:delSetting("zlib_account")
+    end
+    settings_file:flush()
+    return true
+end
+
 -- download_dir
 function KindleFetchSettings:getDownloadDir()
     local settings_file = getSettingsFile()

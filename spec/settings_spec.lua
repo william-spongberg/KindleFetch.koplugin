@@ -168,6 +168,40 @@ describe("KindleFetchSettings", function()
         end)
     end)
 
+    describe("Z-Library account", function()
+        it("is none to begin with", function()
+            assert.is_nil(Settings:getZlibAccount())
+        end)
+
+        it("is remembered by its email, user id and key, without logging the key", function()
+            Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "secretkey", extra = 1 })
+
+            local account = { email = "reader@example.com", user_id = 42, user_key = "secretkey" }
+            assert.are.same(account, Settings:getZlibAccount())
+            assert.are.same(account, pluginSettings().zlib_account)
+            for _, log in ipairs(helper.state.logs) do
+                for i = 2, #log do
+                    assert.is_nil(tostring(log[i]):find("secretkey", 1, true))
+                end
+            end
+        end)
+
+        it("can be forgotten", function()
+            Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "secretkey" })
+            Settings:setZlibAccount(nil)
+
+            assert.is_nil(Settings:getZlibAccount())
+            assert.is_nil(pluginSettings().zlib_account)
+        end)
+
+        it("isn't one without a user id and key", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                zlib_account = { email = "reader@example.com" },
+            }
+            assert.is_nil(require("settings.settings"):getZlibAccount())
+        end)
+    end)
+
     it("remembers the plugin version it last ran", function()
         assert.is_nil(Settings:getLastVersion())
         Settings:setLastVersion("0.4")

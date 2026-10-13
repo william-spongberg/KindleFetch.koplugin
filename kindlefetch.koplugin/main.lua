@@ -3,7 +3,6 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
-local InfoMessage = require("ui/widget/infomessage")
 local Trapper = require("ui/trapper")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local Device = require("device")
@@ -20,6 +19,9 @@ local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
+local WaitingMessage = require("ui.waitingmessage")
+local ZlibLogin = require("ui.zliblogin")
+local ZlibAccount = require("api.zlibaccount")
 local SearchCache = require("cache.searchcache")
 local UrlCache = require("cache.urlcache")
 local CurlUpdater = require("updater.curlupdater")
@@ -113,6 +115,12 @@ function KindleFetch:onDispatcherRegisterActions()
         title = string.format(_("Kindle Fetch: search %s"), Sources.archive.NAME),
         general = true,
     })
+    Dispatcher:registerAction("kindlefetch_zlib_action", {
+        category = "none",
+        event = "KindleFetchZlib",
+        title = string.format(_("Kindle Fetch: search %s"), Sources.zlib.NAME),
+        general = true,
+    })
 end
 
 -- cancel downloads when KOReader exits or restarts, so curl isn't left running and partial books are removed
@@ -130,6 +138,10 @@ function KindleFetch:onKindleFetch()
 end
 function KindleFetch:onKindleFetchArchive()
     self:setupUI("archive")
+    return true
+end
+function KindleFetch:onKindleFetchZlib()
+    self:setupUI("zlib")
     return true
 end
 
@@ -194,6 +206,12 @@ function KindleFetch:addToMainMenu(menu_items)
                 text = string.format(_("Search %s"), Sources.archive.NAME),
                 callback = function()
                     self:setupUI("archive")
+                end,
+            },
+            {
+                text = string.format(_("Search %s"), Sources.zlib.NAME),
+                callback = function()
+                    self:setupUI("zlib")
                 end,
             },
             {
@@ -286,10 +304,26 @@ function KindleFetch:showRecentSearches()
     UIManager:show(dialog)
 end
 
--- open the search box, for searching the site source names (see Sources)
+-- whether the site can only be searched once logged into, and isn't. then logs in, calling on_logged_in once it has
+local function needsLogin(source, on_logged_in)
+    if not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn() then
+        return false
+    end
+    LogUtil.info("logging in to", Sources[source].NAME, "before searching it")
+    ZlibLogin.show(on_logged_in)
+    return true
+end
+
+-- open the search box, for searching the site source names (see Sources), once logged into it where it needs that
 function KindleFetch:setupUI(source)
     -- grab self reference for callbacks
     local this = self
+    local function openOnceLoggedIn()
+        this:setupUI(source)
+    end
+    if needsLogin(source, openOnceLoggedIn) then
+        return
+    end
     self.source = source
 
     self.search_box = InputDialog:new {
@@ -346,6 +380,14 @@ function KindleFetch:performSearch()
     if turned_off then
         LogUtil.warn("every", turned_off, "is turned off, so there's nothing to search for")
         NotifyUtil.error(string.format(_("Turn on at least one %s in Kindle Fetch's settings first."), turned_off))
+        return
+    end
+
+    -- e.g. once Z-Library has logged Kindle Fetch out (see ZlibAccount:request)
+    local function searchOnceLoggedIn()
+        self:performSearch()
+    end
+    if needsLogin(self.source, searchOnceLoggedIn) then
         return
     end
 
@@ -443,39 +485,6 @@ function KindleFetch:search(query, page)
     return books, nil, next_page, results_read
 end
 
--- a message saying what's being waited for, with a Cancel button where the wait can be called off (see
--- HttpUtil.trap_widget), rather than any tap calling it off, as a tap may have been meant for something else
-local function waitingMessage(text)
-    if not HttpUtil.canCancel() then
-        return InfoMessage:new {
-            text = text,
-        }
-    end
-
-    local message
-    message = ButtonDialog:new {
-        title = text,
-        title_align = "center",
-        dismissable = false,
-        buttons = {
-            {
-                {
-                    text = _("Cancel"),
-                    callback = function()
-                        message.cancelled = true
-                        UIManager:close(message)
-                        -- set by Trapper:dismissablePopen while it waits
-                        if message.dismiss_callback then
-                            message.dismiss_callback()
-                        end
-                    end,
-                },
-            },
-        },
-    }
-    return message
-end
-
 -- search without holding up the rest of KOReader while the site answers, where that's possible (see
 -- HttpUtil), showing waiting_text until it has. calls on_done with what search returned, unless the search was
 -- called off before finding anything, with the message's Cancel button
@@ -484,7 +493,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
         -- results saved from an earlier search are there straight away
         local message
         if not Sources[self.source]:isCached(query, page) then
-            message = waitingMessage(waiting_text)
+            message = WaitingMessage.new(waiting_text)
             UIManager:show(message)
             -- so that a second tap on what started the search doesn't land on the message
             Device.input:inhibitInputUntil(true)

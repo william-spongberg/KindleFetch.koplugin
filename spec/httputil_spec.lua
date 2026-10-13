@@ -3,7 +3,7 @@ local helper = require("helper")
 describe("HttpUtil", function()
     local data_dir, requests, responses, http, HttpUtil
 
-    -- queue up luasocket responses: {body, ok, status}
+    -- queue up luasocket responses: {body, ok, status, headers}
     local function respond(...)
         responses = { ... }
     end
@@ -23,7 +23,7 @@ describe("HttpUtil", function()
             if response[1] ~= "" then
                 request.sink(response[1])
             end
-            return response[2], response[3]
+            return response[2], response[3], response[4]
         end
         HttpUtil = require("util.httputil")
     end)
@@ -116,6 +116,74 @@ describe("HttpUtil", function()
 
     -- curl asks for pages compressed, which Library Genesis sends several times sooner, and doesn't hold KOReader
     -- up while it waits
+    describe("posting a form", function()
+        local form = { { "email", "reader@example.com" }, { "password", "p@ss word" }, { "languages[]", "english" } }
+
+        it("sends its fields, as a browser does", function()
+            respond({ '{"success":1}', 1, 200 })
+
+            assert.are.equal(
+                '{"success":1}',
+                HttpUtil.getBody("https://z-lib.example/eapi/user/login", { form = form })
+            )
+            assert.are.equal("POST", requests[1].method)
+            local body = "email=reader%40example.com&password=p%40ss%20word&languages%5B%5D=english"
+            assert.are.equal(body, requests[1].source.text)
+            assert.are.equal("application/x-www-form-urlencoded", requests[1].headers["Content-Type"])
+            assert.are.equal(tostring(#body), requests[1].headers["Content-Length"])
+        end)
+
+        -- which can be a password
+        it("logs the names of its fields, but not what's in them", function()
+            respond({ '{"success":1}', 1, 200 })
+            HttpUtil.getBody("https://z-lib.example/eapi/user/login", { form = form })
+
+            assert.is_truthy(
+                helper.logged(
+                    "dbg",
+                    "^posting email, password, languages%[%] to https://z%-lib%.example/eapi/user/login$"
+                )
+            )
+            for _, log in ipairs(helper.state.logs) do
+                for i = 2, #log do
+                    assert.is_nil(tostring(log[i]):find("p@ss", 1, true))
+                end
+            end
+        end)
+    end)
+
+    it("sends the cookies it's given", function()
+        respond({ "<html>profile</html>", 1, 200 })
+        HttpUtil.getBody("https://z-lib.example/eapi/user/profile", { cookies = "remix_userid=1; remix_userkey=abc" })
+
+        assert.are.equal("GET", requests[1].method)
+        assert.are.equal("remix_userid=1; remix_userkey=abc", requests[1].headers["Cookie"])
+    end)
+
+    -- as a site's check that it isn't a bot can, which luasocket can't follow by itself, as it doesn't keep cookies
+    it("asks again with the cookie a site answers with, along with a redirect back to where it was", function()
+        respond({
+            "",
+            1,
+            307,
+            {
+                location = "https://z-lib.example/eapi/user/login",
+                ["set-cookie"] = "__wall=xyz; Path=/; Expires=Fri, 09 Oct 2026 12:00:00 GMT; Secure",
+            },
+        }, { '{"success":1}', 1, 200 })
+
+        local body = HttpUtil.getBody(
+            "https://z-lib.example/eapi/user/login",
+            { form = { { "email", "a@b.c" } }, cookies = "remix_userid=1" }
+        )
+        assert.are.equal('{"success":1}', body)
+        assert.are.equal(2, #requests)
+        assert.is_false(requests[1].redirect)
+        assert.are.equal("remix_userid=1; __wall=xyz", requests[2].headers["Cookie"])
+        assert.are.equal("POST", requests[2].method)
+        assert.are.equal("email=a%40b.c", requests[2].source.text)
+    end)
+
     describe("with a curl that can fetch pages", function()
         local fetches
 
@@ -229,6 +297,48 @@ describe("HttpUtil", function()
             HttpUtil.getBody("https://libgen.example")
 
             assert.are.same({}, helper.state.trapped)
+        end)
+
+        -- in a file of its own, rather than on curl's command line, where any program on the device can read them
+        it("passes curl the form and cookies in a file", function()
+            local config
+            curlAnswers(function(cmd)
+                config = helper.readFile(cmd:match("%-K '([^']+)'"))
+                return '{"success":1}', 200
+            end)
+
+            local body = HttpUtil.getBody("https://z-lib.example/eapi/user/login", {
+                form = { { "email", "a@b.c" }, { "password", "secret" } },
+                cookies = "remix_userid=1",
+            })
+            assert.are.equal('{"success":1}', body)
+            assert.are.equal(
+                'cookie = ""\nheader = "Cookie: remix_userid=1"\ndata = "email=a%40b.c&password=secret"\n',
+                config
+            )
+            assert.is_nil(fetches[1]:find("secret", 1, true))
+        end)
+
+        -- so that curl keeps the cookie a site's check that it isn't a bot answers with, which it only does when not
+        -- given cookies of its own to send
+        it("has curl keep cookies, even when there are none to send", function()
+            local config
+            curlAnswers(function(cmd)
+                config = helper.readFile(cmd:match("%-K '([^']+)'"))
+                return "{}", 200
+            end)
+
+            HttpUtil.getBody("https://z-lib.example/eapi/user/login", { form = { { "email", "a@b.c" } } })
+            assert.are.equal('cookie = ""\ndata = "email=a%40b.c"\n', config)
+        end)
+
+        it("fetches other pages without a file of options", function()
+            curlAnswers(function()
+                return "<html>results</html>", 200
+            end)
+
+            HttpUtil.getBody("https://libgen.example")
+            assert.is_nil(fetches[1]:find(" -K ", 1, true))
         end)
 
         describe("asked to wait in the background", function()

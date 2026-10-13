@@ -50,6 +50,7 @@ describe("SettingsPage", function()
         assert.are.same({
             "Show Book Covers: ☑",
             "Download Folder: " .. SettingsPage.shortenFolder(helper.abs(data_dir)),
+            "Z-Library Account: Not logged in",
             -- by name, rather than the codes they're saved as
             "Preferred Languages: English",
             "Preferred File Types: All",
@@ -69,8 +70,48 @@ describe("SettingsPage", function()
         SettingsPage:showSettings()
 
         -- in the order they're listed in
-        assert.are.equal("Preferred File Types: epub, pdf", lastMenu().item_table[4].text)
-        assert.are.equal("Preferred Book Types: Fiction, Non-fiction", lastMenu().item_table[5].text)
+        assert.are.equal("Preferred File Types: epub, pdf", lastMenu().item_table[5].text)
+        assert.are.equal("Preferred Book Types: Fiction, Non-fiction", lastMenu().item_table[6].text)
+    end)
+
+    describe("Z-Library account", function()
+        local logins
+
+        before_each(function()
+            logins = {}
+            helper.stub("ui.zliblogin", {
+                show = function(on_logged_in)
+                    table.insert(logins, on_logged_in)
+                end,
+            })
+            SettingsPage = dofile("kindlefetch.koplugin/settings/settingspage.lua")
+        end)
+
+        it("logs in, showing the account's email once it has", function()
+            SettingsPage:showSettings()
+            tap("Z-Library Account: Not logged in")
+            assert.are.equal(1, #logins)
+
+            Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "key" })
+            logins[1]()
+            assert.are.equal("Z-Library Account: reader@example.com", lastMenu().item_table[3].text)
+        end)
+
+        it("logs out once asked if it should", function()
+            Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "key" })
+            SettingsPage:showSettings()
+            tap("Z-Library Account: reader@example.com")
+
+            local confirm = helper.lastShown()
+            assert.are.equal("Log out of Z-Library (reader@example.com)?", confirm.text)
+            assert.are.equal("Log out", confirm.ok_text)
+            assert.is_not_nil(Settings:getZlibAccount())
+
+            confirm.ok_callback()
+            assert.is_nil(Settings:getZlibAccount())
+            assert.are.equal("Z-Library Account: Not logged in", lastMenu().item_table[3].text)
+            assert.are.equal(0, #logins)
+        end)
     end)
 
     -- whose end says the most about it, where the menu would cut it off
@@ -128,7 +169,7 @@ describe("SettingsPage", function()
         tap("Check for Updates Automatically")
 
         assert.is_false(Settings:getCheckForUpdates())
-        assert.are.equal("Check for Updates Automatically: ☐", lastMenu().item_table[6].text)
+        assert.are.equal("Check for Updates Automatically: ☐", lastMenu().item_table[7].text)
         assert.are.equal(0, #helper.state.notifications)
 
         tap("Check for Updates Automatically")
@@ -151,7 +192,7 @@ describe("SettingsPage", function()
             assert.are.equal(0, #helper.state.notifications)
             -- back in the settings, which were open underneath
             assert.is_true(helper.wasClosed(choices))
-            assert.are.equal("Keep Searches For: 30 days", lastMenu().item_table[7].text)
+            assert.are.equal("Keep Searches For: 30 days", lastMenu().item_table[8].text)
             assert.are.equal(2, #helper.state.shown)
         end)
 
@@ -161,7 +202,7 @@ describe("SettingsPage", function()
             tap("1 day")
 
             assert.are.equal(1, Settings:getMirrorCacheExpiryDays())
-            assert.are.equal("Keep Mirrors For: 1 day", lastMenu().item_table[8].text)
+            assert.are.equal("Keep Mirrors For: 1 day", lastMenu().item_table[9].text)
         end)
     end)
 
@@ -208,7 +249,7 @@ describe("SettingsPage", function()
 
             assert.are.same({ "es", "fr" }, Settings:getPreferredLanguages())
             assert.are.equal(0, #helper.state.notifications)
-            assert.are.equal("Preferred Languages: Spanish, French", lastMenu().item_table[3].text)
+            assert.are.equal("Preferred Languages: Spanish, French", lastMenu().item_table[4].text)
         end)
 
         -- there are eight pages of languages, and each tick used to go back to the first

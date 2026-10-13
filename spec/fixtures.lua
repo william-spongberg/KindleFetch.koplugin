@@ -3,33 +3,40 @@
 local fixtures = {}
 
 -- Mirrors are scraped from the live Wikipedia pages, while every other page is served from web.pages
--- (url -> html, or a function returning html, and the HTTP status or what went wrong when it says) so specs don't
--- contact the sites themselves, unless web.live is set.
+-- (url -> html, or a function given the request's form and cookies, see HttpUtil.getBody, returning html, and the
+-- HTTP status or what went wrong when it says) so specs don't contact the sites themselves, unless web.live is set.
+-- web.requests keeps each request's form and cookies too
 function fixtures.fakeWeb(helper)
     local web = {
         pages = {},
         fetched = {},
+        requests = {},
         scrapes = 0,
         wikipedia_down = false,
     }
     helper.useLiveHttp()
     local HttpUtil = require("util.httputil")
     local fetchLive = HttpUtil.getBody
-    HttpUtil.getBody = function(url)
+    HttpUtil.getBody = function(url, opts)
         table.insert(web.fetched, url)
+        table.insert(web.requests, { url = url, form = opts and opts.form, cookies = opts and opts.cookies })
         if url:find("wikipedia.org", 1, true) then
             if web.wikipedia_down then
                 return nil, "could not resolve host"
             end
             web.scrapes = web.scrapes + 1
+            -- or a page given in its place
+            if web.pages[url] then
+                return web.pages[url]
+            end
             return fetchLive(url)
         end
         if web.live then
-            return fetchLive(url)
+            return fetchLive(url, opts)
         end
         local page, err, status = web.pages[url], nil, nil
         if type(page) == "function" then
-            page, err, status = page()
+            page, err, status = page(opts or {})
         end
         if page or err then
             return page, err, status
@@ -59,6 +66,37 @@ function fixtures.scrapeMirrors(web, getUrls, site)
     require("cache.urlcache"):clear()
     web.fetched, web.scrapes = {}, 0
     return mirrors
+end
+
+-- the website row of the infobox on Wikipedia's Z-Library page, linking to each of the sites given (e.g.
+-- "z-lib.example"), as it does to its addresses, along with those on Tor and I2P, as the real page does
+function fixtures.wikipediaZlib(sites)
+    local items = {}
+    for _, site in ipairs(sites) do
+        table.insert(
+            items,
+            '<li><a rel="mw:ExtLink nofollow" href="https://'
+                .. site
+                .. '/" class="external free">https://'
+                .. site
+                .. '/</a><sup class="reference"><a href="./Z-Library#cite_note-1">[1]</a></sup></li>'
+        )
+    end
+    table.insert(
+        items,
+        "<li><span>bookszlibb74ugqojhzhg2a63w5i2atv5bqarulgczawnbmsb6s6qead.onion</span> (accessing via "
+            .. '<a href="https://en.wikipedia.org/wiki/Tor_(network)">Tor</a>)</li>'
+    )
+    table.insert(
+        items,
+        '<li><a href="http://zlib24th6ptyb4ibzn3tj2cndqafs6rhm4ed4gruxztaaco35lka.b32.i2p">I2P</a></li>'
+    )
+    return '<html><body><table class="infobox vcard"><tbody><tr><th scope="row" class="infobox-label">Type of site</th>'
+        .. '<td class="infobox-data">Shadow library</td></tr><tr><th scope="row" class="infobox-label">Website</th>'
+        .. '<td class="infobox-data url"><div class="plainlist"><ul>'
+        .. table.concat(items)
+        .. "</ul></div></td></tr></tbody></table>"
+        .. '<p>It was previously at <a href="https://z-lib.org/">z-lib.org</a>, until it was seized.</p></body></html>'
 end
 
 local function cell(value)
@@ -208,6 +246,64 @@ fixtures.ARCHIVE_EMMA = {
     year = 1816,
     language = "eng",
     format = { "Abbyy GZ", "DjVuTXT", "Djvu XML", "EPUB", "Item Tile", "Metadata", "Text PDF" },
+}
+
+-- Z-Library's answer to logging in, with the user id and key that log in as the account from then on
+function fixtures.zlibLogin(user_id, user_key)
+    return require("dkjson").encode({
+        success = 1,
+        user = {
+            id = user_id,
+            email = "reader@example.com",
+            name = "Reader",
+            remix_userkey = user_key,
+            downloads_today = 0,
+            downloads_limit = 10,
+        },
+    })
+end
+
+-- what Z-Library answers with when something's wrong, e.g. "Please login"
+function fixtures.zlibError(message)
+    return require("dkjson").encode({
+        success = 0,
+        error = message,
+    })
+end
+
+-- Z-Library's answer to a search, with the books, and the page after this one (or false on the last)
+function fixtures.zlibResults(books, next_page, total)
+    return require("dkjson").encode({
+        success = 1,
+        books = books,
+        exactBooksCount = total or #books,
+        pagination = {
+            limit = 50,
+            current = 1,
+            before = false,
+            next = next_page or false,
+            total_items = total or #books,
+            total_pages = 1,
+        },
+    })
+end
+
+-- a book as Z-Library describes it in its results (trimmed down to what the plugin reads, and a few more)
+fixtures.ZLIB_1984 = {
+    id = 15846732,
+    content_type = "book",
+    title = "Orwell, George - 1984 (Penguin)",
+    author = "George Orwell [Orwell, George]",
+    year = 2004,
+    publisher = "Penguin UK",
+    language = "English",
+    cover = "https://covers.example/covers299/1984.jpg",
+    filesize = 2158260,
+    filesizeString = "2.06 MB",
+    extension = "epub",
+    md5 = "9d4f939243175e76e973a1555ed70ecc",
+    hash = "728638",
+    dl = "/dl/knMa5dywnD",
 }
 
 return fixtures

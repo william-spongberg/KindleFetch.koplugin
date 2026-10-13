@@ -314,6 +314,9 @@ local function createStubs(state)
             function file:saveSetting(key, value)
                 self.data[key] = value
             end
+            function file:delSetting(key)
+                self.data[key] = nil
+            end
             function file:flush()
                 state.settings_files[path] = deepCopy(self.data)
             end
@@ -366,6 +369,24 @@ local function createStubs(state)
             end
             o.onCloseKeyboard = function(self)
                 self.keyboard_closed = true
+            end
+            return o
+        end,
+    }
+
+    -- KOReader's dialog with several boxes to type in, where what's typed in each is kept as its field's text
+    stubs.multiinputdialog = {
+        new = function(_, o)
+            o = o or {}
+            o.getFields = function(self)
+                local texts = {}
+                for _, field in ipairs(self.fields) do
+                    table.insert(texts, field.text)
+                end
+                return texts
+            end
+            o.onShowKeyboard = function(self)
+                self.keyboard_shown = true
             end
             return o
         end,
@@ -458,6 +479,14 @@ local function createStubs(state)
         end,
     }
     stubs.ltn12 = {
+        -- what's sent, which here is kept as it is, so specs can read it
+        source = {
+            string = function(text)
+                return {
+                    text = text,
+                }
+            end,
+        },
         sink = {
             table = function(t)
                 return function(chunk)
@@ -571,6 +600,7 @@ local MODULE_STUBS = {
     ["luasettings"] = "luasettings",
     ["ui/uimanager"] = "uimanager",
     ["ui/widget/inputdialog"] = "inputdialog",
+    ["ui/widget/multiinputdialog"] = "multiinputdialog",
     ["ui/widget/notification"] = "notification",
     ["util"] = "util",
     ["ui/network/manager"] = "network",
@@ -716,35 +746,77 @@ function helper.useLiveHttp()
     }
     function http.request(request)
         table.insert(http.requests, request.url)
-        local response = live_responses[request.url]
+        local form = request.source and request.source.text
+        local cookie = request.headers and request.headers["Cookie"]
+        -- what other specs asking the same can share, unlike what a form or cookies were sent for, or a redirect
+        -- that wasn't followed
+        local shared = not form and not cookie and request.redirect ~= false
+        local response = shared and live_responses[request.url]
         if not response then
             -- like luasocket, the timeout the plugin sets limits each wait for data rather than the whole transfer
             local timeout = helper.state.http_timeouts and helper.state.http_timeouts[1] or 60
+            local headers_file = os.tmpname()
             local cmd = string.format(
-                "curl -sL --connect-timeout %d --speed-time %d --speed-limit 1 --max-time 120 -A %s "
+                "curl -s%s --connect-timeout %d --speed-time %d --speed-limit 1 --max-time 120 -A %s -D %s "
                     .. "-w '\\n%%{http_code} %%{exitcode}' %s",
+                request.redirect == false and "" or "L",
                 timeout,
                 timeout,
                 quote(request.headers and request.headers["User-Agent"] or "curl"),
+                quote(headers_file),
                 quote(request.url)
             )
             if request.proxy then
                 cmd = cmd .. " -x " .. quote(request.proxy)
             end
+            -- the form and cookies in a file, rather than on curl's command line, as they can log into an account
+            local config_file
+            if form or cookie then
+                config_file = os.tmpname()
+                local config = io.open(config_file, "w")
+                if form then
+                    config:write(string.format('data = "%s"\n', form))
+                end
+                if cookie then
+                    config:write(string.format('header = "Cookie: %s"\n', cookie))
+                end
+                config:close()
+                cmd = cmd .. " -K " .. quote(config_file)
+            end
             local pipe = real_popen(cmd)
             local output = pipe:read("*a")
             pipe:close()
+            if config_file then
+                os.remove(config_file)
+            end
+
+            -- the headers of the last response, with their names in lower case, as luasocket gives them
+            local headers = {}
+            local headers_f = io.open(headers_file, "r")
+            local raw_headers = headers_f and headers_f:read("*a") or ""
+            if headers_f then
+                headers_f:close()
+            end
+            os.remove(headers_file)
+            for line in (raw_headers:match(".*(HTTP/[^\n]*\n.*)$") or ""):gmatch("[^\r\n]+") do
+                local name, value = line:match("^([^:]+):%s*(.*)$")
+                if name then
+                    headers[name:lower()] = value
+                end
+            end
 
             local body, code, exit_code = output:match("^(.*)\n(%d+) (%d+)$")
             code = tonumber(code)
             if not code or code == 0 or exit_code ~= "0" then
                 return nil, "could not fetch " .. request.url .. " (curl exit code " .. tostring(exit_code) .. ")"
             end
-            response = { body, code }
-            live_responses[request.url] = response
+            response = { body, code, headers }
+            if shared then
+                live_responses[request.url] = response
+            end
         end
         request.sink(response[1])
-        return 1, response[2]
+        return 1, response[2], response[3]
     end
     package.loaded["socket.http"] = http
     return http
