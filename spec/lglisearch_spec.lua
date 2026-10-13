@@ -12,8 +12,9 @@ describe("LlgiSearch", function()
             .. LlgiSearch.buildParams(query or "dune", page or 1, require("settings.settings"):getPreferredBookTypes())
     end
 
-    local function results(mirror, books, page)
-        web.pages[searchUrl(mirror, page)] = fixtures.libgenResults(books)
+    -- the books on the given page of results, of the pages Library Genesis says there are, when it says
+    local function results(mirror, books, page, pages)
+        web.pages[searchUrl(mirror, page)] = fixtures.libgenResults(books, pages, page)
     end
 
     local function searches()
@@ -321,10 +322,10 @@ describe("LlgiSearch", function()
         end)
 
         describe("across pages", function()
-            -- a full page of results, of which the first `wanted` are books to show
+            -- a full page of results, as many as Library Genesis sends, of which the first `wanted` are books to show
             local function fullPage(page, wanted)
                 local books = {}
-                for i = 1, 100 do
+                for i = 1, 25 do
                     table.insert(books, {
                         md5 = string.format("%030x%02x", page, i),
                         title = string.format("Book %d.%d", page, i),
@@ -345,7 +346,7 @@ describe("LlgiSearch", function()
 
             it("reads pages until there are enough books to show", function()
                 for page = 1, 3 do
-                    results(mirrors[1], fullPage(page, 4), page)
+                    results(mirrors[1], fullPage(page, 4), page, 10)
                 end
 
                 local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
@@ -355,21 +356,44 @@ describe("LlgiSearch", function()
                 assert.are.equal(4, next_page)
                 assert.are.equal(3, #searches())
                 -- so it can be said how many were left out when none are found
-                assert.are.equal(300, results_read)
+                assert.are.equal(75, results_read)
             end)
 
             it("says how many results it read when none of them were books to show", function()
-                results(mirrors[1], fullPage(1, 0), 1)
-                results(mirrors[1], { { md5 = "abc", title = "Dune", language = "Spanish", file_type = "epub" } }, 2)
+                results(mirrors[1], fullPage(1, 0), 1, 2)
+                results(mirrors[1], { { md5 = "abc", title = "Dune", language = "Spanish", file_type = "epub" } }, 2, 2)
 
                 local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
                 assert.are.same({}, books)
                 assert.is_nil(err)
                 assert.is_nil(next_page)
-                assert.are.equal(101, results_read)
+                assert.are.equal(26, results_read)
             end)
 
+            -- which Library Genesis says, as its last page can be full
             it("stops at the last page of results", function()
+                results(mirrors[1], fullPage(1, 2), 1, 2)
+                results(mirrors[1], fullPage(2, 1), 2, 2)
+
+                local books, _, next_page = LlgiSearch:search("dune", 1)
+                assert.are.same({ "Book 1.1", "Book 1.2", "Book 2.1" }, titles(books))
+                assert.is_nil(next_page)
+                assert.are.equal(2, #searches())
+            end)
+
+            -- whatever's asked for, so a page of fewer than were asked for isn't the last one, as it was taken to be,
+            -- which left a single page of results and nothing to load more of (#56)
+            it("carries on while Library Genesis says there are more pages", function()
+                results(mirrors[1], fullPage(1, 10), 1, 80)
+
+                local books, _, next_page = LlgiSearch:search("dune", 1)
+                assert.are.equal(10, #books)
+                assert.are.equal(2, next_page)
+                assert.are.equal(1, #searches())
+            end)
+
+            -- e.g. if its page stops saying, in case it has more
+            it("carries on after a full page when Library Genesis doesn't say how many pages it has", function()
                 results(mirrors[1], fullPage(1, 2), 1)
                 results(mirrors[1], { fixtures.DUNE }, 2)
 
@@ -378,9 +402,21 @@ describe("LlgiSearch", function()
                 assert.is_nil(next_page)
             end)
 
+            -- as when it didn't say how many pages it had, and its last was full
+            it("stops at a page past the last one", function()
+                results(mirrors[1], fullPage(1, 2), 1)
+                web.pages[searchUrl(mirrors[1], 2)] = fixtures.libgenNoResults(25)
+
+                local books, err, next_page = LlgiSearch:search("dune", 1)
+                assert.is_nil(err)
+                assert.are.same({ "Book 1.1", "Book 1.2" }, titles(books))
+                assert.is_nil(next_page)
+                assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
+            end)
+
             it("reads at most five pages at a time", function()
                 for page = 1, 6 do
-                    results(mirrors[1], fullPage(page, 1), page)
+                    results(mirrors[1], fullPage(page, 1), page, 10)
                 end
 
                 local books, _, next_page = LlgiSearch:search("dune", 1)
@@ -398,7 +434,7 @@ describe("LlgiSearch", function()
             end)
 
             it("keeps the books found when a later page fails", function()
-                results(mirrors[1], fullPage(1, 3), 1)
+                results(mirrors[1], fullPage(1, 3), 1, 10)
 
                 local books, err, next_page = LlgiSearch:search("dune", 1)
                 assert.is_nil(err)
@@ -437,7 +473,7 @@ describe("LlgiSearch", function()
 
                 -- which there may have been a few of, when it was called off while looking for more
                 it("shows the books found on earlier pages, carrying on from the one it was called off on", function()
-                    results(mirrors[1], fullPage(1, 3), 1)
+                    results(mirrors[1], fullPage(1, 3), 1, 10)
                     callOffAt("&page=2")
 
                     local books, err, next_page = LlgiSearch:search("dune", 1)
@@ -460,7 +496,7 @@ describe("LlgiSearch", function()
 
             it("remembers where to carry on from", function()
                 for page = 1, 3 do
-                    results(mirrors[1], fullPage(page, 4), page)
+                    results(mirrors[1], fullPage(page, 4), page, 10)
                 end
                 LlgiSearch:search("dune", 1)
 
@@ -624,10 +660,13 @@ describe("LlgiSearch", function()
         -- catches Library Genesis changing its results page, like Anna's Archive blocking searches did (#24)
         it("finds books on the live Library Genesis site", function()
             web.live = true
-            local books, err = LlgiSearch:search("frank herbert dune", 1)
+            local books, err, next_page = LlgiSearch:search("frank herbert dune", 1)
 
             assert.is_nil(err)
             assert.is_true(#books > 0, "no books found")
+            -- it has many pages of results, which there was no going on to once it sent fewer a page than were asked
+            -- for (#56)
+            assert.is_not_nil(next_page, "no page of results to carry on from")
             for _, book in ipairs(books) do
                 assert.matches("^%x+$", book.id)
                 assert.are.equal(32, #book.id)

@@ -15,7 +15,10 @@ local LlgiSearch = {
 
 -- constants
 local SOURCE = "libgen"
+-- the results asked for on each page, though Library Genesis sends 25 however many are asked for (see hasMorePages)
 local RESULTS_PER_PAGE = 100
+-- as many results as Library Genesis sends on a page, on every page but its last
+local FULL_PAGE = 25
 -- Library Genesis can't filter by language or file type, so a page of results may have few books to show.
 -- Searches read its pages until they have this many books...
 local MIN_BOOKS = 10
@@ -179,6 +182,17 @@ function LlgiSearch.parseResults(html, base_url, languages, file_types)
     end
 
     return books, results
+end
+
+-- whether Library Genesis has more results after the given page, which had this many: as it says itself, in the
+-- script showing links to its pages (which it leaves out when there's only one), or failing that, when the page was
+-- full. a page of fewer results than were asked for isn't its last, as it sends 25 whatever's asked for (#56)
+function LlgiSearch.hasMorePages(html, page, results)
+    local pages = tonumber(html:match('new Paginator%(%s*"paginator_example_top"%s*,%s*(%d+)'))
+    if pages then
+        return page < pages
+    end
+    return results >= FULL_PAGE
 end
 
 function LlgiSearch.buildParams(query, page, book_types)
@@ -365,7 +379,7 @@ function LlgiSearch:search(query, page)
             end
         end
 
-        if results < RESULTS_PER_PAGE then
+        if not LlgiSearch.hasMorePages(html, next_page, results) then
             next_page = nil
             break
         end
