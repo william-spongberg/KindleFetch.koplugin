@@ -20,6 +20,8 @@ local Geom = require("ui/geometry")
 local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
 local LogUtil = require("util.logutil")
+local FileUtil = require("util.fileutil")
+local NotifyUtil = require("util.notifyutil")
 local CoverCache = require("cache.covercache")
 local CoverPlaceholder = require("ui.coverplaceholder")
 local Guard = require("util.guard")
@@ -443,6 +445,13 @@ function DownloadPrompt:choosePath()
     DownloadMgr:new {
         title = _("Choose download directory"),
         onConfirm = function(dir)
+            -- (keeping the folder it was, which can be)
+            local ok, err = FileUtil.checkWritableDir(dir)
+            if not ok then
+                LogUtil.warn("not downloading to", dir, "as", err)
+                NotifyUtil.error(string.format(_("Books can't be downloaded to %s: %s"), dir, err))
+                return
+            end
             self.filepath = dir .. "/" .. self:filename()
 
             -- recreate the button rather than setting its text, which keeps the old text's size

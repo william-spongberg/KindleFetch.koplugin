@@ -66,6 +66,7 @@ describe("Downloader", function()
         data_dir = helper.tmpdir("data")
         helper.state.data_dir = data_dir
         helper.run("mkdir -p " .. helper.quote(data_dir .. "/settings"))
+        helper.run("mkdir -p " .. helper.quote(data_dir .. "/Books"))
         filepath = data_dir .. "/Dune.epub"
         book = {
             source = "libgen",
@@ -254,6 +255,48 @@ describe("Downloader", function()
                 assert.is_nil(helper.lastShown().ok_text)
                 assert.are.equal(data_dir .. "/Books/Dune.epub.part", spawned[1].path)
             end)
+        end)
+
+        -- which was only found out once its link had been looked up, which can count as one of the few downloads
+        -- Z-Library allows a day
+        it("doesn't look up the link when the folder chosen can't be found", function()
+            Downloader:downloadBook(book, filepath, onResult)
+            prompts[1].on_download(data_dir .. "/SD card/Dune.epub")
+
+            assert.are.same({
+                {
+                    ok = false,
+                    err = "books can't be saved in "
+                        .. data_dir
+                        .. "/SD card, as it doesn't exist, so choose another folder",
+                },
+            }, results)
+            assert.are.equal(0, #spawned)
+            assert.are.same({}, Downloader:getActiveDownloads())
+            assert.are.equal(0, #web.fetched)
+        end)
+
+        -- e.g. another edition with the same title, which shared its .part file, so one was saved as the other
+        it("doesn't download two books to the same name at once", function()
+            download()
+            local other_edition = {
+                source = "libgen",
+                id = fixtures.DUNE.md5:gsub("^.", "f"),
+                title = "Dune",
+                file_type = "epub",
+            }
+            Downloader:downloadBook(other_edition, filepath, onResult)
+            prompts[2].on_download(filepath)
+
+            assert.are.same({
+                {
+                    ok = false,
+                    err = "another book is already downloading as Dune.epub, so wait for it to finish, or choose "
+                        .. "another folder",
+                },
+            }, results)
+            assert.are.equal(1, #spawned)
+            assert.is_nil(Downloader.active_downloads[other_edition.id])
         end)
 
         it("shows the progress again when a book that is already downloading is chosen", function()

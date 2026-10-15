@@ -548,6 +548,30 @@ function Downloader:_startDownloadInBackground(book, filepath, callback, retryin
     end))
 end
 
+-- why a book can't be downloaded to filepath, or nil when it can: its folder can't be found (e.g. once deleted, or on
+-- an SD card that has been taken out) or written to, or another book (e.g. another edition) is being downloaded to the
+-- same name, which would share its .part file, and one would be saved as the other
+function Downloader:cantDownloadTo(filepath)
+    local folder, name = filepath:match("^(.*)/([^/]*)$")
+    folder = folder ~= "" and folder or "/"
+    local ok, err = FileUtil.checkWritableDir(folder)
+    if not ok then
+        LogUtil.warn("can't download to", folder, "as", err)
+        return string.format(_("books can't be saved in %s, as %s, so choose another folder"), folder, err)
+    end
+    local taken = false
+    for _, download in pairs(self.active_downloads) do
+        taken = taken or download.filepath == filepath
+    end
+    if taken then
+        LogUtil.warn("another book is already downloading to", filepath)
+        return string.format(
+            _("another book is already downloading as %s, so wait for it to finish, or choose another folder"),
+            name
+        )
+    end
+end
+
 -- open_existing is optionally called with the path of a book that's already there, when asked to read that one
 -- rather than download over it
 function Downloader:downloadBook(book, filepath, callback, open_existing)
@@ -570,6 +594,12 @@ function Downloader:downloadBook(book, filepath, callback, open_existing)
     -- show download prompt to let user choose folder and confirm
     local prompt = DownloadPrompt.new(book, filepath, function(confirmed_filepath)
         local function start()
+            -- before the link is looked up, which can count as one of the few downloads Z-Library allows a day
+            local err = self:cantDownloadTo(confirmed_filepath)
+            if err then
+                callback(false, err)
+                return
+            end
             -- turning on wifi first if need be, as KOReader is set up to (it says so itself if it can't connect)
             NetworkMgr:runWhenConnected(function()
                 self:_startDownloadInBackground(book, confirmed_filepath, callback, false)

@@ -148,16 +148,27 @@ describe("DownloadPrompt", function()
     end)
 
     it("lets the download folder be changed", function()
+        local books = helper.tmpdir("books")
         local prompt = newPrompt()
         prompt.path_widget.callback()
-        helper.state.dir_choosers[1].onConfirm("/mnt/us/books")
+        helper.state.dir_choosers[1].onConfirm(books)
 
-        assert.are.equal("/mnt/us/books/Dune.epub", prompt.filepath)
-        assert.are.equal("/mnt/us/books", prompt.path_widget.text)
+        assert.are.equal(books .. "/Dune.epub", prompt.filepath)
+        assert.are.equal(books, prompt.path_widget.text)
         assert.are.equal("Dune.epub", prompt.filename_widget.text)
 
         tapButton(prompt, "download")
-        assert.are.same({ "/mnt/us/books/Dune.epub" }, downloads)
+        assert.are.same({ books .. "/Dune.epub" }, downloads)
+    end)
+
+    -- which was only found out once the download had started, after its link had been looked up
+    it("keeps the folder it was when the one chosen can't be written to", function()
+        local prompt = newPrompt()
+        prompt.path_widget.callback()
+        helper.state.dir_choosers[1].onConfirm("/proc")
+
+        assert.are.equal("/mnt/us/documents/Dune.epub", prompt.filepath)
+        assert.matches("^Books can't be downloaded to /proc: it can't be written to", helper.lastError())
     end)
 
     -- which used to share a button with the folder, and be cut off by a long one
@@ -173,13 +184,14 @@ describe("DownloadPrompt", function()
     end)
 
     it("lets the download folder be changed more than once", function()
+        local comics = helper.tmpdir("comics")
         local prompt = newPrompt()
         prompt.path_widget.callback()
-        helper.state.dir_choosers[1].onConfirm("/mnt/us/books")
+        helper.state.dir_choosers[1].onConfirm(helper.tmpdir("books"))
         prompt.path_widget.callback()
-        helper.state.dir_choosers[2].onConfirm("/mnt/us/comics")
+        helper.state.dir_choosers[2].onConfirm(comics)
 
-        assert.are.equal("/mnt/us/comics/Dune.epub", prompt.filepath)
+        assert.are.equal(comics .. "/Dune.epub", prompt.filepath)
     end)
 
     it("closes when tapping outside of it", function()

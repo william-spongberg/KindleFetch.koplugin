@@ -224,7 +224,18 @@ describe("SettingsPage", function()
             helper.state.dir_choosers[1].onConfirm(data_dir .. "/missing")
 
             assert.are.equal(helper.abs(data_dir), Settings:getDownloadDir())
-            assert.are.equal("Invalid directory path", helper.lastError())
+            assert.are.equal(
+                "Books can't be downloaded to " .. data_dir .. "/missing: it doesn't exist",
+                helper.lastError()
+            )
+        end)
+
+        it("must be one books can be saved in", function()
+            SettingsPage:showSettings()
+            tap("Download Folder")
+            helper.state.dir_choosers[1].onConfirm("/proc")
+
+            assert.matches("^Books can't be downloaded to /proc: it can't be written to", helper.lastError())
         end)
     end)
 

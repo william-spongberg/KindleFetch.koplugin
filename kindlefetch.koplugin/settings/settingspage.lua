@@ -270,7 +270,7 @@ function SettingsPage:changeDownloadFolder()
             if ok then
                 this:refresh()
             else
-                NotifyUtil.error(err)
+                NotifyUtil.error(string.format(_("Books can't be downloaded to %s: %s"), dir, err))
             end
         end,
     }:chooseDir()
