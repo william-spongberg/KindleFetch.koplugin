@@ -141,6 +141,7 @@ local function resumeTransfer(transfer)
     LogUtil.info(string.format("carrying on with the download of %q, now Wi-Fi is back", transfer.book.title))
     transfer.paused = nil
     transfer.resume = true
+    transfer.quiet_polls = 0
     FileUtil.removeFile(transfer.exit_file)
     local started, err = startCurl(transfer)
     if not started then
@@ -189,12 +190,15 @@ local function pollDownload(transfer)
     end
 
     local bytes_downloaded = FileUtil.getSize(part_path)
-    -- when the latest of the book arrived, to tell when the download has stalled
+    -- how many checks have found nothing more of the book arrived, to tell when the download has stalled: counted,
+    -- rather than timed with the clock, which can be put back, or jump forward once the time is looked up
     if bytes_downloaded ~= transfer.last_size then
         transfer.last_size = bytes_downloaded
-        transfer.last_arrival = os.time()
+        transfer.quiet_polls = 0
+    else
+        transfer.quiet_polls = (transfer.quiet_polls or 0) + 1
     end
-    local stalled = bytes_downloaded > 0 and os.time() - transfer.last_arrival >= STALL_NOTICE_TIME
+    local stalled = bytes_downloaded > 0 and transfer.quiet_polls * DOWNLOAD_POLL_INTERVAL >= STALL_NOTICE_TIME
 
     -- curl notes down the headers it's sent, which say how big the book is, before the book starts to arrive
     if not transfer.total_size and bytes_downloaded > 0 then

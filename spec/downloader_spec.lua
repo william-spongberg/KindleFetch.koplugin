@@ -504,16 +504,20 @@ describe("Downloader", function()
         end)
 
         -- rather than looking as if KOReader is stuck, as curl only tries again once it has stalled for a while
+        -- once nothing has arrived for 10 seconds, the 20 checks on it since, however the clock has changed (it can be
+        -- put back, or jump forward once the time is looked up)
         it("says when the download has stalled", function()
             helper.state.time = 1000
             download()
             curlWrote(MB / 2)
             helper.tick()
-            helper.state.time = 1009
-            helper.tick()
+            helper.state.time = 5000
+            for _ = 1, 19 do
+                helper.tick()
+            end
             assert.are.equal("50% · 0.5 / 1.0 MB", progress().status_widget.text)
 
-            helper.state.time = 1010
+            helper.state.time = 10
             helper.tick()
             assert.are.equal("Stalled at 50%, retrying...", progress().status_widget.text)
             assert.are.equal(0.5, progress().bar_widget.percentage)
@@ -526,12 +530,11 @@ describe("Downloader", function()
 
         it("says when a download of unknown size has stalled", function()
             remote_size = nil
-            helper.state.time = 1000
             download()
             curlWrote(MB / 2)
-            helper.tick()
-            helper.state.time = 1010
-            helper.tick()
+            for _ = 1, 21 do
+                helper.tick()
+            end
             assert.are.equal("Stalled at 0.5 MB, retrying...", progress().status_widget.text)
         end)
 
