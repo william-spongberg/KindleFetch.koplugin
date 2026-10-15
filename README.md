@@ -18,7 +18,7 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
 - **Preferences**: Filter results by preferred languages, file types, and book types (on Library Genesis)
 - **Looking Through Results**: Show only the books found with some text in their title, authors or file type, without searching again, or change the languages, file types and book types they can be in from the menu at the top of the results, searching again with them
 - **Other Sites**: When a search finds nothing, or fails, offers to search the other sites for the same thing (Z-Library once logged in)
-- **Errors That Offer the Fix**: When a search, loading more books or a download fails for a reason with a fix, the message offers it, then tries again: Log in (once Z-Library has logged Kindle Fetch out), Update curl (on a Kindle whose curl is too old), or Turn on Wi-Fi (or Try again, where it's on). A book found on Z-Library is downloaded once logged in, rather than its link being looked up only for Z-Library to say so
+- **Errors That Offer the Fix**: When a search, loading more books or a download fails for a reason with a fix, the message offers it, then tries again: Log in (once Z-Library has logged Kindle Fetch out), Update curl (on a Kindle whose curl is too old), Use encrypted DNS (when the network can't find any of a site's addresses), or Turn on Wi-Fi (or Try again, where it's on). A book found on Z-Library is downloaded once logged in, rather than its link being looked up only for Z-Library to say so
 - **Narrower Searches**: Search only the books' titles, authors or ISBNs on Library Genesis and Internet Archive (Z-Library searches everything)
 - **Searching From Your Books**: Search for more by a book's author from the dialog KOReader shows on holding it (in the file browser, history, collections and file search, on versions of KOReader that let plugins add to it), or from Kindle Fetch's menu while reading it, and for text you highlight in a book with Search Kindle Fetch, choosing which site to search
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders until each one arrives; tap a cover in the download prompt to see it full size
@@ -30,7 +30,9 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch for Library Genesis, or Kindle Fetch: search Internet Archive or Z-Library, in KOReader's gesture manager)
 - **Automatic Curl Updates**: Offers to install curl 8.21.0, the latest static build, on Kindles with an older one (downloading it with KOReader's own HTTP, as a Kindle's own curl can be too old to connect to GitHub, and only installing the build that was released, keeping the old curl until the new one has been copied over in full and runs, so there's always a curl that does), and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
 - **Automatic Plugin Updates**: Checks for new plugin releases in the background, at most once a day, and prompts to update with release notes, then offers to restart KOReader to use the new version (can be turned off in settings, or checked for manually from the menu); an update you turn down isn't offered again until you check manually. The version installed before an update is kept, to go back to from Kindle Fetch's menu (Go back to v…) if the new one doesn't work on your device, and if it can't even start, Kindle Fetch's menu says so and offers to go back, rather than disappearing from KOReader's menu. Where curl can't look them up (on a Kindle until it has been updated, or a device without curl), updates are only checked for manually, with KOReader's own HTTP, which holds KOReader up until GitHub answers
-- **Automatic Retry Logic**: Fallback to other available urls if connection fails
+- **Automatic Retry Logic**: Fallback to other available urls if connection fails, saying which mirror it's trying and why the one before didn't work, and to the mirrors looked up before (or known when Kindle Fetch was released) when Wikipedia, where they're looked up, can't be reached
+- **Blocked Networks**: Looks the sites up with encrypted DNS where the network's own DNS blocks them, and goes through KOReader's HTTP proxy for everything, both set from the settings
+- **Diagnostics**: Shows what's needed to work out what went wrong, with a test of the connection to each site, to copy or save for an issue (see [Troubleshooting](#anything-else))
 - **Safe File Handling**: Automatic filename sanitisation and directory management, asking before downloading over a book that's already there; before a book's link is looked up, it checks the folder can be found and written to (downloading to the default folder for now when the one chosen in the settings is missing, as on an SD card that has been taken out), and that no other book is downloading to the same name
 
 ## Installation
@@ -63,7 +65,7 @@ Internet Archive only has the books that anyone can download, rather than borrow
 
 2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download. To show only the books with some text in their title, authors or file type, tap the menu at the top left of the list, or tap the page number, type the text and tap Search.
 
-<img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" /> <img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" /> <img width="350" alt="Searching Library Genesis: opening Kindle Fetch, typing a search, the covers arriving, and loading more books" src="docs/gifs/searching.gif" />
+<img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" /> <img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" /> <img width="350" alt="Searching Internet Archive: opening Kindle Fetch, typing a search, the covers arriving, and loading more books" src="docs/gifs/searching.gif" />
 
 3. In the download prompt, optionally tap the book cover to see it full size, or tap the folder it will be saved in (above the name it will be saved as) to choose another, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
 
@@ -110,9 +112,9 @@ Downloaded books are saved to the download folder in the settings, unless you ch
 
 <img width="350" alt="Preferred book types" src="docs/screenshots/18-settings-book-types.png" />
 
-When a search finds books, but none in the languages and file types chosen, Kindle Fetch says how many the site listed, and offers to open the settings or to keep searching through the rest.
+When a search finds books, but none in the languages and file types chosen, Kindle Fetch says how many the site listed, and offers to open the settings or to keep searching through the rest. When the site has none of the file types chosen at all (Internet Archive only has EPUB, MOBI, PDF, DJVU, TXT, CBZ and CBR), it says so, and offers the settings or the other sites.
 
-<img width="350" alt="Being told that none of the results are in the languages and file types chosen" src="docs/screenshots/19-search-none-chosen.png" />
+<img width="350" alt="Being told that Internet Archive has none of the file types chosen" src="docs/screenshots/19-search-none-chosen.png" />
 
 - **Check for Updates Automatically**: Check for plugin and curl updates at most once a day while connected (default: enabled)
 
@@ -165,6 +167,8 @@ To put the old curl back, run `mntroot rw`, then `cp /usr/bin/curl.system.bak /u
 
 Kindle Fetch → Diagnostics shows what's needed to work out what went wrong: the versions of Kindle Fetch, KOReader and curl, the device, the settings, the mirrors, and what Kindle Fetch has logged since KOReader started. Tap Test connection to see which of the sites (Wikipedia, each of Library Genesis' mirrors, Internet Archive and Z-Library) the device can reach, then Copy or Save (to `kindlefetch-diagnostics.txt` in KOReader's folder) to attach it to an [issue](https://github.com/william-spongberg/KindleFetch.koplugin/issues). It has nothing in it that would let anyone into your Z-Library account.
 
+<img width="350" alt="Kindle Fetch's diagnostics" src="docs/screenshots/21-diagnostics.png" />
+
 KOReader's `crash.log`, in its `koreader` folder, says what Kindle Fetch was doing when something went wrong too.
 
 ## How It Works
@@ -198,7 +202,7 @@ kindlefetch.koplugin/
 │   └── downloadprogress.lua   # Renders a centered progress widget with cancel and hide buttons
 ├── cache/
 │   ├── cache.lua              # Generic caching system with expiry, size limits, and timestamp-based cleanup
-│   ├── searchcache.lua        # Caches search results by site, query, page, and filter preferences (2 weeks by default, 100-entry limit)
+│   ├── searchcache.lua        # Caches each site's search results by query, page, and filter preferences, searching the site for those it hasn't (2 weeks by default, 100-entry limit)
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
 │   └── covercache.lua         # Downloads and caches book covers and full-size covers by book (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
@@ -283,6 +287,7 @@ kindlefetch.koplugin/
    - When none of Library Genesis' sites can be found, though Wikipedia can, as when the network is blocking them, the plugin says so, rather than only that the last couldn't be found (see [Troubleshooting](#troubleshooting))
    - When Library Genesis' database is too busy for its mirrors to search or give download links, which they all say at once as they share it, the plugin says so, keeping the mirrors rather than looking them up again
    - The mirror that last answered a search or gave a download link is tried first from then on, rather than asking the ones before it, which may be too busy, every time
+   - While the mirrors (or Z-Library's addresses) are tried in turn, the search's message or the download's progress says which is being tried, and why the one before didn't work: it couldn't be found, didn't answer, answered with an error, or sent something else. A site that takes the connection but sends nothing for 20 seconds is given up on, rather than waited for for a whole minute, and once every mirror has failed, only those that looking them up again finds are tried, rather than every one again
    - If Wikipedia answers without listing any mirrors (e.g. once its page has been rearranged), the mirrors known when the plugin was released are used, and when it can't be reached at all (e.g. where it's blocked), the mirrors looked up before, however long ago, or otherwise those known when the plugin was released
    - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything. Z-Library's addresses are only taken from the website row of its Wikipedia page, and only those named as its addresses have been (such as z-lib.sk or 1lib.sk), as your password is sent to them when logging in
    - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes (which it does when the device is powered off or restarted, or its storage is shared over USB, as well as when it exits), rather than curl carrying on, writing to the storage being shared
