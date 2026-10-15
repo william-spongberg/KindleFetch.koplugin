@@ -10,7 +10,7 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
 
 ## Features
 
-- **Three sites**: search and download from Library Genesis, Internet Archive and Z-Library (with your account)
+- **Three sites, searched at once**: Library Genesis, Internet Archive and Z-Library (with your account), each site's books shown as soon as it finds them
 - **Narrower searches**: search only titles, authors or ISBNs (Library Genesis and Internet Archive)
 - **Filters**: show only books in the languages, file types and book types you choose, and look through the results for a title or author
 - **Search from your books**: find more by a book's author, or search for text you've highlighted
@@ -38,11 +38,11 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
 
 ### Downloading books
 
-#### Search → Kindle Fetch → Search Library Genesis, Search Internet Archive, or Search Z-Library
+#### Search → Kindle Fetch → Search
 
-Each can also be opened from a gesture, in KOReader's gesture manager: Kindle Fetch (for Library Genesis), or Kindle Fetch: search Internet Archive or Z-Library.
+Search can also be opened from a gesture, in KOReader's gesture manager: Kindle Fetch, for the sites ticked last, or Kindle Fetch: search Internet Archive or Z-Library, for that site.
 
-Z-Library can only be searched with an account: the first time, Kindle Fetch asks for its email and password, and keeps the key Z-Library logs it in with rather than your password (you can log out in the settings). Z-Library limits how many books an account can download a day; once they've all been downloaded, Kindle Fetch says so, rather than asking for another.
+Z-Library can only be searched with an account: the first time it's ticked, Kindle Fetch asks for its email and password, and keeps the key Z-Library logs it in with rather than your password (you can log out in the settings). Z-Library limits how many books an account can download a day; once they've all been downloaded, Kindle Fetch says so, rather than asking for another.
 
 <img width="350" alt="Logging in to Z-Library, then searching it, and downloading and reading a book from it" src="docs/gifs/z-library.gif" />
 
@@ -52,7 +52,7 @@ Internet Archive only has the books that anyone can download, rather than borrow
 
 <img width="350" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" /> <img width="350" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
-1. Enter a book title, author, or keyword in the search box, or tap Recent to search again for one of your last 10 searches. On Library Genesis and Internet Archive, Search in narrows the search down to the books' titles, authors or ISBNs. KOReader carries on while the site answers; tap Cancel on the message saying it's searching to call the search off.
+1. Enter a book title, author, or keyword in the search box, or tap Recent to search again for one of your last 10 searches. Tap Sites to tick the sites to search: they're searched at once, and each one's books are shown as soon as it has found them, with the site each was found on, while the sites still being searched are listed at the end. On Library Genesis and Internet Archive, Search in narrows the search down to the books' titles, authors or ISBNs. KOReader carries on while the sites answer; tap Cancel on the message saying it's searching to call the search off.
 
 <img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" /> <img width="350" alt="Message saying it's searching, with a button to cancel" src="docs/screenshots/04-searching.png" />
 
@@ -118,6 +118,7 @@ When a search finds books, but none in the languages and file types chosen, Kind
 <img width="350" alt="How long searches are kept" src="docs/screenshots/20-settings-cache.png" />
 
 - **Clear Cache**: Forget the searches (and the recent ones the search box offers), mirrors and book covers that have been saved, e.g. if results look out of date
+- **Go back to v…**: After an update, while the version before it is kept, go back to that version, if the new one doesn't work on your device
 
 ## Troubleshooting
 
@@ -180,6 +181,7 @@ kindlefetch.koplugin/
 ├── api/
 │   ├── downloader.lua         # Downloads books from the site they were found on, with progress tracking and error recovery
 │   ├── sources.lua            # The sites books can be searched for and downloaded from
+│   ├── multisearch.lua        # Searches the sites ticked at once, each in a coroutine of its own, passing on each one's books as soon as it has found them
 │   ├── lglisearch.lua         # Searches Library Genesis and finds its download links; parses HTML, filters by preferences and caches results
 │   ├── iasearch.lua           # Searches Internet Archive's books that anyone can download, and finds their files, with its search API
 │   ├── zlibaccount.lua        # Logs in to Z-Library, keeping the key it logs in with rather than the password, and asks its API as the account
@@ -226,7 +228,7 @@ kindlefetch.koplugin/
    - The latest release is looked up in the background, so KOReader can be used meanwhile. Where curl can't look it up (on a Kindle until it has been updated, or a device without curl), it's looked up with KOReader's own HTTP instead, only when checking manually, as that holds KOReader up until GitHub answers
    - A curl or plugin update that is turned down is only offered again by checking manually
    - On Kindles, curl version is checked; user is prompted to update if version is below 8.21.0. The new curl is downloaded with KOReader's own HTTP (a Kindle's own curl can be too old to connect to GitHub), checked to be the build that was released, and the old one kept until the new one has been copied over in full and runs
-   - Plugin version is checked against GitHub releases; user is prompted to update with the release notes, then offered a restart. The version installed before is kept, to go back to from Kindle Fetch's menu (Go back to v…), and if a new version can't start, Kindle Fetch's menu says so and offers to go back
+   - Plugin version is checked against GitHub releases; user is prompted to update with the release notes, then offered a restart. The version installed before is kept, to go back to from the settings (Go back to v…), and if a new version can't start, Kindle Fetch's menu says so and offers to go back
    - Settings are loaded from persistent storage
 
 1. **Settings & Filtering** (`SettingsPage`)
@@ -237,8 +239,9 @@ kindlefetch.koplugin/
    - Book cover loading can be toggled on/off (for efficiency)
    - All settings are persisted and applied to future searches
 
-2. **Search Phase** (`LlgiSearch`, `IaSearch`, `ZlibSearch`)
+2. **Search Phase** (`MultiSearch`, `LlgiSearch`, `IaSearch`, `ZlibSearch`)
    - User enters a search query via InputDialog, or chooses one of the last 10 from its Recent button
+   - The sites ticked in the search box (`MultiSearch`) are searched at once, each in a coroutine of its own, so each one's books are shown as soon as it has found them, with the sites still being searched listed at the end. Where pages are fetched with KOReader's own HTTP, which holds KOReader up, they're searched one after another instead, with what has been found shown in between. A site that fails is said to have over the books the others found, Load more carries on from each site that has more, and Cancel calls them all off
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
    - Plugin scrapes the Library Genesis HTML search results page for the preferred book types
    - Pages are fetched with curl where there is one (on a Kindle, once it has been updated): compressed, which Library Genesis sends several times sooner, and in the background, so KOReader isn't held up, and Cancel on the message saying it's searching calls the search off. Otherwise they're fetched with KOReader's own HTTP, which holds KOReader up until they arrive
