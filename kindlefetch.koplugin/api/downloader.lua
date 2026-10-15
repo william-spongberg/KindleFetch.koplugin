@@ -12,6 +12,7 @@ local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
 local HttpDownload = require("util.httpdownload")
 local FileCheck = require("util.filecheck")
+local ProxyUtil = require("util.proxyutil")
 local Sources = require("api.sources")
 local CoverCache = require("cache.covercache")
 local Errors = require("util.errors")
@@ -50,9 +51,9 @@ local function expectedFile(listed)
     }
 end
 
+-- whether there's a backup proxy to try again through (see ProxyUtil)
 local function hasProxy()
-    local proxy_url = os.getenv("PROXY_URL")
-    return proxy_url ~= nil and proxy_url ~= ""
+    return ProxyUtil.backup() ~= nil
 end
 
 -- keep the device from going to sleep while books are downloading, as that turns Wi-Fi off and stops them: no
@@ -127,7 +128,7 @@ local function startCurl(transfer)
         pid, exit_file_or_err = HttpDownload.start(transfer.download_url, transfer.part_path, {
             headers_file = transfer.headers_file,
             stall_time = DOWNLOAD_STALL_TIME,
-            proxy = transfer.tried_proxy and os.getenv("PROXY_URL") or nil,
+            proxy = ProxyUtil.get(transfer.tried_proxy),
         })
     end
     if not pid then

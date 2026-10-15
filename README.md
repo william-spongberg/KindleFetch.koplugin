@@ -115,6 +115,7 @@ When a search finds books, but none in the languages and file types chosen, Kind
 - **Check for Updates Automatically**: Check for plugin and curl updates at most once a day while connected (default: enabled)
 
 - **Keep Searches For / Keep Mirrors For**: How long search results (default: 14 days), and Library Genesis' mirrors and Z-Library's addresses (default: 7 days) are cached
+- **HTTP Proxy**: KOReader's HTTP proxy, the same setting as in KOReader's network settings, which Kindle Fetch goes through for everything (searches, covers and books, with curl too) as KOReader does: turn it on with its address, e.g. `http://proxy.example:8080`, or off (default: off)
 
 <img width="350" alt="How long searches are kept" src="docs/screenshots/20-settings-cache.png" />
 
@@ -128,7 +129,7 @@ Kindle Fetch looks Library Genesis' sites up on Wikipedia, then searches them in
 
 - another Wi-Fi network, such as a phone's hotspot
 - another DNS server on your router, such as 1.1.1.1 or 8.8.8.8, as the Kindle uses the one its Wi-Fi network gives it
-- a proxy (see [Environment Variables](#environment-variables)) or VPN
+- a proxy (see HTTP Proxy in the [settings](#settings), or [Environment Variables](#environment-variables)) or VPN
 
 ### Updating curl fails
 
@@ -212,6 +213,7 @@ kindlefetch.koplugin/
     ├── logutil.lua            # Logger wrapper
     ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed
     ├── pathutil.lua           # Plugin install location and temporary download directory
+    ├── proxyutil.lua          # The proxies everything goes through: KOReader's HTTP proxy, where it's on, and PROXY_URL as a backup
     ├── shellutil.lua          # Runs a step of installing an update with shell commands, saying what went wrong in the command's own words
     └── versionutil.lua        # Version parsing and comparison utilities
 ```
@@ -272,7 +274,7 @@ kindlefetch.koplugin/
 5. **Error Handling & Resilience**
    - Wi-Fi is turned on before searching if it's off
    - A download waits while the device sleeps or Wi-Fi is off, rather than failing as if the site had, then carries on from what had arrived, with the same link, once Wi-Fi is back (so Z-Library isn't asked for another, which can count as another download)
-   - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or failed downloads are deleted
+   - Everything goes through KOReader's HTTP proxy, where it's turned on, given to curl in a file rather than on its command line, as it can have a password in it. Failed searches, cover downloads and book downloads automatically retry through a backup proxy (if `PROXY_URL` env var is set) and empty or failed downloads are deleted
    - Mirrors that answer with something other than Library Genesis are removed from cache; one that doesn't answer is tried after the others for an hour (and from then on, until it answers again), rather than removed, as it may only not have for a moment; if all cached URLs fail they are re-scraped from Wikipedia
    - When none of Library Genesis' sites can be found, though Wikipedia can, as when the network is blocking them, the plugin says so, rather than only that the last couldn't be found (see [Troubleshooting](#troubleshooting))
    - When Library Genesis' database is too busy for its mirrors to search or give download links, which they all say at once as they share it, the plugin says so, keeping the mirrors rather than looking them up again
@@ -285,13 +287,13 @@ kindlefetch.koplugin/
 
 ### Environment Variables
 
-The plugin supports an optional `PROXY_URL` environment variable for proxy-based downloads:
+The plugin supports an optional `PROXY_URL` environment variable for a backup proxy:
 
 ```bash
 export PROXY_URL="http://proxy.example.com:8080"
 ```
 
-If a search, book cover or book download fails, the plugin automatically retries it through the proxy.
+If a search, book cover or book download fails, the plugin automatically retries it through the proxy. To go through a proxy for everything, turn on HTTP Proxy in the settings instead.
 
 ## Attribution
 

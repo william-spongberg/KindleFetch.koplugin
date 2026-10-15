@@ -544,6 +544,16 @@ local function createStubs(state)
             state.wifi_prompts = (state.wifi_prompts or 0) + 1
             self.prompted = "connect to wifi"
         end,
+        -- as KOReader's: what luasocket goes through, saved as turned on, or off
+        setHTTPProxy = function(_, proxy)
+            stubs.http.PROXY = proxy
+            if proxy then
+                state.reader_settings.http_proxy = proxy
+                state.reader_settings.http_proxy_enabled = true
+            else
+                state.reader_settings.http_proxy_enabled = false
+            end
+        end,
         -- like KOReader, turns wifi on (as the user has configured) and runs callback once connected
         runWhenConnected = function(self, callback)
             if self.connected then

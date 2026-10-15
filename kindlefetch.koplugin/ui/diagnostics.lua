@@ -13,6 +13,7 @@ local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local PathUtil = require("util.pathutil")
+local ProxyUtil = require("util.proxyutil")
 local Guard = require("util.guard")
 local T = require("ffi/util").template
 local _ = require("gettext")
@@ -48,15 +49,15 @@ function Diagnostics.summary()
     local ok, koreader_version = pcall(function()
         return require("version"):getCurrentRevision()
     end)
-    local proxy_url = os.getenv("PROXY_URL")
     return string.format(
-        "KindleFetch %s on KOReader %s, %s %s, curl %s%s",
+        "KindleFetch %s on KOReader %s, %s %s, curl %s%s%s",
         Diagnostics.version() or "unknown",
         ok and koreader_version or "unknown",
         deviceKind(),
         tostring(Device.model),
         CurlUtil.getVersion() or "not found",
-        proxy_url and proxy_url ~= "" and ", with PROXY_URL set" or ""
+        ProxyUtil.koreader() and ", through KOReader's HTTP proxy" or "",
+        ProxyUtil.backup() and ", with PROXY_URL set" or ""
     )
 end
 
