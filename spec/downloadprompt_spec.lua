@@ -375,6 +375,17 @@ describe("DownloadPrompt", function()
                 assert.is_true(helper.wasClosed(loadingNotices()[1]))
             end)
 
+            -- which said it was loading for good, as nothing would say it had stopped
+            it("doesn't say it's loading when it couldn't even be started", function()
+                require("util.curlutil").downloadMultiple = function()
+                    return nil, nil, nil, "could not start curl"
+                end
+                local prompt = newPrompt()
+                prompt.cover_container:onTapCover()
+                assert.is_true(prompt.fullscreen_cover_shown)
+                assert.are.same({}, loadingNotices())
+            end)
+
             it("stops saying it's loading when the cover is closed", function()
                 local prompt = newPrompt()
                 prompt.cover_container:onTapCover()

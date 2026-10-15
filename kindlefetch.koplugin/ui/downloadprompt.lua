@@ -471,8 +471,10 @@ function DownloadPrompt:showFullscreenCover()
 
     self.fullscreen_cover_shown = true
     self.fullscreen_file = cover_file
-    -- only get the full-size cover once it's wanted, showing the thumbnail until it arrives
-    local loading_full_size = CoverCache:downloadFullSize(self.book)
+    -- only get the full-size cover once it's wanted, showing the thumbnail until it arrives (or until it couldn't
+    -- be downloaded, which may already be known, as when curl couldn't be started)
+    CoverCache:downloadFullSize(self.book)
+    local loading_full_size = CoverCache:isFullSizeComing(self.book)
 
     local fullscreen_image = ImageWidget:new {
         file = cover_file,

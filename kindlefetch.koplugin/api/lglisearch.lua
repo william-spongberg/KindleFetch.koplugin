@@ -390,10 +390,22 @@ function LlgiSearch:search(query, page)
         local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types))
         if not html then
             -- show the books found so far, carrying on from the page that failed, or that the search was called off
-            -- on, rather than throwing away what earlier pages found
-            if #books > 0 then
+            -- on, rather than throwing away what earlier pages found. that may be none, but how many results they
+            -- read is kept too, to say none were in the languages and file types chosen and keep searching from the
+            -- page that failed, rather than that the search failed (unless it was called off, which isn't said)
+            if #books > 0 or (results_read > 0 and err ~= HttpUtil.CANCELLED) then
                 if err == HttpUtil.CANCELLED then
                     LogUtil.info("search called off on page", next_page, "so showing the", #books, "books found before")
+                else
+                    LogUtil.warn(
+                        string.format(
+                            "page %d of the search failed (%s), so showing the %d books found in the %d results before",
+                            next_page,
+                            tostring(err),
+                            #books,
+                            results_read
+                        )
+                    )
                 end
                 break
             end

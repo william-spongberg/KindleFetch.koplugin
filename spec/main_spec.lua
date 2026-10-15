@@ -1260,6 +1260,14 @@ describe("KindleFetch", function()
             assert.are.same({ "dune", 2 }, searches[2])
         end)
 
+        -- which was said to be the end of the results, and Load more taken away
+        it("says loading more failed when the search doesn't say why", function()
+            search_results[2] = { nil }
+            loadMore()
+            assert.are.equal("Loading more books failed: search failed", helper.lastError())
+            assert.are.same({ "Dune", "Dune Messiah", "Load more" }, itemTexts(menus[1]))
+        end)
+
         it("stays on the same page after an error", function()
             search_results[2] = { nil, "request timed out" }
             loadMore()

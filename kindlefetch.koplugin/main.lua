@@ -781,7 +781,10 @@ function KindleFetch:loadMoreBooks()
 
     local waiting_text = _("Loading more books...")
     self:searchInBackground(query, self.next_page, waiting_text, function(books, err, next_page, results_read)
-        if err then
+        -- (without books, as a search that didn't say why, rather than there being no more)
+        if err or not books then
+            err = err or "search failed"
+            LogUtil.warn(string.format("loading more books for %q failed: %s", query, err))
             NotifyUtil.error(_("Loading more books failed: ") .. err)
             return
         end

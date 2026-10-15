@@ -251,7 +251,8 @@ end
 -- download missing covers in the background, calling on_done with the number downloaded once finished, and
 -- letting open search results and download prompts know with a KindleFetchCoversDownloaded event, so they
 -- can replace the placeholders: as covers arrive, rather than once the slowest has, and once they've all
--- finished. returns false when there was nothing to download.
+-- finished. returns false when there was nothing to download, and on_done isn't called, otherwise true, though
+-- on_done may have been called already, as when curl couldn't be started.
 function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     ensureCacheDir()
     removeOrphans()
