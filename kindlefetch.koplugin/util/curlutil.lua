@@ -1,5 +1,6 @@
 local LogUtil = require("util.logutil")
 local ProxyUtil = require("util.proxyutil")
+local KindleFetchSettings = require("settings.settings")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local VersionUtil = require("util.versionutil")
@@ -161,6 +162,11 @@ local function curlIsAtLeast(min_version)
     local version = VersionUtil.parseVersion(CurlUtil.getVersion())
     return version ~= nil and VersionUtil.compareVersions(version, VersionUtil.parseVersion(min_version)) >= 0
 end
+
+-- DNS over HTTPS, which curl can look the sites' names up with (see applyEncryptedDns): Cloudflare's, by its
+-- address, so that it isn't looked up with the network's own DNS either
+local DOH_URL = "https://1.1.1.1/dns-query"
+local DOH_MIN_VERSION = "7.62.0"
 
 -- whether curl can fetch web pages (see fetchCommand), and ask for them compressed. worked out once per session,
 -- as it means running curl
@@ -431,6 +437,20 @@ function CurlUtil.enableParallel(curl_cmd, max_parallel)
     return cmd
 end
 
+-- whether curl can look names up with encrypted DNS (see applyEncryptedDns)
+function CurlUtil.canUseEncryptedDns()
+    return CurlUtil.canFetch() and curlIsAtLeast(DOH_MIN_VERSION)
+end
+
+-- curl_cmd, looking the sites' names up with DNS over HTTPS (see DOH_URL), where that's turned on in the settings and
+-- curl can, as a network's own DNS can be what's blocking them (#55)
+function CurlUtil.applyEncryptedDns(curl_cmd)
+    if KindleFetchSettings:getEncryptedDns() and CurlUtil.canUseEncryptedDns() then
+        return string.format("%s --doh-url %s", curl_cmd, DOH_URL)
+    end
+    return curl_cmd
+end
+
 -- curl_cmd, going through the proxy (see ProxyUtil.get, its backup when use_backup is set), which is given to curl in
 -- a config file (see createConfigFile), rather than on its command line, where any program on the device can read it,
 -- as it can have a password in it. the config file is returned too, to remove once curl has read it. without a proxy
@@ -488,6 +508,7 @@ function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_t
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, url)
     cmd = string.format("%s --connect-timeout %d --max-time %d", cmd, answer_timeout, page_timeout)
+    cmd = CurlUtil.applyEncryptedDns(cmd)
     -- each config file curl is given, removed once it has finished with them
     local config_files = {}
     local proxy_config
@@ -589,6 +610,7 @@ local function downloadCommand(download_url, filepath, use_proxy, max_time, opts
     if opts.stall_time then
         cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
+    cmd = CurlUtil.applyEncryptedDns(cmd)
     local proxy_config
     cmd, proxy_config = CurlUtil.applyProxy(cmd, use_proxy)
 
@@ -720,6 +742,7 @@ function CurlUtil.downloadMultiple(
         cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
     cmd = CurlUtil.enableParallel(cmd, num_parallel_jobs)
+    cmd = CurlUtil.applyEncryptedDns(cmd)
     -- write each file's result, as some may download when others fail. where curl can, to its stderr, which isn't
     -- buffered like its stdout, so each file's result is there as soon as it has downloaded (and been written out
     -- in full), rather than once they all have

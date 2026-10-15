@@ -13,6 +13,8 @@ local KindleFetchSettings = {}
 local DEFAULTS = {
     show_book_covers = true,
     check_for_updates = true,
+    -- looking the sites up with DNS over HTTPS (see CurlUtil.applyEncryptedDns), for networks whose own DNS blocks them
+    encrypted_dns = false,
     search_cache_expiry_days = 14,
     mirror_cache_expiry_days = 7,
     download_dir = nil,
@@ -626,6 +628,13 @@ function KindleFetchSettings:getShowBookCovers()
 end
 function KindleFetchSettings:setShowBookCovers(bool)
     return KindleFetchSettings:setSetting("show_book_covers", bool)
+end
+
+function KindleFetchSettings:getEncryptedDns()
+    return KindleFetchSettings:getSetting("encrypted_dns")
+end
+function KindleFetchSettings:setEncryptedDns(bool)
+    return KindleFetchSettings:setSetting("encrypted_dns", bool)
 end
 
 -- check_for_updates (automatically, once per session)

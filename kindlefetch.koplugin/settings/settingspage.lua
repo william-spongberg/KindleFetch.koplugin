@@ -14,6 +14,7 @@ local InputDialog = require("ui/widget/inputdialog")
 local NetworkMgr = require("ui/network/manager")
 local LogUtil = require("util.logutil")
 local ProxyUtil = require("util.proxyutil")
+local CurlUtil = require("util.curlutil")
 local StringUtil = require("util.stringutil")
 local T = require("ffi/util").template
 local _ = require("gettext")
@@ -144,6 +145,7 @@ function SettingsPage:settingsItems()
     local search_cache_days = KindleFetchSettings:getSearchCacheExpiryDays()
     local mirror_cache_days = KindleFetchSettings:getMirrorCacheExpiryDays()
     local proxy = ProxyUtil.koreader()
+    local encrypted_dns = KindleFetchSettings:getEncryptedDns()
 
     return {
         {
@@ -215,6 +217,14 @@ function SettingsPage:settingsItems()
             text = T(_("HTTP Proxy: %1"), proxy and ProxyUtil.describe(proxy) or _("Off")),
             callback = function()
                 this:changeProxy()
+            end,
+        },
+        {
+            -- (see CurlUtil.applyEncryptedDns), which can be turned off whether or not curl can look names up with it
+            text = T(_("Encrypted DNS: %1"), encrypted_dns and "☑" or "☐"),
+            enabled = encrypted_dns or CurlUtil.canUseEncryptedDns(),
+            callback = function()
+                this:changeEncryptedDns()
             end,
         },
         {
@@ -315,6 +325,11 @@ function SettingsPage:changeProxy()
     }
     UIManager:show(dialog)
     dialog:onShowKeyboard()
+end
+
+function SettingsPage:changeEncryptedDns()
+    saved(KindleFetchSettings:setEncryptedDns(not KindleFetchSettings:getEncryptedDns()))
+    self:refresh()
 end
 
 function SettingsPage:changeCheckForUpdates()

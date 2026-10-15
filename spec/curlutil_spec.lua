@@ -235,6 +235,31 @@ describe("CurlUtil", function()
             assert.matches("; rm -f '" .. config_file .. "' 'options.txt'; ", cmd, 1, true)
         end)
 
+        -- where the network's own DNS blocks the sites (#55)
+        it("looks names up with encrypted DNS where it's turned on, and curl can", function()
+            installedCurl("curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0")
+            local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", false, 10, 60)
+            assert.is_nil(cmd:find("--doh-url", 1, true))
+
+            require("settings.settings"):setEncryptedDns(true)
+            assert.is_true(CurlUtil.canUseEncryptedDns())
+            cmd = CurlUtil.fetchCommand("https://libgen.example", "page", false, 10, 60)
+            assert.matches(" --doh-url https://1.1.1.1/dns-query", cmd, 1, true)
+        end)
+
+        -- which curl can only from 7.62.0
+        it("goes without encrypted DNS where curl is too old for it", function()
+            -- (other than a Kindle, where curl that old can't fetch at all)
+            helper.stubs.device.kindle = false
+            installedCurl("curl 7.61.1 (x86_64-pc-linux-gnu) libcurl/7.61.1")
+            require("settings.settings"):setEncryptedDns(true)
+
+            assert.is_true(CurlUtil.canFetch())
+            assert.is_false(CurlUtil.canUseEncryptedDns())
+            local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", false, 10, 60)
+            assert.is_nil(cmd:find("--doh-url", 1, true))
+        end)
+
         it("fetches into a file of its own in the plugin's tmp dir", function()
             local page_file = CurlUtil.createPageFile()
             assert.matches(data_dir .. "/settings/tmp/curl_download_", page_file, 1, true)

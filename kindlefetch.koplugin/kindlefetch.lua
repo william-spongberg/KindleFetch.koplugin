@@ -27,6 +27,7 @@ local ZlibAccount = require("api.zlibaccount")
 local SearchCache = require("cache.searchcache")
 local UrlCache = require("cache.urlcache")
 local CurlUpdater = require("updater.curlupdater")
+local CurlUtil = require("util.curlutil")
 local PluginUpdater = require("updater.pluginupdater")
 local FileUtil = require("util.fileutil")
 local PathUtil = require("util.pathutil")
@@ -218,7 +219,7 @@ function KindleFetch:init()
         logEnvironment()
         clearCachesAfterUpdate()
         -- tidy up after the last session, which may have closed with downloads still running
-        require("util.curlutil").removeLeftovers()
+        CurlUtil.removeLeftovers()
     end
 
     -- get screen size
@@ -684,8 +685,8 @@ function KindleFetch:rememberSearch(query)
 end
 
 -- buttons for what fixes err, where something does, which call retry, where given, once it has: logging in to
--- Z-Library again, updating a Kindle's curl, or turning Wi-Fi on (or, where it's on, trying again, as the internet may
--- only have dropped for a moment)
+-- Z-Library again, updating a Kindle's curl, looking the sites up with encrypted DNS where the network can't find
+-- them, or turning Wi-Fi on (or, where it's on, trying again, as the internet may only have dropped for a moment)
 function KindleFetch:fixes(err, retry)
     if err == Errors.LOGGED_OUT then
         return {
@@ -702,6 +703,28 @@ function KindleFetch:fixes(err, retry)
                 text = _("Update curl"),
                 callback = function()
                     CurlUpdater.checkVersion(true)
+                end,
+            },
+        }
+    elseif
+        (err == Errors.UNFOUND or err == Errors.ZLIB_UNFOUND)
+        and not KindleFetchSettings:getEncryptedDns()
+        and CurlUtil.canUseEncryptedDns()
+    then
+        -- the network's own DNS may be what's blocking them (#55)
+        return {
+            {
+                text = _("Use encrypted DNS"),
+                callback = function()
+                    local ok, save_err = KindleFetchSettings:setEncryptedDns(true)
+                    if not ok then
+                        NotifyUtil.error(save_err)
+                        return
+                    end
+                    LogUtil.info("turned encrypted DNS on, as the network couldn't find the sites")
+                    if retry then
+                        retry()
+                    end
                 end,
             },
         }
