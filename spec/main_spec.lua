@@ -1030,6 +1030,19 @@ describe("KindleFetch", function()
         end)
     end)
 
+    -- KOReader's Go to letter, on tapping the page number, exited KOReader on a book without
+    it("lists each book with its title, authors and file type", function()
+        local orwell = book("1984")
+        orwell.authors = "George Orwell"
+        search_results[1] = { { orwell, book("Brave New World", "pdf") }, nil, 2 }
+        search(openUI(), "dystopia")
+
+        local items = menus[1].item_table
+        assert.are.equal("1984 · George Orwell · EPUB", items[1].text)
+        assert.are.equal("Brave New World · PDF", items[2].text)
+        assert.are.equal("Load more", items[3].text)
+    end)
+
     describe("load more", function()
         local plugin
 

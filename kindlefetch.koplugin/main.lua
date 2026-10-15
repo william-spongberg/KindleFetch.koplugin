@@ -523,6 +523,21 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
     end)
 end
 
+-- a book's title, authors and file type, as its entry's text, which KOReader's own Go to letter looks through the
+-- results for (on tapping the page number), and exited KOReader on finding an entry without
+local function bookText(book)
+    local parts = {}
+    local function add(part)
+        if part and part ~= "" then
+            table.insert(parts, part)
+        end
+    end
+    add(book.display_title or book.title)
+    add(book.authors)
+    add(book.file_type and book.file_type:upper())
+    return table.concat(parts, " · ")
+end
+
 -- the books as entries for the menu of results, followed by a way to load more when there are more to load
 function KindleFetch:bookMenuItems(books)
     local this = self
@@ -531,6 +546,7 @@ function KindleFetch:bookMenuItems(books)
     for _, book in ipairs(books) do
         table.insert(menu_items, {
             book = book,
+            text = bookText(book),
             callback = function()
                 this:downloadBook(book)
             end,
