@@ -306,6 +306,38 @@ describe("SettingsPage", function()
             assert.are.same({ "fr" }, Settings:getPreferredLanguages())
         end)
 
+        -- as the settings show what's chosen
+        it("are saved without saying anything", function()
+            SettingsPage:showSettings()
+            tap("Preferred Languages")
+            tap("English")
+            tap("French")
+            lastMenu().onClose()
+
+            assert.are.same({ "fr" }, Settings:getPreferredLanguages())
+            for _, widget in ipairs(helper.state.shown) do
+                assert.are_not.equal("notice-warning", widget.icon)
+            end
+        end)
+
+        -- which KOReader's Home key closes, then sends Home on again until what's on top has changed, which it
+        -- never did while the menu stayed open with nothing ticked
+        it("are left as they were when KOReader's Home key closes their menu with none ticked", function()
+            local Menu = require("ui/widget/menu")
+            Menu.onHome = function(self)
+                self:onClose()
+                return true
+            end
+            SettingsPage:showSettings()
+            tap("Preferred Languages")
+            local languages = lastMenu()
+            tap("English")
+            languages:onHome()
+
+            assert.is_true(helper.wasClosed(languages))
+            assert.are.same({ "en" }, Settings:getPreferredLanguages())
+        end)
+
         it("cannot all be unticked", function()
             SettingsPage:showSettings()
             tap("Preferred Languages")

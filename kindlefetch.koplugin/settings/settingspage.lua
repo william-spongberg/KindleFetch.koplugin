@@ -221,7 +221,9 @@ end
 -- show the settings as they are now, in the menu that's open and on the page it's on. closing the menu and
 -- opening another for every change flashes the whole screen twice
 function SettingsPage:refresh()
-    self.menu:switchItemTable(nil, self:settingsItems(), -1)
+    if self.menu then
+        self.menu:switchItemTable(nil, self:settingsItems(), -1)
+    end
 end
 
 function SettingsPage:changeBookCoverVisibility()
@@ -324,6 +326,9 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, none_text)
         return item_table
     end
 
+    -- whether KOReader's Home key is closing it, which it does every menu, then sends Home on, again until what's on
+    -- top has changed, which it never did while this stayed open with nothing ticked
+    local going_home = false
     menu = self:newMenu(title, items(), function()
         local result = {}
         for __, choice in ipairs(choices) do
@@ -334,12 +339,21 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, none_text)
 
         if #result == 0 then
             NotifyUtil.info(none_text)
-            return
+            if not going_home then
+                return
+            end
+        else
+            save(result)
         end
-        save(result)
         UIManager:close(menu)
         this:refresh()
     end)
+    if Menu.onHome then
+        function menu:onHome()
+            going_home = true
+            return Menu.onHome(self)
+        end
+    end
     UIManager:show(menu)
 end
 
