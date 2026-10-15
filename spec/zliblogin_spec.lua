@@ -40,7 +40,7 @@ describe("ZlibLogin", function()
             end,
             login = function(_, email, password)
                 table.insert(logins, { email, password })
-                table.insert(logins, require("util.httputil").trap_widget or false)
+                table.insert(logins, require("util.httputil").getTrapWidget() or false)
                 if type(login_result) == "function" then
                     return login_result()
                 end
@@ -48,10 +48,17 @@ describe("ZlibLogin", function()
             end,
         }
         helper.stub("api.zlibaccount", ZlibAccount)
+        local trap_widget
         helper.stub("util.httputil", {
             CANCELLED = "request cancelled",
             canCancel = function()
                 return true
+            end,
+            setTrapWidget = function(widget)
+                trap_widget = widget
+            end,
+            getTrapWidget = function()
+                return trap_widget
             end,
         })
         ZlibLogin = require("ui.zliblogin")
@@ -130,6 +137,17 @@ describe("ZlibLogin", function()
         assert.are.equal(0, logged_in)
         assert.is_nil(helper.lastError())
         assert.is_truthy(helper.logged("info", "^logging in to Z%-Library was called off$"))
+    end)
+
+    -- which was lost, as Trapper drops what goes wrong once its function has waited on something
+    it("says when what's done once logged in goes wrong", function()
+        ZlibLogin.show(function()
+            error("unexpected")
+        end)
+        logIn("reader@example.com", "secret")
+
+        assert.are.equal("Kindle Fetch: something went wrong, see crash.log", helper.lastError())
+        assert.is_truthy(helper.logged("err", "^logging in to Z%-Library went wrong:.*unexpected"))
     end)
 
     it("says when something went wrong, rather than leaving the message up", function()

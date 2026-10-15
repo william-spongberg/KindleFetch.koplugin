@@ -82,11 +82,7 @@ describe("Downloader", function()
         web = fixtures.fakeWeb(helper)
 
         CurlUtil = require("util.curlutil")
-        CurlUtil.download = function(url, path, use_proxy, background, _, opts)
-            if not background then -- book cover
-                helper.writeFile(path, "jpeg")
-                return true
-            end
+        CurlUtil.startDownload = function(url, path, use_proxy, _, opts)
             local exit_file = CurlUtil.createExitFile()
             table.insert(spawned, {
                 url = url,
@@ -316,7 +312,7 @@ describe("Downloader", function()
             it("doesn't hold KOReader up, letting the progress's Cancel call it off", function()
                 local waits = {}
                 HttpUtil.getBody = function(url)
-                    table.insert(waits, { wrapped = Trapper:isWrapped(), trap_widget = HttpUtil.trap_widget })
+                    table.insert(waits, { wrapped = Trapper:isWrapped(), trap_widget = HttpUtil.getTrapWidget() })
                     return getBody(url)
                 end
 
@@ -327,7 +323,7 @@ describe("Downloader", function()
                     assert.is_true(wait.wrapped)
                     assert.are.equal(progress(), wait.trap_widget)
                 end
-                assert.is_nil(HttpUtil.trap_widget)
+                assert.is_nil(HttpUtil.getTrapWidget())
                 assert.are.equal(1, #spawned)
             end)
 
@@ -341,10 +337,10 @@ describe("Downloader", function()
                 end
 
                 download()
-                assert.are.same({ { ok = false, err = "cancelled" } }, results)
+                assert.are.same({ { ok = false, err = "request cancelled" } }, results)
                 assert.are.equal(0, #spawned)
                 assert.are.same({}, Downloader:getActiveDownloads())
-                assert.is_nil(HttpUtil.trap_widget)
+                assert.is_nil(HttpUtil.getTrapWidget())
                 -- none are dropped, or looked up again
                 HttpUtil.getBody = getBody
                 assert.are.same(mirrors, UrlApi:getLibgenUrls())
@@ -362,9 +358,67 @@ describe("Downloader", function()
                 assert.are.same({ { ok = false, err = "something went wrong, see crash.log" } }, results)
                 assert.is_true(helper.wasClosed(widget.container))
                 assert.are.same({}, Downloader:getActiveDownloads())
-                assert.is_nil(HttpUtil.trap_widget)
+                assert.is_nil(HttpUtil.getTrapWidget())
                 assert.is_truthy(helper.logged("err", "^looking up the download link went wrong:.*unexpected"))
             end)
+        end)
+
+        -- which KOReader would have exited on, leaving curl running and the progress up
+        it("stops the download, and says something went wrong, when checking on it goes wrong", function()
+            download()
+            local widget = progress()
+            CurlUtil.getDownloadSize = function()
+                error("unexpected")
+            end
+            curlWrote(MB / 2)
+            helper.tick()
+
+            assert.are.same({ { ok = false, err = "something went wrong, see crash.log" } }, results)
+            assert.are.same({ 1000 }, killed)
+            assert.is_false(helper.exists(filepath .. ".part"))
+            assert.is_false(helper.exists(spawned[1].headers_file))
+            assert.is_true(helper.wasClosed(widget.container))
+            assert.are.same({}, Downloader:getActiveDownloads())
+            assert.is_truthy(helper.logged("err", "^checking on a download went wrong:.*unexpected"))
+            -- and isn't checked on again
+            assert.are.equal(0, helper.tick())
+        end)
+
+        -- e.g. offering to read it: the book did download
+        it("doesn't say a download failed once it has finished, when what's done with the book goes wrong", function()
+            Downloader:downloadBook(book, filepath, function(ok, err)
+                table.insert(results, { ok = ok, err = err })
+                if ok then
+                    error("unexpected")
+                end
+            end, onOpenExisting)
+            prompts[1].on_download(prompts[1].filepath)
+            curlWrote(MB, 0)
+            helper.tick()
+
+            assert.are.same({ { ok = true } }, results)
+            assert.is_true(helper.exists(filepath))
+            assert.is_truthy(helper.logged("err", "^checking on a download went wrong:.*unexpected"))
+        end)
+
+        -- which was only lost, as Trapper drops what goes wrong once its function has waited on something
+        it("says something went wrong when starting the download goes wrong once its link is found", function()
+            CurlUtil.createHeadersFile = function()
+                error("unexpected")
+            end
+            Downloader:downloadBook(book, filepath, onResult)
+            local widget
+            local show = require("ui.downloadprogress").show
+            require("ui.downloadprogress").show = function(self)
+                widget = self
+                return show(self)
+            end
+            prompts[1].on_download(filepath)
+
+            assert.are.same({ { ok = false, err = "something went wrong, see crash.log" } }, results)
+            assert.is_true(helper.wasClosed(widget.container))
+            assert.are.same({}, Downloader:getActiveDownloads())
+            assert.is_truthy(helper.logged("err", "^starting the download of Dune went wrong:.*unexpected"))
         end)
 
         -- which could be another book entirely, with the same title
@@ -723,15 +777,12 @@ describe("Downloader", function()
         end)
 
         it("fails when curl cannot be started", function()
-            CurlUtil.download = function(_, _, _, background)
-                if background then
-                    return nil, nil, "unable to launch curl"
-                end
-                return true
+            CurlUtil.startDownload = function()
+                return nil, "could not start curl"
             end
 
             download()
-            assert.are.same({ { ok = false, err = "unable to launch curl" } }, results)
+            assert.are.same({ { ok = false, err = "could not start curl" } }, results)
             assert.are.same({}, Downloader:getActiveDownloads())
         end)
 
@@ -852,13 +903,13 @@ describe("Downloader", function()
         it("fails when the proxy retry cannot be started", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"
             download()
-            CurlUtil.download = function()
-                return nil, nil, "unable to launch curl"
+            CurlUtil.startDownload = function()
+                return nil, "could not start curl"
             end
 
             curlWrote(0, 7)
             helper.runScheduled()
-            assert.are.same({ { ok = false, err = "unable to launch curl" } }, results)
+            assert.are.same({ { ok = false, err = "could not start curl" } }, results)
         end)
 
         it("can be cancelled from the progress widget", function()
@@ -869,7 +920,7 @@ describe("Downloader", function()
             helper.runScheduled()
 
             assert.are.same({ spawned[1].pid, spawned[1].pid }, killed)
-            assert.are.same({ { ok = false, err = "cancelled" } }, results)
+            assert.are.same({ { ok = false, err = "request cancelled" } }, results)
             assert.is_false(helper.exists(filepath))
             assert.is_false(helper.exists(filepath .. ".part"))
         end)
@@ -1072,7 +1123,7 @@ describe("Downloader", function()
             assert.are.same({}, Downloader:getActiveDownloads())
 
             helper.runScheduled()
-            assert.are.same({ { ok = false, err = "cancelled" } }, results)
+            assert.are.same({ { ok = false, err = "request cancelled" } }, results)
         end)
     end)
 end)

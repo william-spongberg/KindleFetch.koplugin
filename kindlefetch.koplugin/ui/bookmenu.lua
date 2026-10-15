@@ -21,6 +21,7 @@ local CoverCache = require("cache.covercache")
 local CoverPlaceholder = require("ui.coverplaceholder")
 local KindleFetchSettings = require("settings.settings")
 local LogUtil = require("util.logutil")
+local Guard = require("util.guard")
 local _ = require("gettext")
 
 -- constants
@@ -373,14 +374,16 @@ end
 -- redraw once any of the page's covers has downloaded, or been given up on, even if another search started
 -- downloading it, but not for covers that are all for another page, such as the next one, as covers arrive
 -- several times a page
--- (updateItems refreshes the screen itself, without the flash of a full refresh each time covers arrive)
-function BookMenu:onKindleFetchCoversDownloaded()
+-- (updateItems refreshes the screen itself, without the flash of a full refresh each time covers arrive). KOReader
+-- doesn't catch errors in it, as it does in the plugin's own event handlers, and covers arrive several times a page,
+-- so what goes wrong is only logged (see Guard)
+BookMenu.onKindleFetchCoversDownloaded = Guard.wrap("showing the covers that arrived", function(self)
     for _, book in pairs(self.awaited_covers or {}) do
         if not CoverCache:isComing(book) then
             self:updateItems()
             return
         end
     end
-end
+end, Guard.quiet)
 
 return BookMenu

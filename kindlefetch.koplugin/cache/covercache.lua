@@ -6,6 +6,7 @@ local Event = require("ui/event")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
 local LogUtil = require("util.logutil")
+local Guard = require("util.guard")
 
 local CoverCache = {}
 
@@ -63,7 +64,7 @@ local function removeOrphans()
     end
 
     local orphans = {}
-    for file in lfs.dir(CACHE_DIR) do
+    for _, file in ipairs(FileUtil.listDir(CACHE_DIR) or {}) do
         local id = file:match("^(.+)%.jpg$")
         if id and not downloading[id] and not persistent_cache:get(id) then
             table.insert(orphans, file)
@@ -119,10 +120,8 @@ function CoverCache:clear()
     downloading = {}
     unavailable = {}
     if lfs.attributes(CACHE_DIR, "mode") == "directory" then
-        for file in lfs.dir(CACHE_DIR) do
-            if file ~= "." and file ~= ".." then
-                FileUtil.removeFile(CACHE_DIR .. file)
-            end
+        for _, file in ipairs(FileUtil.listDir(CACHE_DIR) or {}) do
+            FileUtil.removeFile(CACHE_DIR .. file)
         end
     end
 end
@@ -156,10 +155,10 @@ function CoverCache:download(id, url)
     ensureCacheDir()
     local path = self:getPath(id)
 
-    local success = CurlUtil.download(url, path, false, false, COVER_MAX_TIME)
+    local success = CurlUtil.download(url, path, false, COVER_MAX_TIME)
     if not success and hasProxy() then
         LogUtil.debug("retrying cover download through proxy", id)
-        success = CurlUtil.download(url, path, true, false, COVER_MAX_TIME)
+        success = CurlUtil.download(url, path, true, COVER_MAX_TIME)
     end
     if success then
         persistent_cache:set(path, id)
@@ -189,8 +188,11 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_progress
     if not exit_code then
         if CurlUtil.isPidRunning(pid) then
             on_progress(downloadedPaths(CurlUtil.getTransferResults(results_file), filepaths))
-            UIManager:scheduleIn(POLL_INTERVAL, function()
+            -- once something goes wrong, as having none of them (see Guard)
+            Guard.scheduleIn(POLL_INTERVAL, "checking on covers' downloads", function()
                 pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
+            end, function()
+                on_done({})
             end)
             return
         end
@@ -239,15 +241,18 @@ local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs
         return
     end
 
-    UIManager:scheduleIn(POLL_INTERVAL, function()
+    Guard.scheduleIn(POLL_INTERVAL, "checking on covers' downloads", function()
         pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
+    end, function()
+        on_done({})
     end)
 end
 
 -- download missing covers in the background, calling on_done with the number downloaded once finished, and
 -- letting open search results and download prompts know with a KindleFetchCoversDownloaded event, so they
 -- can replace the placeholders: as covers arrive, rather than once the slowest has, and once they've all
--- finished. returns false when there was nothing to download.
+-- finished. returns false when there was nothing to download, and on_done isn't called, otherwise true, though
+-- on_done may have been called already, as when curl couldn't be started.
 function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     ensureCacheDir()
     removeOrphans()

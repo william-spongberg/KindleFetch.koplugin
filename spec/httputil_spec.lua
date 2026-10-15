@@ -58,6 +58,19 @@ describe("HttpUtil", function()
         assert.is_nil(helper.state.http_timeouts)
     end)
 
+    -- e.g. from the TLS library, which KOReader exited on, without its timeouts being put back
+    it("says what went wrong when KOReader's HTTP raises it rather than returning it", function()
+        http.request = function()
+            error("wantread")
+        end
+
+        local body, err = HttpUtil.getBody("https://libgen.example")
+        assert.is_nil(body)
+        assert.matches("wantread", err)
+        assert.is_nil(helper.state.http_timeouts)
+        assert.is_truthy(helper.logged("warn", "^KOReader's HTTP raised an error rather than returning it"))
+    end)
+
     it("returns the HTTP status, e.g. of an error page", function()
         respond({ "<html>Forbidden</html>", 1, 403 })
 
@@ -347,6 +360,32 @@ describe("HttpUtil", function()
             assert.are.equal('cookie = ""\ndata = "email=a%40b.c"\n', config)
         end)
 
+        -- which was said to have been called off, so nothing was said at all, and the password was left in a file
+        it("says when curl couldn't be started, rather than that it was called off", function()
+            local popen = io.popen
+            io.popen = function(cmd, ...)
+                if cmd:find(" -w '%{http_code}'", 1, true) then
+                    return nil
+                end
+                return popen(cmd, ...)
+            end
+            local body, err = HttpUtil.getBody("https://z-lib.example/eapi/user/login", {
+                form = { { "password", "secret" } },
+            })
+            io.popen = popen
+            assert.is_nil(body)
+            assert.are.equal("could not start curl", err)
+            assert.are.same({}, helper.readDir(data_dir .. "/settings/tmp"))
+
+            -- as it does when waiting in the background with a message that wasn't tapped
+            helper.stubs.trapper.wrapped = true
+            HttpUtil.setTrapWidget({ text = "Logging in..." })
+            helper.state.dismiss = true
+            body, err = HttpUtil.getBody("https://z-lib.example/eapi/user/login")
+            assert.is_nil(body)
+            assert.are.equal("could not start curl", err)
+        end)
+
         it("fetches other pages without a file of options", function()
             curlAnswers(function()
                 return "<html>results</html>", 200
@@ -362,7 +401,7 @@ describe("HttpUtil", function()
             before_each(function()
                 helper.stubs.trapper.wrapped = true
                 message = { text = "Searching..." }
-                HttpUtil.trap_widget = message
+                HttpUtil.setTrapWidget(message)
                 curlAnswers(function()
                     return "<html>results</html>", 200
                 end)
@@ -375,8 +414,38 @@ describe("HttpUtil", function()
                 assert.are.equal(fetches[1], helper.state.trapped[1].cmd)
             end)
 
+            -- each search, download and login waits in a coroutine of its own: hiding one download while it looked up
+            -- its link, then starting another, had the second's Cancel call off the first, and once the first was
+            -- over, a tap anywhere call off the second
+            it("calls off each coroutine's requests with its own widget", function()
+                local first_message, second_message = { text = "Finding a download link..." }, { text = "Searching..." }
+                local first = coroutine.create(function()
+                    HttpUtil.setTrapWidget(first_message)
+                    coroutine.yield()
+                    HttpUtil.getBody("https://libgen.example/ads.php")
+                    HttpUtil.setTrapWidget(nil)
+                end)
+                local second = coroutine.create(function()
+                    HttpUtil.setTrapWidget(second_message)
+                    coroutine.yield()
+                    HttpUtil.getBody("https://libgen.example/index.php")
+                    HttpUtil.setTrapWidget(nil)
+                end)
+
+                assert.is_true(coroutine.resume(first))
+                assert.is_true(coroutine.resume(second))
+                assert.is_true(coroutine.resume(first))
+                assert.is_true(coroutine.resume(second))
+                assert.are.equal(first_message, helper.state.trapped[1].trap_widget)
+                assert.are.equal(second_message, helper.state.trapped[2].trap_widget)
+                -- and what's waited for outside them still has the one given there
+                assert.are.equal(message, HttpUtil.getTrapWidget())
+            end)
+
             it("says so when it's called off, without trying again through PROXY_URL", function()
                 helper.state.env.PROXY_URL = "http://proxy.example:8080"
+                -- a tap on its Cancel
+                message.cancelled = true
                 helper.state.dismiss = true
 
                 local body, err, status = HttpUtil.getBody("https://libgen.example")
@@ -429,6 +498,18 @@ describe("HttpUtil", function()
             assert.is_false(helper.exists(path))
         end)
 
+        it("leaves nothing behind when KOReader's HTTP raises what went wrong", function()
+            http.request = function()
+                error("closed")
+            end
+
+            local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
+            assert.is_nil(ok)
+            assert.matches("closed", err)
+            assert.is_false(helper.exists(path))
+            assert.is_nil(helper.state.http_timeouts)
+        end)
+
         -- rather than keeping the page saying what's wrong in place of the file
         it("says that the site's name couldn't be looked up as curl does", function()
             respond({ "", nil, "No address associated with hostname" })
@@ -454,15 +535,15 @@ describe("HttpUtil", function()
             )
             local CurlUtil = require("util.curlutil")
             local download
-            CurlUtil.download = function(url, filepath, use_proxy, background)
-                download = { url, filepath, use_proxy, background }
-                return false, "request timed out"
+            CurlUtil.download = function(url, filepath, use_proxy)
+                download = { url, filepath, use_proxy }
+                return nil, "request timed out"
             end
 
             local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
             assert.is_nil(ok)
             assert.are.equal("request timed out", err)
-            assert.are.same({ "https://github.example/curl-armhf", path, false, false }, download)
+            assert.are.same({ "https://github.example/curl-armhf", path, false }, download)
             assert.are.equal(0, #requests)
         end)
     end)

@@ -54,27 +54,50 @@ end
 function KindleFetchCache:evict(key)
     local entry = self.cache[key]
     self:delete(key)
-    if entry and self.onEvict then
+    if type(entry) == "table" and self.onEvict then
         self.onEvict(key, entry.value)
     end
 end
 
-function KindleFetchCache:removeOldest()
-    local oldest_key
-    local oldest_timestamp
+-- how long ago an entry was stored, in seconds, or nil when that can't be known: it was saved without a time (e.g.
+-- by hand, or by a file that was cut short), or the time is still to come, as the clock has been put back since, as
+-- an e-reader's can be when its battery runs flat. those are taken to have expired, as they may have long ago
+local function age(entry, now)
+    local timestamp = type(entry) == "table" and tonumber(entry.timestamp)
+    if not timestamp or timestamp > now then
+        return nil
+    end
+    return now - timestamp
+end
 
-    -- read through all entries for oldest timestamp
-    for key, entry in pairs(self.cache) do
-        if entry.timestamp then
-            if oldest_timestamp == nil or entry.timestamp < oldest_timestamp then
-                oldest_timestamp = entry.timestamp
-                oldest_key = key
+-- the order each entry was stored in, which, unlike the time it was stored, doesn't go back when the clock does:
+-- covers stored after it had, as the oldest, were pushed out by the next ones
+function KindleFetchCache:lastSeq()
+    if not self.last_seq then
+        self.last_seq = 0
+        for _, entry in pairs(self.cache) do
+            local seq = type(entry) == "table" and tonumber(entry.seq)
+            if seq and seq > self.last_seq then
+                self.last_seq = seq
             end
         end
     end
+    return self.last_seq
+end
 
-    -- delete oldest entry, if exists
-    if oldest_key then
+-- push out the entry stored before the others, those that can't be told apart (stored by older versions, or saved
+-- wrongly) first
+function KindleFetchCache:removeOldest()
+    local oldest_key, oldest_seq, oldest_timestamp
+    for key, entry in pairs(self.cache) do
+        local seq = type(entry) == "table" and tonumber(entry.seq) or 0
+        local timestamp = type(entry) == "table" and tonumber(entry.timestamp) or -math.huge
+        if oldest_key == nil or seq < oldest_seq or (seq == oldest_seq and timestamp < oldest_timestamp) then
+            oldest_key, oldest_seq, oldest_timestamp = key, seq, timestamp
+        end
+    end
+
+    if oldest_key ~= nil then
         self:evict(oldest_key)
     end
 end
@@ -87,7 +110,7 @@ function KindleFetchCache:load()
 
     -- load from cache file if data/file exists
     local file = self:getCacheFile()
-    self.cache = file.data or {}
+    self.cache = type(file.data) == "table" and file.data or {}
 end
 
 function KindleFetchCache:save()
@@ -97,10 +120,15 @@ function KindleFetchCache:save()
     local expiry = self:getExpiry()
     if expiry then
         local now = os.time()
+        local expired = {}
         for key, entry in pairs(self.cache) do
-            if entry.timestamp and now - entry.timestamp > expiry then
-                self:evict(key)
+            local entry_age = age(entry, now)
+            if not entry_age or entry_age > expiry then
+                table.insert(expired, key)
             end
+        end
+        for _, key in ipairs(expired) do
+            self:evict(key)
         end
     end
 
@@ -124,14 +152,14 @@ function KindleFetchCache:get(...)
     LogUtil.debug("checking cache for key:", key)
 
     local entry = self.cache[key]
-    if not entry then
+    if entry == nil then
         return nil
     end
 
-    local age = os.time() - entry.timestamp
+    local entry_age = age(entry, os.time())
     local expiry = self:getExpiry()
-    if expiry and age > expiry then
-        LogUtil.debug("cache expired for key:", key, "age:", age, "seconds")
+    if type(entry) ~= "table" or (expiry and (not entry_age or entry_age > expiry)) then
+        LogUtil.debug("cache expired for key:", key, "age:", entry_age, "seconds")
 
         self:evict(key)
         self:save()
@@ -148,8 +176,10 @@ function KindleFetchCache:put(value, ...)
 
     local key = self.makeKey(...)
 
+    self.last_seq = self:lastSeq() + 1
     self.cache[key] = {
         timestamp = os.time(),
+        seq = self.last_seq,
         value = value,
     }
 
@@ -165,6 +195,7 @@ function KindleFetchCache:clear()
     LogUtil.debug("clearing cache")
 
     self.cache = {}
+    self.last_seq = nil
     self:save()
 end
 
@@ -173,7 +204,7 @@ function KindleFetchCache:deleteValueFromKey(value, ...)
     local key = self.makeKey(...)
     local entry = self.cache[key]
 
-    if not entry then
+    if type(entry) ~= "table" then
         LogUtil.debug("cache key not found:", key)
         return
     end
@@ -207,7 +238,7 @@ end
 function KindleFetchCache:moveValueToFront(value, ...)
     self:load()
     local entry = self.cache[self.makeKey(...)]
-    if not entry or type(entry.value) ~= "table" or entry.value[1] == value then
+    if type(entry) ~= "table" or type(entry.value) ~= "table" or entry.value[1] == value then
         return
     end
 

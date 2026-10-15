@@ -541,13 +541,45 @@ function KindleFetchSettings:load()
     end
 end
 
+-- the type each setting is saved as, besides those with a default, which are saved as the default is
+local TYPES = {
+    last_version = "string",
+    last_update_check = "number",
+    skipped_version = "string",
+    curl_update_declined = "boolean",
+    recent_searches = "table",
+}
+
+-- the strings in a list, leaving out anything else, which a list of languages or searches is never saved with
+local function strings(list)
+    local kept = {}
+    for _, value in ipairs(list) do
+        if type(value) == "string" then
+            table.insert(kept, value)
+        end
+    end
+    return kept
+end
+
 -- util
+-- a setting as it's saved, or its default when it isn't, or is saved as something it can't be (e.g. by hand), which
+-- what reads it would fail on, possibly when KOReader starts, leaving the plugin out of the menu
 function KindleFetchSettings:getSetting(name)
     local settings_file = getSettingsFile()
     local value = settings_file:readSetting(name)
 
     if value == nil then
         return DEFAULTS[name]
+    end
+
+    local expected = DEFAULTS[name] ~= nil and type(DEFAULTS[name]) or TYPES[name]
+    if expected and type(value) ~= expected then
+        LogUtil.warn("ignoring", name, "as it's saved as a", type(value), "rather than a", expected)
+        return DEFAULTS[name]
+    end
+    -- the lists of languages, file types, book types and searches
+    if expected == "table" then
+        return strings(value)
     end
 
     return value

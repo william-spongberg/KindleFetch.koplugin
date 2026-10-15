@@ -415,12 +415,21 @@ describe("CurlUtil", function()
 
     it("builds a download command that saves curl's exit code", function()
         helper.state.env.PROXY_URL = "http://proxy.example:8080"
-        local cmd = CurlUtil.getCMD("https://libgen.example/get.php", "Dune.epub", "exit", true)
+        helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
+        local path = data_dir .. "/Dune.epub"
+        CurlUtil.download("https://libgen.example/get.php", path, true)
+        local cmd = helper.state.executed[#helper.state.executed]
+        local exit_file = cmd:match("echo %$s > '([^']+)'")
 
         assert.are.equal(
-            "(trap 'kill $c 2>/dev/null' TERM; curl -sL -f -o 'Dune.epub' 'https://libgen.example/get.php' --retry 2 "
-                .. "--retry-delay 2 --connect-timeout 15 -x 'http://proxy.example:8080' & c=$!; wait $c; s=$?; "
-                .. "if kill -0 $c 2>/dev/null; then wait $c; s=$?; fi; echo $s > 'exit') >/dev/null 2>&1",
+            "(trap 'kill $c 2>/dev/null' TERM; curl -sL -f -o '"
+                .. path
+                .. "' 'https://libgen.example/get.php' "
+                .. "-A 'Mozilla/5.0' -e 'https://libgen.example/' --retry 2 --retry-delay 2 --connect-timeout 15 "
+                .. "-x 'http://proxy.example:8080' & c=$!; wait $c; s=$?; if kill -0 $c 2>/dev/null; then wait $c; "
+                .. "s=$?; fi; echo $s > '"
+                .. exit_file
+                .. "') >/dev/null 2>&1",
             cmd
         )
     end)
@@ -435,7 +444,7 @@ describe("CurlUtil", function()
         it("downloads the file with retries, a timeout and a browser user agent", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
 
-            assert.is_true(CurlUtil.download("https://libgen.example/get.php?md5=abc", filepath, false, false))
+            assert.is_true(CurlUtil.download("https://libgen.example/get.php?md5=abc", filepath, false))
             assert.are.equal("epub data", helper.readFile(filepath))
 
             local cmd = helper.state.executed[#helper.state.executed]
@@ -450,10 +459,10 @@ describe("CurlUtil", function()
         it("can limit how long the download takes", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("jpeg"))
 
-            CurlUtil.download("https://libgen.example/cover.jpg", filepath, false, false, 10)
+            CurlUtil.download("https://libgen.example/cover.jpg", filepath, false, 10)
             assert.matches("--max-time 10 --retry-max-time 10", helper.state.executed[#helper.state.executed], 1, true)
 
-            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            CurlUtil.download("https://libgen.example/get.php", filepath, false)
             assert.is_nil(helper.state.executed[#helper.state.executed]:find("--max-time", 1, true))
         end)
 
@@ -461,7 +470,7 @@ describe("CurlUtil", function()
         it("has curl note down the headers it's sent when asked to", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
 
-            CurlUtil.download("https://libgen.example/get.php", filepath, false, false, nil, {
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, nil, {
                 headers_file = data_dir .. "/it's headers",
             })
             assert.matches(
@@ -471,35 +480,35 @@ describe("CurlUtil", function()
                 true
             )
 
-            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            CurlUtil.download("https://libgen.example/get.php", filepath, false)
             assert.is_nil(helper.state.executed[#helper.state.executed]:find(" -D ", 1, true))
         end)
 
         it("carries on from what has already downloaded, including when it tries again, when asked to", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
 
-            CurlUtil.download("https://libgen.example/get.php", filepath, false, false, nil, { resume = true })
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, nil, { resume = true })
             assert.matches(" -C - ", helper.state.executed[#helper.state.executed], 1, true)
 
-            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            CurlUtil.download("https://libgen.example/get.php", filepath, false)
             assert.is_nil(helper.state.executed[#helper.state.executed]:find(" -C ", 1, true))
         end)
 
         it("gives up on a download once nothing has arrived for a while, when asked to", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
 
-            CurlUtil.download("https://libgen.example/get.php", filepath, false, false, nil, { stall_time = 30 })
+            CurlUtil.download("https://libgen.example/get.php", filepath, false, nil, { stall_time = 30 })
             assert.matches("--speed-limit 1 --speed-time 30", helper.state.executed[#helper.state.executed], 1, true)
 
-            CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
+            CurlUtil.download("https://libgen.example/get.php", filepath, false)
             assert.is_nil(helper.state.executed[#helper.state.executed]:find("--speed-time", 1, true))
         end)
 
         it("fails and cleans up when curl fails", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("partial", 6))
 
-            local ok, err = CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
-            assert.is_false(ok)
+            local ok, err = CurlUtil.download("https://libgen.example/get.php", filepath, false)
+            assert.is_nil(ok)
             assert.are.equal("could not resolve host", err)
             assert.is_false(helper.exists(filepath))
         end)
@@ -507,8 +516,8 @@ describe("CurlUtil", function()
         it("fails when the download is empty", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl(""))
 
-            local ok, err = CurlUtil.download("https://libgen.example/get.php", filepath, false, false)
-            assert.is_false(ok)
+            local ok, err = CurlUtil.download("https://libgen.example/get.php", filepath, false)
+            assert.is_nil(ok)
             assert.are.equal("download produced empty file", err)
             assert.is_false(helper.exists(filepath))
         end)
@@ -517,14 +526,25 @@ describe("CurlUtil", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"
             helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
 
-            assert.is_true(CurlUtil.download("https://libgen.example/get.php", filepath, true, false))
+            assert.is_true(CurlUtil.download("https://libgen.example/get.php", filepath, true))
             assert.matches("-x 'http://proxy.example:8080'", helper.state.executed[#helper.state.executed], 1, true)
+        end)
+
+        -- which was said to have failed with "(curl exit code nil)"
+        it("says when curl couldn't be started", function()
+            helper.stubExecute("curl -sL -f -o", function()
+                return 127
+            end)
+            local ok, err = CurlUtil.download("https://libgen.example/get.php", filepath, false)
+            assert.is_nil(ok)
+            assert.are.equal("could not start curl", err)
+            assert.are.same({}, helper.readDir(data_dir .. "/settings/tmp"))
         end)
 
         it("runs in the background and returns the curl pid", function()
             helper.stubCommand("& echo $!", "4242\n")
 
-            local pid, exit_file = CurlUtil.download("https://libgen.example/get.php", filepath, false, true)
+            local pid, exit_file = CurlUtil.startDownload("https://libgen.example/get.php", filepath, false)
             assert.are.equal(4242, pid)
             assert.matches(data_dir .. "/settings/tmp/curl_download_", exit_file, 1, true)
         end)
@@ -532,10 +552,9 @@ describe("CurlUtil", function()
         it("reports when the background download cannot start", function()
             helper.stubCommand("& echo $!", "")
 
-            local pid, exit_file, err = CurlUtil.download("https://libgen.example/get.php", filepath, false, true)
+            local pid, err = CurlUtil.startDownload("https://libgen.example/get.php", filepath, false)
             assert.is_nil(pid)
-            assert.is_nil(exit_file)
-            assert.are.equal("unable to determine curl pid", err)
+            assert.are.equal("could not start curl", err)
         end)
     end)
 
@@ -717,12 +736,25 @@ describe("CurlUtil", function()
             assert.matches('output = "' .. paths[2] .. '"', helper.readFile(first_config), 1, true)
         end)
 
+        -- e.g. once the device's storage is full, when KOReader exited on writing it
+        it("doesn't start curl when the list of files to download can't be written", function()
+            helper.writeFile(data_dir .. "/settings/tmp", "not a folder")
+
+            local pid, _, _, err = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
+            assert.is_nil(pid)
+            assert.are.equal("could not write the list of files for curl", err)
+            assert.are.equal(0, CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15))
+            assert.are.same({}, helper.state.popen_calls)
+            assert.is_truthy(helper.logged("warn", "^could not create .*/settings/tmp/ for curl's files"))
+            assert.is_truthy(helper.logged("warn", "^could not write curl's list of files to download"))
+        end)
+
         it("cleans up when the background download cannot start", function()
             helper.stubCommand("& echo $!", "")
 
             local pid, _, _, err = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
             assert.is_nil(pid)
-            assert.are.equal("unable to determine curl pid", err)
+            assert.are.equal("could not start curl", err)
             assert.are.same({}, helper.readDir(data_dir .. "/settings/tmp"))
         end)
     end)

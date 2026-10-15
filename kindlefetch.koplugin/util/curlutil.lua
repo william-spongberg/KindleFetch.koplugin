@@ -3,6 +3,7 @@ local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local VersionUtil = require("util.versionutil")
+local Errors = require("util.errors")
 local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
 local Device = require("device")
@@ -46,7 +47,9 @@ local CURL_ERRORS = {
 }
 
 local function ensureTmpDir()
-    lfs.mkdir(TMP_DIR)
+    if lfs.attributes(TMP_DIR, "mode") ~= "directory" and not lfs.mkdir(TMP_DIR) then
+        LogUtil.warn("could not create", TMP_DIR, "for curl's files")
+    end
 end
 
 -- os.time() is in seconds, and downloads can start within the same second (a book's cover and the book itself),
@@ -66,7 +69,7 @@ function CurlUtil.removeLeftovers()
     end
 
     local leftovers = {}
-    for file in lfs.dir(TMP_DIR) do
+    for _, file in ipairs(FileUtil.listDir(TMP_DIR) or {}) do
         if file:find("^curl_download") then
             table.insert(leftovers, file)
         end
@@ -188,8 +191,7 @@ end
 
 -- what a Kindle's own curl fails with when connecting to Library Genesis, which it's too old to
 local TLS_ERRORS = { [35] = true, [51] = true, [58] = true, [59] = true, [60] = true, [77] = true, [83] = true }
-CurlUtil.OUTDATED_ERROR = "this Kindle's curl is too old to download books. Update it from "
-    .. "Search → Kindle Fetch → Check for updates"
+CurlUtil.OUTDATED_ERROR = Errors.OUTDATED_CURL
 
 -- whether this is a Kindle whose curl is older than the oldest known to connect to Library Genesis
 function CurlUtil.isOutdated()
@@ -299,11 +301,13 @@ function CurlUtil.getProxyFlag(use_proxy)
     return proxy_flag
 end
 
+-- start cmd in the background (see echoPid), returning its pid, or nil and Errors.START_FAILED
 function CurlUtil.spawnCurlPid(cmd)
     -- execute command
     local pipe = io.popen(cmd, "r")
     if not pipe then
-        return nil, "unable to launch curl"
+        LogUtil.warn("could not start a shell to run curl")
+        return nil, Errors.START_FAILED
     end
 
     -- read pid from terminal output
@@ -312,7 +316,8 @@ function CurlUtil.spawnCurlPid(cmd)
 
     local pid = tonumber(pid_str)
     if not pid then
-        return nil, "unable to determine curl pid"
+        LogUtil.warn("curl was started, but its pid wasn't given:", tostring(pid_str))
+        return nil, Errors.START_FAILED
     end
 
     return pid
@@ -470,24 +475,13 @@ function CurlUtil.echoPid(cmd)
     return string.format("%s & echo $!", cmd)
 end
 
-function CurlUtil.getCMD(download_url, filepath, exit_file, use_proxy)
-    local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
-    cmd = CurlUtil.enableRetry(cmd, 2, 2)
-    cmd = CurlUtil.setTimeout(cmd, 15)
-    if use_proxy then
-        cmd = CurlUtil.applyProxy(cmd)
-    end
-    cmd = CurlUtil.saveExitCode(cmd, exit_file)
-
-    return cmd
-end
-
+-- the command that has curl download url to filepath (see download), and the file it saves curl's exit code in.
 -- max_time optionally limits how long each attempt (and retrying) can take, in seconds.
 -- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize),
 -- opts.stall_time gives up on a download once nothing has arrived for that many seconds, and opts.resume has curl
 -- carry on from what's already in filepath, including when it tries again after a download stops partway (where
 -- the site says it can), rather than starting again from the beginning
-function CurlUtil.download(download_url, filepath, use_proxy, background, max_time, opts)
+local function downloadCommand(download_url, filepath, use_proxy, max_time, opts)
     opts = opts or {}
 
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
@@ -515,20 +509,34 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
     cmd = CurlUtil.saveExitCode(cmd, exit_file)
 
     LogUtil.debug("curl download command", cmd)
+    return cmd, exit_file
+end
 
-    if background then
-        cmd = CurlUtil.echoPid(cmd)
-        local pid, err = CurlUtil.spawnCurlPid(cmd, exit_file)
-        if not pid or err then
-            return nil, nil, err
-        end
-
-        return pid, exit_file
+-- download url to filepath in the background (see downloadCommand for the options), returning the pid to follow it
+-- by (see isPidRunning and killPid) and the file its exit code is saved in once it has finished (see getExitCode), or
+-- nil and why it couldn't be started
+function CurlUtil.startDownload(download_url, filepath, use_proxy, max_time, opts)
+    local cmd, exit_file = downloadCommand(download_url, filepath, use_proxy, max_time, opts)
+    local pid, err = CurlUtil.spawnCurlPid(CurlUtil.echoPid(cmd))
+    if not pid then
+        return nil, err
     end
+    return pid, exit_file
+end
 
+-- download url to filepath (see downloadCommand for the options), holding KOReader up until it has. returns true, or
+-- nil and what went wrong, leaving nothing behind
+function CurlUtil.download(download_url, filepath, use_proxy, max_time, opts)
+    local cmd, exit_file = downloadCommand(download_url, filepath, use_proxy, max_time, opts)
     os.execute(cmd)
 
     local exit_code = CurlUtil.getExitCode(exit_file)
+    if not exit_code then
+        LogUtil.warn("could not start curl to download from", LogUtil.site(download_url))
+        FileUtil.removeFile(exit_file)
+        FileUtil.removeFile(filepath)
+        return nil, Errors.START_FAILED
+    end
     if exit_code == 0 then
         local file_size = FileUtil.getSize(filepath)
         if file_size and file_size > 0 then
@@ -540,7 +548,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
         else
             LogUtil.warn("download from", LogUtil.site(download_url), "to", filepath, "produced an empty file")
             FileUtil.removeFile(filepath)
-            return false, "download produced empty file"
+            return nil, "download produced empty file"
         end
     else
         LogUtil.warn(
@@ -553,7 +561,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
             "(" .. CurlUtil.getErrorMeaning(exit_code) .. ")"
         )
         FileUtil.removeFile(filepath)
-        return false, CurlUtil.getErrorMeaning(exit_code)
+        return nil, CurlUtil.getErrorMeaning(exit_code)
     end
 end
 
@@ -571,23 +579,38 @@ function CurlUtil.downloadMultiple(
     opts = opts or {}
     ensureTmpDir()
 
-    local config_file = tmpFile("curl_download_config", ".txt")
-    local f = io.open(config_file, "w")
-
     -- backslashes and quotes mean something inside the quotes of curl's config file
     local function quote(value)
         return (value:gsub("\\", "\\\\"):gsub('"', '\\"'))
     end
+    local lines = {}
     for i, download_url in ipairs(download_urls) do
         -- an address with a line break in it would add lines of its own to the config file, so leave it out
         if StringUtil.isSafeUrl(download_url) and not filepaths[i]:find("%c") then
-            f:write(string.format('url = "%s"\n', quote(download_url)))
-            f:write(string.format('output = "%s"\n', quote(filepaths[i])))
+            table.insert(lines, string.format('url = "%s"\n', quote(download_url)))
+            table.insert(lines, string.format('output = "%s"\n', quote(filepaths[i])))
         else
             LogUtil.warn("left out a download whose address can't be used:", download_url)
         end
     end
-    f:close()
+
+    -- which can't be written when the device's storage is full, or read-only
+    local config_file = tmpFile("curl_download_config", ".txt")
+    local f, open_err = io.open(config_file, "w")
+    local written, write_err = false, open_err
+    if f then
+        written, write_err = f:write(table.concat(lines))
+        local closed, close_err = f:close()
+        written, write_err = written and closed, write_err or close_err
+    end
+    if not written then
+        LogUtil.warn("could not write curl's list of files to download to", config_file .. ":", write_err)
+        FileUtil.removeFile(config_file)
+        if background then
+            return nil, nil, nil, "could not write the list of files for curl"
+        end
+        return 0
+    end
 
     local results_file = CurlUtil.getResultsFile(config_file)
     local cmd = string.format('curl -sL -f --config "%s"', config_file)

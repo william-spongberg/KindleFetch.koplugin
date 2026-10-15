@@ -166,10 +166,17 @@ describe("KindleFetch", function()
             end,
         })
         can_cancel, trap_widgets = true, {}
+        local trap_widget
         helper.stub("util.httputil", {
             CANCELLED = "request cancelled",
             canCancel = function()
                 return can_cancel
+            end,
+            setTrapWidget = function(widget)
+                trap_widget = widget
+            end,
+            getTrapWidget = function()
+                return trap_widget
             end,
         })
         helper.stub("api.lglisearch", {
@@ -177,7 +184,7 @@ describe("KindleFetch", function()
             HAS_BOOK_TYPES = true,
             search = function(_, query, page)
                 table.insert(searches, { query, page })
-                table.insert(trap_widgets, require("util.httputil").trap_widget or false)
+                table.insert(trap_widgets, require("util.httputil").getTrapWidget() or false)
                 -- books, error, the page to carry on from and how many results were read (or a function to run in
                 -- place of the search)
                 local result = search_results[page] or { {} }
@@ -431,6 +438,21 @@ describe("KindleFetch", function()
 
             helper.runScheduled()
             assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
+        end)
+
+        -- which wasn't asked for, so isn't said
+        it("only logs what goes wrong checking for updates", function()
+            helper.stub("updater.curlupdater", {
+                checkVersion = function()
+                    error("unexpected")
+                end,
+            })
+            KindleFetch = dofile("kindlefetch.koplugin/main.lua")
+            openUI()
+            helper.tick()
+
+            assert.is_truthy(helper.logged("err", "^checking for updates went wrong:.*unexpected"))
+            assert.is_nil(helper.lastError())
         end)
 
         it("does not check for updates when automatic checks are turned off", function()
@@ -845,7 +867,7 @@ describe("KindleFetch", function()
                 assert.are.equal(0, #helper.state.notifications)
                 -- it's what calls the search off
                 assert.are.same({ message() }, trap_widgets)
-                assert.is_nil(require("util.httputil").trap_widget)
+                assert.is_nil(require("util.httputil").getTrapWidget())
             end)
 
             it("is called off with the message's Cancel button", function()
@@ -902,6 +924,19 @@ describe("KindleFetch", function()
                 assert.are.same({ false }, trap_widgets)
             end)
 
+            -- which was lost, as Trapper drops what goes wrong once its function has waited on something
+            it("says so when showing the books found goes wrong", function()
+                search_results[1] = { { book("Dune") } }
+                require("ui.bookmenu").new = function()
+                    error("attempt to call a nil value")
+                end
+                search(openUI(), "dune")
+
+                assert.is_true(helper.wasClosed(message()))
+                assert.are.equal("Search failed: something went wrong, see crash.log", helper.lastError())
+                assert.matches("attempt to call a nil value", helper.logged("err", '^searching for "dune" went wrong'))
+            end)
+
             it("says so when the search goes wrong, rather than leaving its message up", function()
                 search_results[1] = function()
                     error("attempt to index a nil value")
@@ -909,7 +944,7 @@ describe("KindleFetch", function()
                 search(openUI(), "dune")
 
                 assert.is_true(helper.wasClosed(message()))
-                assert.is_nil(require("util.httputil").trap_widget)
+                assert.is_nil(require("util.httputil").getTrapWidget())
                 assert.are.equal("Search failed: something went wrong, see crash.log", helper.lastError())
                 assert.matches("attempt to index a nil value", helper.logged("err", '^search for "dune" went wrong'))
             end)
@@ -1225,6 +1260,14 @@ describe("KindleFetch", function()
             assert.are.same({ "dune", 2 }, searches[2])
         end)
 
+        -- which was said to be the end of the results, and Load more taken away
+        it("says loading more failed when the search doesn't say why", function()
+            search_results[2] = { nil }
+            loadMore()
+            assert.are.equal("Loading more books failed: search failed", helper.lastError())
+            assert.are.same({ "Dune", "Dune Messiah", "Load more" }, itemTexts(menus[1]))
+        end)
+
         it("stays on the same page after an error", function()
             search_results[2] = { nil, "request timed out" }
             loadMore()
@@ -1414,7 +1457,7 @@ describe("KindleFetch", function()
 
         it("says a download was cancelled, rather than that it failed", function()
             selectBook("Dune")
-            downloads[1].callback(false, "cancelled")
+            downloads[1].callback(false, "request cancelled")
             assert.are.equal("Download cancelled", helper.lastNotification())
             assert.is_nil(helper.lastError())
         end)

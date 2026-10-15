@@ -208,7 +208,7 @@ function DownloadProgress:cancel()
     self:close()
 
     -- and stop waiting on what was being waited for, such as the download link being looked up. set by
-    -- Trapper:dismissablePopen, when the widget is what calls the wait off (see HttpUtil.trap_widget)
+    -- Trapper:dismissablePopen, when the widget is what calls the wait off (see HttpUtil.setTrapWidget)
     local dismiss = self.dismiss_callback
     self.dismiss_callback = nil
     if dismiss then

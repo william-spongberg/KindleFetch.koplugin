@@ -192,8 +192,10 @@ kindlefetch.koplugin/
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes
 └── util/
     ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
+    ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from
+    ├── guard.lua              # Runs what KOReader runs later (scheduled tasks, Trapper's functions, event handlers), catching errors, logging where they happened and cleaning up
     ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback; posts forms and sends cookies, giving them to curl in a file rather than on its command line; downloads files with curl, or KOReader's own HTTP where curl can't connect
-    ├── fileutil.lua           # File operations (size, creation, deletion, validation) and directory checks
+    ├── fileutil.lua           # File operations (size, reading, writing and deleting files, listing folders) and directory checks
     ├── stringutil.lua         # String utilities (trimming, validation, cleaning titles and file names, HTML entity conversion, checking web addresses)
     ├── logutil.lua            # Logger wrapper
     ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed
@@ -265,6 +267,7 @@ kindlefetch.koplugin/
    - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything. Z-Library's addresses are only taken from the website row of its Wikipedia page, and only those named as its addresses have been (such as z-lib.sk or 1lib.sk), as your password is sent to them when logging in
    - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes
    - Curl exit codes are mapped to human-readable error messages, and what went wrong is shown in a message that stays until it's dismissed
+   - A mistake in Kindle Fetch itself, in what KOReader runs later and doesn't catch errors in (such as checking on a download), is logged to crash.log with where it happened, and stops what was going on, cleaning up after it, rather than KOReader exiting
 
 ### Environment Variables
 

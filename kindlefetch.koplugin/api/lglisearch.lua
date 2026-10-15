@@ -5,6 +5,7 @@ local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
 local UrlApi = require("api.urlapi")
+local Errors = require("util.errors")
 
 -- searches Library Genesis, and finds its books' download links (see Sources)
 local LlgiSearch = {
@@ -33,11 +34,10 @@ local TOPICS = {
     articles = "a",
     standards = "s",
 }
-local BLOCKED_ERROR = "Library Genesis is blocking automated searches right now, try again later"
-local BUSY_ERROR = "Library Genesis is too busy to send books right now, try again in a few minutes"
-local BUSY_SEARCH_ERROR = "Library Genesis is too busy to search right now, try again in a few minutes"
-local UNFOUND_ERROR = "none of Library Genesis' sites can be found on this network, which may be blocking them. Try "
-    .. "another Wi-Fi network or DNS server"
+local BLOCKED_ERROR = Errors.BLOCKED
+local BUSY_ERROR = Errors.BUSY
+local BUSY_SEARCH_ERROR = Errors.BUSY_SEARCH
+local UNFOUND_ERROR = Errors.UNFOUND
 
 local function stripTags(html)
     return StringUtil.trim(StringUtil.collapseWhitespace(html:gsub("<[^>]+>", " ")))
@@ -390,10 +390,22 @@ function LlgiSearch:search(query, page)
         local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types))
         if not html then
             -- show the books found so far, carrying on from the page that failed, or that the search was called off
-            -- on, rather than throwing away what earlier pages found
-            if #books > 0 then
+            -- on, rather than throwing away what earlier pages found. that may be none, but how many results they
+            -- read is kept too, to say none were in the languages and file types chosen and keep searching from the
+            -- page that failed, rather than that the search failed (unless it was called off, which isn't said)
+            if #books > 0 or (results_read > 0 and err ~= HttpUtil.CANCELLED) then
                 if err == HttpUtil.CANCELLED then
                     LogUtil.info("search called off on page", next_page, "so showing the", #books, "books found before")
+                else
+                    LogUtil.warn(
+                        string.format(
+                            "page %d of the search failed (%s), so showing the %d books found in the %d results before",
+                            next_page,
+                            tostring(err),
+                            #books,
+                            results_read
+                        )
+                    )
                 end
                 break
             end

@@ -329,6 +329,20 @@ describe("BookMenu", function()
             menu:onKindleFetchCoversDownloaded()
             assert.are.equal(2, #helper.state.refreshes)
         end)
+
+        -- KOReader doesn't catch errors in it, and covers arrive several times a page
+        it("only logs what goes wrong redrawing", function()
+            local menu = newMenu(11)
+            menu:updateItems()
+            cacheCover("book-2")
+            menu.updateItems = function()
+                error("unexpected")
+            end
+
+            assert.is_nil(menu:onKindleFetchCoversDownloaded())
+            assert.is_truthy(helper.logged("err", "^showing the covers that arrived went wrong:.*unexpected"))
+            assert.is_nil(helper.lastError())
+        end)
     end)
 
     describe("loadCoversForPage", function()

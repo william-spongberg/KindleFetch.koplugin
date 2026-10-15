@@ -33,7 +33,7 @@ describe("KindleFetchCache", function()
 
     it("saves entries to its settings file", function()
         newCache():set("value", "key")
-        assert.are.same({ key = { timestamp = 1000000, value = "value" } }, cacheFile())
+        assert.are.same({ key = { timestamp = 1000000, seq = 1, value = "value" } }, cacheFile())
     end)
 
     it("loads entries saved by an earlier session", function()
@@ -100,6 +100,54 @@ describe("KindleFetchCache", function()
         assert.is_nil(cache:get("a"))
         assert.are.equal("second", cache:get("b"))
         assert.are.equal("third", cache:get("c"))
+    end)
+
+    -- e.g. saved by hand, or by a file that was cut short, which raised an error
+    it("takes an entry saved without a time to have expired", function()
+        helper.state.settings_files[data_dir .. "/settings/test_cache.lua"] = {
+            key = { value = "value" },
+            broken = "value",
+        }
+        local cache = newCache { expiry = 60 }
+        assert.is_nil(cache:get("key"))
+        assert.is_nil(cache:get("broken"))
+        assert.are.same({}, cacheFile())
+    end)
+
+    -- which never happened, as no entry without a time was the oldest
+    it("makes room by dropping the entries saved without a time first", function()
+        helper.state.settings_files[data_dir .. "/settings/test_cache.lua"] = {
+            a = { value = "first" },
+            b = 5,
+        }
+        local cache = newCache { max_entries = 1 }
+        cache:set("third", "c")
+        assert.are.equal(1, cache:count())
+        assert.are.equal("third", cache:get("c"))
+    end)
+
+    -- as an e-reader's can be when its battery runs flat: what was stored after that would have expired as it was
+    -- stored, or been the first to be pushed out
+    describe("once the clock has been put back", function()
+        it("takes what was stored before to have expired, as how long ago can't be known", function()
+            local cache = newCache { expiry = 60 }
+            cache:set("value", "key")
+            helper.state.time = 1000000 - 365 * 24 * 60 * 60
+            assert.is_nil(cache:get("key"))
+        end)
+
+        it("still pushes out what was stored first", function()
+            local cache = newCache { max_entries = 2 }
+            cache:set("first", "a")
+            helper.state.time = 500
+            cache:set("second", "b")
+            helper.state.time = 501
+            cache:set("third", "c")
+
+            assert.is_nil(cache:get("a"))
+            assert.are.equal("second", cache:get("b"))
+            assert.are.equal("third", cache:get("c"))
+        end)
     end)
 
     describe("with an owner to tell about the entries it drops", function()

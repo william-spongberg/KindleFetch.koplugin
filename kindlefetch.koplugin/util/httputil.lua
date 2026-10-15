@@ -6,14 +6,12 @@ local Trapper = require("ui/trapper")
 local CurlUtil = require("util.curlutil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
+local Errors = require("util.errors")
 
 local HttpUtil = {}
 
--- the error when a request was called off, by a tap on trap_widget
-HttpUtil.CANCELLED = "request cancelled"
--- a widget on screen that calls off the request being waited for when tapped, such as a message saying what's
--- being waited for. set by whoever started the requests from inside Trapper:wrap, and cleared by them after
-HttpUtil.trap_widget = nil
+-- the error when a request was called off, by a tap on the trap widget (see setTrapWidget)
+HttpUtil.CANCELLED = Errors.CANCELLED
 -- the error when a site's name couldn't be looked up, as when the network blocks the site: curl's, which what
 -- KOReader's own HTTP says for it is turned into (see explainFailure)
 HttpUtil.UNRESOLVED = CurlUtil.getErrorMeaning(6)
@@ -45,9 +43,37 @@ local function explainFailure(err)
     return err
 end
 
--- whether requests made from inside Trapper:wrap can be called off (see trap_widget), which those made with curl can
+-- luasocket's http.request, which returns what went wrong, but can raise it instead, e.g. from the TLS library, which
+-- KOReader would exit on, without its timeouts being put back
+local function request(options)
+    local requested, ok, status, headers = pcall(http.request, options)
+    if not requested then
+        LogUtil.warn("KOReader's HTTP raised an error rather than returning it:", tostring(ok))
+        return nil, ok
+    end
+    return ok, status, headers
+end
+
+-- whether requests made from inside Trapper:wrap can be called off (see setTrapWidget), which those made with curl can
 function HttpUtil.canCancel()
     return CurlUtil.canFetch()
+end
+
+-- the widget on screen that calls off the requests being waited for when tapped, such as a message saying what's
+-- being waited for, for each of the coroutines Trapper runs searches, downloads and logins in, as several can be
+-- waiting at once: one search's Cancel called off another's download (keyed by the coroutine, or MAIN outside one)
+local trap_widgets = setmetatable({}, { __mode = "k" })
+local MAIN = {}
+
+-- set the widget that calls off the requests made from here on in the coroutine this is called from, or nil once
+-- they're over. set by whoever made them from inside Trapper:wrap
+function HttpUtil.setTrapWidget(widget)
+    trap_widgets[coroutine.running() or MAIN] = widget
+end
+
+-- the widget that calls off the requests made in the coroutine this is called from (see setTrapWidget)
+function HttpUtil.getTrapWidget()
+    return trap_widgets[coroutine.running() or MAIN]
 end
 
 -- the fields of a form, as a list of each one's name and value, as they're sent
@@ -85,8 +111,9 @@ local function requestBodyWithCurl(request_url, use_proxy, opts)
     local cmd = CurlUtil.fetchCommand(request_url, page_file, use_proxy, ANSWER_TIMEOUT, PAGE_TIMEOUT, config_file)
 
     local completed, output
+    local trap_widget = HttpUtil.getTrapWidget()
     if Trapper:isWrapped() then
-        completed, output = Trapper:dismissablePopen(cmd, HttpUtil.trap_widget)
+        completed, output = Trapper:dismissablePopen(cmd, trap_widget)
     else
         local pipe = io.popen(cmd, "r")
         if pipe then
@@ -95,9 +122,17 @@ local function requestBodyWithCurl(request_url, use_proxy, opts)
         end
     end
     if not completed then
-        -- curl carries on until it has finished or timed out. what it leaves behind is removed when KOReader
-        -- next starts
-        return nil, HttpUtil.CANCELLED
+        -- called off by a tap on the widget's Cancel, which marks it cancelled (see WaitingMessage and
+        -- DownloadProgress), or without one, a tap anywhere. curl carries on until it has finished or timed out, and
+        -- what it leaves behind is removed when KOReader next starts
+        if Trapper:isWrapped() and (not trap_widget or trap_widget.cancelled) then
+            return nil, HttpUtil.CANCELLED
+        end
+        -- or the shell that runs curl couldn't be started, which isn't the same, and isn't to be passed over
+        LogUtil.warn("could not start curl to fetch", LogUtil.site(request_url))
+        FileUtil.removeFile(page_file)
+        FileUtil.removeFile(config_file)
+        return nil, Errors.START_FAILED
     end
 
     local body = FileUtil.readFile(page_file)
@@ -153,7 +188,7 @@ function HttpUtil.requestBody(request_url, proxy_url, opts)
         if cookies and cookies ~= "" then
             request_headers["Cookie"] = cookies
         end
-        ok, status, headers = http.request {
+        ok, status, headers = request {
             url = url,
             method = form_body and "POST" or "GET",
             source = form_body and ltn12.source.string(form_body),
@@ -231,7 +266,7 @@ local function downloadWithKOReader(url, path)
     end
 
     socketutil:set_timeout(ANSWER_TIMEOUT, FILE_TIMEOUT)
-    local ok, status = http.request {
+    local ok, status = request {
         url = url,
         headers = {
             ["User-Agent"] = "Mozilla/5.0",
@@ -264,7 +299,7 @@ function HttpUtil.downloadFile(url, path)
     if not CurlUtil.canFetch() then
         return downloadWithKOReader(url, path)
     end
-    local ok, err = CurlUtil.download(url, path, false, false)
+    local ok, err = CurlUtil.download(url, path, false)
     if not ok then
         return nil, err
     end

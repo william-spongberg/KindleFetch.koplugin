@@ -36,6 +36,20 @@ describe("CoverCache", function()
         CoverCache:clear()
     end)
 
+    -- which lfs.dir raises, and KOReader would exit on
+    it("carries on when its folder can't be read", function()
+        fixtures.cacheCover(helper, "abc")
+        helper.stubs.lfs.dir = function(path)
+            error("cannot open " .. path .. ": Permission denied")
+        end
+        CoverCache:clear()
+        CurlUtil.downloadMultiple = function()
+            return nil, nil, nil, "unable to launch curl"
+        end
+        assert.is_true(CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6))
+        assert.is_true(CurlUtil.removeLeftovers() == nil)
+    end)
+
     it("stores covers by book id", function()
         assert.are.equal(covers_dir .. "abc.jpg", CoverCache:getPath("abc"))
         assert.is_true(helper.isDir(covers_dir))
@@ -43,7 +57,7 @@ describe("CoverCache", function()
 
     describe("download", function()
         it("downloads and remembers a cover", function()
-            CurlUtil.download = function(url, path, use_proxy, background, max_time)
+            CurlUtil.download = function(url, path, use_proxy, max_time)
                 assert.are.equal("https://covers.example/abc.jpg", url)
                 -- the download prompt waits for the cover, so a stalled one mustn't hold it up
                 assert.are.equal(10, max_time)
@@ -65,7 +79,7 @@ describe("CoverCache", function()
                     helper.writeFile(path, "jpeg")
                     return true
                 end
-                return false, "TLS/SSL connection failed"
+                return nil, "TLS/SSL connection failed"
             end
 
             assert.are.equal(covers_dir .. "abc.jpg", CoverCache:download("abc", "https://covers.example/abc.jpg"))
@@ -77,7 +91,7 @@ describe("CoverCache", function()
             local attempts = 0
             CurlUtil.download = function()
                 attempts = attempts + 1
-                return false, "TLS/SSL connection failed"
+                return nil, "TLS/SSL connection failed"
             end
 
             assert.is_nil(CoverCache:download("abc", "https://covers.example/abc.jpg"))
@@ -86,7 +100,7 @@ describe("CoverCache", function()
 
         it("returns nil when the download fails", function()
             CurlUtil.download = function()
-                return false, "HTTP error response"
+                return nil, "HTTP error response"
             end
 
             assert.is_nil(CoverCache:download("abc", "https://covers.example/abc.jpg"))
@@ -148,6 +162,20 @@ describe("CoverCache", function()
             assert.is_nil(CoverCache:get("abc"))
             assert.is_nil(helper.state.settings_files[data_dir .. "/settings/kindlefetch_covercache.lua"].abc)
         end)
+    end)
+
+    -- which KOReader exited on, with every cover on the page left waiting for
+    it("takes the placeholders away when the covers can't be downloaded, as the device's storage is full", function()
+        local results = {}
+        local covers = { book("a", "https://covers.example/a.jpg") }
+        helper.writeFile(data_dir .. "/settings/tmp", "not a folder")
+
+        assert.is_true(CoverCache:downloadMultiple(covers, 6, function(count)
+            table.insert(results, count)
+        end))
+        assert.are.same({ 0 }, results)
+        assert.is_false(CoverCache:isComing(covers[1]))
+        assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
     end)
 
     describe("downloadMultiple", function()
@@ -482,6 +510,22 @@ describe("CoverCache", function()
             helper.runScheduled()
 
             assert.are.same({ 0 }, results)
+        end)
+
+        -- which KOReader would have exited on, rather than taking the placeholders away
+        it("gives up on the covers when checking on them goes wrong", function()
+            CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone)
+            CurlUtil.getExitCode = function()
+                error("unexpected")
+            end
+            helper.runScheduled()
+
+            assert.are.same({ 0 }, results)
+            assert.is_false(CoverCache:isComing(book("a", "https://covers.example/a.jpg")))
+            assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
+            assert.is_truthy(helper.logged("err", "^checking on covers' downloads went wrong:.*unexpected"))
+            -- placeholders are all that would say so
+            assert.is_nil(helper.lastError())
         end)
 
         it("reports nothing downloaded when curl cannot be started", function()

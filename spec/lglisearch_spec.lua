@@ -459,6 +459,19 @@ describe("LlgiSearch", function()
                 assert.are.equal(2, next_page)
             end)
 
+            -- which was said to have failed, though the pages before had results, only none to show, so Keep
+            -- searching can carry on from the page that failed
+            it("says how many results it read when a later page fails before any books to show were found", function()
+                results(mirrors[1], fullPage(1, 0), 1, 10)
+
+                local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
+                assert.are.same({}, books)
+                assert.is_nil(err)
+                assert.are.equal(2, next_page)
+                assert.are.equal(25, results_read)
+                assert.is_truthy(helper.logged("warn", "^page 2 of the search failed %(.*%), so showing the 0 books"))
+            end)
+
             -- by a tap on the message saying that it's searching, see HttpUtil
             describe("called off", function()
                 local HttpUtil
@@ -497,6 +510,16 @@ describe("LlgiSearch", function()
                     assert.are.equal(3, #books)
                     assert.are.equal(2, next_page)
                     assert.is_truthy(helper.logged("info", "^search called off on page 2 so showing the 3 books"))
+                end)
+
+                -- rather than saying none of the results read were in the languages and file types chosen
+                it("says nothing more when no books to show had been found yet", function()
+                    results(mirrors[1], fullPage(1, 0), 1, 10)
+                    callOffAt("&page=2")
+
+                    local books, err = LlgiSearch:search("dune", 1)
+                    assert.is_nil(books)
+                    assert.are.equal(HttpUtil.CANCELLED, err)
                 end)
 
                 it("stops while the mirrors are being looked up, rather than taking it for being offline", function()

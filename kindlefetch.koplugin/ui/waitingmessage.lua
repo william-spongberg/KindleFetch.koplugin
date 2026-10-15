@@ -7,7 +7,7 @@ local _ = require("gettext")
 local WaitingMessage = {}
 
 -- a message saying what's being waited for, with a Cancel button where the wait can be called off (see
--- HttpUtil.trap_widget), rather than any tap calling it off, as a tap may have been meant for something else. once
+-- HttpUtil.setTrapWidget), rather than any tap calling it off, as a tap may have been meant for something else. once
 -- Cancel has been tapped, the message's cancelled is set
 function WaitingMessage.new(text)
     if not HttpUtil.canCancel() then
