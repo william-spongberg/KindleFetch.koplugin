@@ -1,5 +1,7 @@
 local UIManager = require("ui/uimanager")
 local NetworkMgr = require("ui/network/manager")
+local Device = require("device")
+local PluginShare = require("pluginshare")
 local Trapper = require("ui/trapper")
 local ConfirmBox = require("ui/widget/confirmbox")
 local LogUtil = require("util.logutil")
@@ -17,6 +19,8 @@ local _ = require("gettext")
 -- downloads books from the site they were found on (see Sources), in the background
 local Downloader = {}
 Downloader.active_downloads = {}
+-- how many downloads have been started this session, to list them in the order they were (see getActiveDownloads)
+local downloads_started = 0
 
 -- constants
 local DOWNLOAD_POLL_INTERVAL = 0.5
@@ -32,6 +36,59 @@ local SERVER_FAILURES = { [6] = true, [7] = true, [28] = true, [52] = true, [56]
 local function hasProxy()
     local proxy_url = os.getenv("PROXY_URL")
     return proxy_url ~= nil and proxy_url ~= ""
+end
+
+-- keep the device from going to sleep while books are downloading, as that turns Wi-Fi off and stops them: no
+-- standby between taps (where KOReader has it), and no suspending once it hasn't been used for a while, by KOReader's
+-- AutoSuspend, or on a Kindle, its own screensaver. each is put back as it was once the last download is over (unless
+-- something else, such as AutoTurn or Keep alive, has changed it since, which is left to it)
+local awake
+local function keepAwake()
+    if awake then
+        return
+    end
+    awake = { pause_auto_suspend = PluginShare.pause_auto_suspend }
+    if UIManager.preventStandby then
+        UIManager:preventStandby()
+    end
+    PluginShare.pause_auto_suspend = true
+    if Device:isKindle() and not PluginShare.keepalive then
+        os.execute("lipc-set-prop com.lab126.powerd preventScreenSaver 1")
+        awake.screensaver_prevented = true
+    end
+    LogUtil.info("keeping the device awake while books download")
+end
+local function allowSleep()
+    if not awake then
+        return
+    end
+    if UIManager.allowStandby then
+        UIManager:allowStandby()
+    end
+    if PluginShare.pause_auto_suspend == true then
+        PluginShare.pause_auto_suspend = awake.pause_auto_suspend
+    end
+    if awake.screensaver_prevented and not PluginShare.keepalive then
+        os.execute("lipc-set-prop com.lab126.powerd preventScreenSaver 0")
+    end
+    awake = nil
+    LogUtil.info("letting the device sleep again, as no books are downloading")
+end
+
+-- follow a download from when it's started (see active_downloads), keeping the device awake while there are any
+function Downloader:track(id, download)
+    downloads_started = downloads_started + 1
+    download.order = downloads_started
+    self.active_downloads[id] = download
+    keepAwake()
+end
+
+-- stop following a download once it's over, letting the device sleep again once none are left
+function Downloader:untrack(id)
+    self.active_downloads[id] = nil
+    if next(self.active_downloads) == nil then
+        allowSleep()
+    end
 end
 
 -- start curl downloading the book in the background, as transfer says (see _startDownload), returning whether it
@@ -265,14 +322,14 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     UIManager:forceRePaint()
 
     -- track this download
-    Downloader.active_downloads[book.id] = {
+    Downloader:track(book.id, {
         book = book,
         filepath = filepath,
         part_path = part_path,
         progress_widget = progress_widget,
         callback = callback,
         started = os.time(),
-    }
+    })
 
     -- look the link up without holding KOReader up (where pages are fetched with curl, see HttpUtil), as it can
     -- mean trying several mirrors, and let Cancel call it off. an error is passed on, rather than left to Trapper,
@@ -288,7 +345,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
 
     if not download_url then
         progress_widget:close()
-        Downloader.active_downloads[book.id] = nil
+        Downloader:untrack(book.id)
 
         if lookup_err == HttpUtil.CANCELLED then
             LogUtil.info(string.format("download of %q cancelled while looking up its link", book.title))
@@ -321,14 +378,14 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         FileUtil.removeFile(part_path)
         FileUtil.removeFile(headers_file)
         progress_widget:close()
-        Downloader.active_downloads[book.id] = nil
+        Downloader:untrack(book.id)
         callback(false, err)
     end
     Downloader.active_downloads[book.id].transfer = transfer
     transfer.on_finish = function(ok, err)
         transfer.finished = true
         progress_widget:close()
-        Downloader.active_downloads[book.id] = nil -- cleanup after download finishes
+        Downloader:untrack(book.id)
         FileUtil.removeFile(headers_file)
         if ok and not os.rename(part_path, filepath) then
             LogUtil.warn("could not move the downloaded book from", part_path, "to", filepath)
@@ -343,7 +400,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     if source.NEW_LINK_WHEN_SERVER_FAILS and not retrying then
         transfer.relink = function()
             progress_widget:close()
-            Downloader.active_downloads[book.id] = nil
+            Downloader:untrack(book.id)
             FileUtil.removeFile(headers_file)
             FileUtil.removeFile(part_path)
             UIManager:forceRePaint()
@@ -362,7 +419,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         LogUtil.warn("could not start curl to download:", spawn_err)
         FileUtil.removeFile(headers_file)
         progress_widget:close()
-        Downloader.active_downloads[book.id] = nil
+        Downloader:untrack(book.id)
         callback(false, spawn_err or "failed to spawn curl downloader")
         return
     end
@@ -387,7 +444,7 @@ function Downloader:_startDownloadInBackground(book, filepath, callback, retryin
         end
         if download then
             download.progress_widget:close()
-            Downloader.active_downloads[book.id] = nil
+            Downloader:untrack(book.id)
         end
         callback(false, err)
     end))
@@ -471,12 +528,12 @@ function Downloader:getActiveDownloads()
             title = download_info.book.display_title or download_info.book.title,
             filepath = download_info.filepath,
             widget = download_info.progress_widget,
-            started = download_info.started,
+            order = download_info.order or 0,
         })
     end
     table.sort(downloads, function(a, b)
-        if a.started ~= b.started then
-            return a.started < b.started
+        if a.order ~= b.order then
+            return a.order < b.order
         end
         return a.title < b.title
     end)
@@ -491,6 +548,7 @@ function Downloader:cancelAllDownloads()
         FileUtil.removeFile(download_info.headers_file)
     end
     self.active_downloads = {}
+    allowSleep()
 end
 
 return Downloader

@@ -1059,6 +1059,102 @@ describe("Downloader", function()
         end)
     end)
 
+    -- as going to sleep turns Wi-Fi off, which stopped the download
+    describe("keeping the device awake", function()
+        local PluginShare
+
+        before_each(function()
+            PluginShare = require("pluginshare")
+        end)
+
+        it("while a book downloads, letting it sleep again once it has", function()
+            download()
+            assert.are.equal(1, helper.state.standby_prevented)
+            assert.is_true(PluginShare.pause_auto_suspend)
+            assert.are.same({ "lipc-set-prop com.lab126.powerd preventScreenSaver 1" }, helper.state.lipc)
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
+            assert.are.equal(0, helper.state.standby_prevented)
+            assert.is_nil(PluginShare.pause_auto_suspend)
+            assert.are.equal("lipc-set-prop com.lab126.powerd preventScreenSaver 0", helper.state.lipc[2])
+        end)
+
+        it("until every book has downloaded", function()
+            download()
+            local first = book
+            book = {
+                source = "libgen",
+                id = fixtures.DUNE.md5:gsub("^.", "f"),
+                title = "Dune Messiah",
+                file_type = "epub",
+            }
+            hasBook(mirrors[1])
+            filepath = data_dir .. "/Dune Messiah.epub"
+            download()
+            assert.are.equal(2, #spawned)
+            assert.are.equal(1, helper.state.standby_prevented)
+            assert.are.equal(1, #helper.state.lipc)
+
+            curlWrote(MB, 0)
+            helper.tick()
+            assert.are.equal(1, helper.state.standby_prevented)
+            assert.is_not_nil(Downloader.active_downloads[first.id])
+        end)
+
+        it("putting auto-suspend back as it was, unless something else has changed it since", function()
+            PluginShare.pause_auto_suspend = false
+            download()
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.is_false(PluginShare.pause_auto_suspend)
+
+            -- e.g. AutoTurn, which was turned off meanwhile
+            PluginShare.pause_auto_suspend = nil
+            download()
+            PluginShare.pause_auto_suspend = false
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.is_false(PluginShare.pause_auto_suspend)
+        end)
+
+        it("leaving a Kindle's screensaver to Keep alive, when that's keeping it awake", function()
+            PluginShare.keepalive = true
+            download()
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({}, helper.state.lipc)
+        end)
+
+        it("only holding off a Kindle's own screensaver on a Kindle", function()
+            helper.stubs.device.kindle = false
+            download()
+            assert.are.equal(1, helper.state.standby_prevented)
+            assert.are.same({}, helper.state.lipc)
+        end)
+
+        it("letting it sleep again however downloads end", function()
+            -- no link
+            web.pages[adsUrl(mirrors[1])] = "<html>nothing</html>"
+            download()
+            assert.are.equal(0, helper.state.standby_prevented)
+
+            -- cancelled
+            hasBook(mirrors[1])
+            download()
+            progress().cancel_button.callback()
+            helper.runScheduled()
+            assert.are.equal(0, helper.state.standby_prevented)
+
+            -- all cancelled at once, as when KOReader closes
+            download()
+            Downloader:cancelAllDownloads()
+            assert.are.equal(0, helper.state.standby_prevented)
+            assert.is_nil(PluginShare.pause_auto_suspend)
+        end)
+    end)
+
     describe("active downloads", function()
         it("lists downloads in progress", function()
             download()
@@ -1071,16 +1167,17 @@ describe("Downloader", function()
             assert.are.equal(progress(), downloads[1].widget)
         end)
 
+        -- even once the clock has been put back, as an e-reader's can be when its battery runs flat
         it("are listed in the order they were started", function()
             helper.state.time = 3000
-            download()
             for i, title in ipairs({ "Zebra", "Apple" }) do
-                Downloader.active_downloads["other" .. i] = {
+                Downloader:track("other" .. i, {
                     book = { id = "other" .. i, title = title },
                     progress_widget = {},
-                    started = 1000 + (title == "Zebra" and 0 or 1000),
-                }
+                })
+                helper.state.time = helper.state.time - 1000
             end
+            download()
 
             local titles = {}
             for _, active_download in ipairs(Downloader:getActiveDownloads()) do
