@@ -255,6 +255,63 @@ describe("HttpUtil", function()
             )
         end)
 
+        -- which a curl built without TLS, or too old for a site's, can't, and KOReader's own HTTP was never tried
+        describe("when curl can't connect securely", function()
+            before_each(function()
+                curlAnswers(function()
+                    return nil, nil, 35
+                end)
+            end)
+
+            it("fetches the page with KOReader's own HTTP instead", function()
+                respond({ "<html>results</html>", 1, 200 })
+                local body, err, status = HttpUtil.getBody("https://libgen.example")
+                assert.are.equal("<html>results</html>", body)
+                assert.is_nil(err)
+                assert.are.equal(200, status)
+                assert.are.equal(1, #fetches)
+                assert.are.equal(1, #requests)
+                assert.is_truthy(helper.logged("warn", "^curl couldn't connect to libgen.example securely"))
+            end)
+
+            it("says curl's error when KOReader's own HTTP can't either", function()
+                respond({ "", nil, "certificate verify failed" })
+                local body, err = HttpUtil.getBody("https://libgen.example")
+                assert.is_nil(body)
+                assert.are.equal("TLS/SSL connection failed", err)
+            end)
+
+            -- rather than after the first, as one site's certificate can have expired, which KOReader's HTTP may not
+            -- check, so curl would be given up on when it works
+            it("fetches pages with KOReader's own HTTP from then on, once curl couldn't 3 times in a row", function()
+                for i = 1, 3 do
+                    respond({ "<html>page " .. i .. "</html>", 1, 200 })
+                    HttpUtil.getBody("https://libgen.example/" .. i)
+                end
+                assert.is_false(require("util.curlutil").canFetch())
+                respond({ "<html>page 4</html>", 1, 200 })
+                HttpUtil.getBody("https://libgen.example/4")
+                assert.are.equal(3, #fetches)
+            end)
+
+            it("keeps fetching pages with curl when it connects in between", function()
+                for i = 1, 4 do
+                    if i == 3 then
+                        curlAnswers(function()
+                            return "<html>curl</html>", 200, 0
+                        end)
+                    else
+                        curlAnswers(function()
+                            return nil, nil, 35
+                        end)
+                    end
+                    respond({ "<html>page " .. i .. "</html>", 1, 200 })
+                    HttpUtil.getBody("https://libgen.example/" .. i)
+                end
+                assert.is_true(require("util.curlutil").canFetch())
+            end)
+        end)
+
         it("fetches the page with curl rather than luasocket, within the same time limits", function()
             curlAnswers(function()
                 return "<html>results</html>\n", 200

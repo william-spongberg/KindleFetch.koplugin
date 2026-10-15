@@ -205,12 +205,8 @@ local function setCookie(headers)
     return type(set_cookie) == "string" and set_cookie:match("^%s*([^;,%s]+=[^;,]*)") or nil
 end
 
-function HttpUtil.requestBody(request_url, proxy_url, opts)
-    opts = opts or {}
-    if CurlUtil.canFetch() then
-        return requestBodyWithCurl(request_url, proxy_url ~= nil, opts)
-    end
-
+-- fetch a page with KOReader's own HTTP, which holds KOReader up until it has
+local function requestBodyWithKOReader(request_url, proxy_url, opts)
     -- set through KOReader, as https requests ignore luasocket's own timeout and wait a minute instead
     socketutil:set_timeout(ANSWER_TIMEOUT, PAGE_TIMEOUT)
 
@@ -262,6 +258,46 @@ function HttpUtil.requestBody(request_url, proxy_url, opts)
     end
 
     return body, nil, status
+end
+
+-- how many pages in a row curl couldn't connect to securely, where KOReader's own HTTP could, after which pages are
+-- fetched with KOReader's own HTTP for the rest of the session (see CurlUtil.stopFetching): not after only one, as a
+-- mirror's certificate can have expired, which KOReader's HTTP may not check
+local TLS_FALLBACKS = 3
+local tls_fallbacks = 0
+
+function HttpUtil.requestBody(request_url, proxy_url, opts)
+    opts = opts or {}
+    if not CurlUtil.canFetch() then
+        return requestBodyWithKOReader(request_url, proxy_url, opts)
+    end
+
+    local body, err, status = requestBodyWithCurl(request_url, proxy_url ~= nil, opts)
+    if body or not CurlUtil.isTlsFailure(err) then
+        if body then
+            tls_fallbacks = 0
+        end
+        return body, err, status
+    end
+    -- curl couldn't make a secure connection, which a curl built without TLS, or too old for the site's, can't, so
+    -- KOReader's own HTTP fetches it instead, where it can, which was never tried
+    LogUtil.warn(
+        "curl couldn't connect to",
+        LogUtil.site(request_url),
+        "securely:",
+        err .. ", so trying KOReader's own HTTP"
+    )
+    local fetched, fetch_err, fetch_status = requestBodyWithKOReader(request_url, proxy_url, opts)
+    if not fetched then
+        return nil, err, status
+    end
+    tls_fallbacks = tls_fallbacks + 1
+    if tls_fallbacks >= TLS_FALLBACKS then
+        CurlUtil.stopFetching(
+            string.format("curl couldn't connect securely %d times in a row where it could", tls_fallbacks)
+        )
+    end
+    return fetched, fetch_err, fetch_status
 end
 
 -- a page's body and HTTP status, or nil and what went wrong. opts.form optionally gives the fields of a form to send

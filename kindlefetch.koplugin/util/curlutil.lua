@@ -131,16 +131,19 @@ end
 -- how the installed curl describes itself, e.g. "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0
 -- OpenSSL/3.5.4 zlib/1.3.1", or nil if curl isn't there. looked up once per session (see forgetVersion), as it
 -- means starting curl, and several things ask
-local curl_description
+local curl_description, curl_protocols
 local function describeCurl()
     if curl_description == nil then
         local pipe = io.popen("curl --version 2>/dev/null", "r")
-        local output = pipe and pipe:read("*l")
+        local output = pipe and pipe:read("*a") or ""
         if pipe then
             pipe:close()
         end
         -- false when curl isn't there, so it isn't looked for again
-        curl_description = output or false
+        curl_description = output:match("^[^\n]+") or false
+        -- the protocols it can use, e.g. "dict file ftp http https", where it says, which a curl built without TLS
+        -- leaves https out of
+        curl_protocols = output:match("\nProtocols:%s*([^\n]*)")
     end
     return curl_description or nil
 end
@@ -168,8 +171,11 @@ local function checkCurl()
 
     local description = describeCurl()
     local version = VersionUtil.parseVersion(description and description:match("^curl%s+([%d%.]+)"))
+    -- every site is https, which a curl built without TLS can't fetch at all
+    local has_tls = not curl_protocols or (" " .. curl_protocols .. " "):find(" https ", 1, true) ~= nil
     -- on a Kindle, only once it has been updated, as the curl it comes with can't connect to Library Genesis
     can_fetch = version ~= nil
+        and has_tls
         and (
             not Device:isKindle()
             or VersionUtil.compareVersions(version, VersionUtil.parseVersion(CurlUtil.MIN_VERSION)) >= 0
@@ -177,9 +183,21 @@ local function checkCurl()
     can_decompress = description ~= nil and description:find("zlib", 1, true) ~= nil
     LogUtil.info(
         "fetching pages with",
-        can_fetch and "curl" or "KOReader, as curl is missing or too old,",
+        can_fetch and "curl"
+            or version and not has_tls and "KOReader, as curl can't make secure connections,"
+            or "KOReader, as curl is missing or too old,",
         can_fetch and can_decompress and "compressed" or "uncompressed"
     )
+end
+
+-- fetch pages with KOReader's own HTTP for the rest of the session, rather than curl, as it has been found not to
+-- connect where KOReader's HTTP can (see HttpUtil.requestBody)
+function CurlUtil.stopFetching(why)
+    checkCurl()
+    if can_fetch then
+        LogUtil.warn("fetching pages with KOReader from now on, as", why)
+        can_fetch = false
+    end
 end
 
 function CurlUtil.canFetch()
@@ -377,6 +395,10 @@ function CurlUtil.dumpHeaders(curl_cmd, headers_file)
 end
 
 function CurlUtil.enableParallel(curl_cmd, max_parallel)
+    -- which curl older than 7.66 doesn't have, and fails on, downloading them one after another instead
+    if not curlIsAtLeast("7.66.0") then
+        return curl_cmd
+    end
     local cmd = string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
     -- open a connection for each file at once, rather than waiting to see whether they can share one, which
     -- Library Genesis' sites never let them: a page of covers arrives in a third of the time

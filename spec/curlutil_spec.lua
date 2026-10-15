@@ -139,6 +139,18 @@ describe("CurlUtil", function()
             assert.is_true(CurlUtil.canFetch())
         end)
 
+        -- as every site is https, which it fetched none of, rather than KOReader's own HTTP fetching them
+        it("isn't left to a curl that can't make secure connections", function()
+            helper.stubCommand(
+                "curl --version",
+                "curl 7.88.1 (arm-linux) libcurl/7.88.1\nRelease-Date: 2023-02-20\nProtocols: file ftp http\n"
+            )
+            assert.is_false(CurlUtil.canFetch())
+            assert.is_truthy(
+                helper.logged("info", "^fetching pages with KOReader, as curl can't make secure connections")
+            )
+        end)
+
         it("isn't left to curl when there isn't one", function()
             assert.is_false(CurlUtil.canFetch())
             assert.is_truthy(helper.logged("info", "^fetching pages with KOReader, as curl is missing or too old,"))
@@ -598,6 +610,7 @@ describe("CurlUtil", function()
         end)
 
         it("downloads files in parallel and counts the successful ones", function()
+            helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
             helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "", "c" }))
 
             assert.are.equal(2, CurlUtil.downloadMultiple(urls, paths, false, false, 4, true, 15))
@@ -609,7 +622,7 @@ describe("CurlUtil", function()
             assert.matches("--parallel --parallel-max 4", cmd, 1, true)
             -- stalled files are given up on
             assert.matches("--connect-timeout 15 --max-time 30", cmd, 1, true)
-            assert.matches("-w '%{exitcode} %{filename_effective}\\n'", cmd, 1, true)
+            assert.matches("%{exitcode} %{filename_effective}\\n'", cmd, 1, true)
             assert.matches("-e 'https://covers.example/'", cmd, 1, true)
             assert.matches("--retry 2", cmd, 1, true)
         end)
@@ -633,6 +646,15 @@ describe("CurlUtil", function()
             helper.stubCommand("curl --version", "")
             CurlUtil.forgetVersion()
             assert.is_nil(command():find("--parallel-immediate", 1, true))
+        end)
+
+        -- which curl older than 7.66 doesn't have, and failed on, so no covers downloaded
+        it("downloads them one after another with a curl too old to download them at once", function()
+            helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }))
+            helper.stubCommand("curl --version", "curl 7.65.3 (x86_64-pc-linux-gnu) libcurl/7.65.3\n")
+
+            assert.are.equal(3, CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15))
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find("--parallel", 1, true))
         end)
 
         -- so covers can be shown as they arrive, rather than once the slowest has
