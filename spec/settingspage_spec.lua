@@ -306,6 +306,46 @@ describe("SettingsPage", function()
             assert.are.same({ "fr" }, Settings:getPreferredLanguages())
         end)
 
+        -- from the results, rather than the settings (see KindleFetch:changeChoices)
+        it("can be chosen on their own, saying once chosen whether they've changed", function()
+            local changes = {}
+            local function onClosed(changed)
+                table.insert(changes, changed)
+            end
+            SettingsPage:changeLanguages(onClosed)
+            local languages = lastMenu()
+            -- filling the screen
+            assert.are.equal(600, languages.width)
+            assert.are.equal(800, languages.height)
+            languages.onClose()
+            assert.are.same({ false }, changes)
+
+            SettingsPage:changeLanguages(onClosed)
+            tap("English")
+            tap("French")
+            lastMenu().onClose()
+            assert.are.same({ false, true }, changes)
+            assert.are.same({ "fr" }, Settings:getPreferredLanguages())
+
+            -- once there are some ticked
+            SettingsPage:changeLanguages(onClosed)
+            tap("French")
+            lastMenu().onClose()
+            assert.are.same({ false, true }, changes)
+        end)
+
+        -- e.g. from the results, after the settings were opened and closed
+        it("leave the settings alone once they've been closed", function()
+            SettingsPage:showSettings()
+            local settings = lastMenu()
+            helper.stubs.uimanager:close(settings)
+            SettingsPage:changeLanguages()
+            tap("French")
+            lastMenu().onClose()
+
+            assert.is_nil(settings.switched_to_item)
+        end)
+
         -- as the settings show what's chosen
         it("are saved without saying anything", function()
             SettingsPage:showSettings()

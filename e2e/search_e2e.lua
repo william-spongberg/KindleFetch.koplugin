@@ -109,7 +109,7 @@ describe("Searching", function()
         H.startSearch("qzxqzxqzx vwvwvw")
         H.waitFor("the message saying no books were found", 120, function()
             assert(not H.errorShown(), H.errorShown())
-            return H.messageSaying("No books found")
+            return H.messageSaying("found no books for")
         end)
     end)
 

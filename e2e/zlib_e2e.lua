@@ -65,7 +65,7 @@ describe("Z-Library", function()
         search_box:setInputText(H.BOOK_QUERY)
         H.tapButton("Search", search_box)
         local menu = H.waitFor("search results", 120, function()
-            local failure = H.errorShown() or H.messageSaying("No books found")
+            local failure = H.errorShown() or H.messageSaying("found no books for")
             if failure then
                 error("search failed: " .. failure, 0)
             end

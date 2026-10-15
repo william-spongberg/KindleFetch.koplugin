@@ -223,7 +223,7 @@ end
 function H.search(query, site)
     local plugin = H.startSearch(query, site)
     return H.waitFor("search results", 120, function()
-        local failure = H.errorShown() or H.messageSaying("No books found") or H.messageSaying("but none in the")
+        local failure = H.errorShown() or H.messageSaying("found no books for") or H.messageSaying("but none in the")
         if failure then
             error("search failed: " .. failure, 0)
         end
