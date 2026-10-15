@@ -489,6 +489,13 @@ function KindleFetch:searchFrom(query, page)
         self.books = books
         self.next_page = next_page
 
+        -- which can't be searched for on this site, as when no results are in them, so the settings are offered
+        if err == Errors.NO_FILE_TYPES then
+            LogUtil.warn(Sources[self.source].NAME, "has none of the file types chosen")
+            self:explainNoBooks(query, nil, nil)
+            return
+        end
+
         -- check for errors
         if err or not books then
             err = err or "search failed"
@@ -517,12 +524,17 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
         return
     end
 
+    -- (none at all for a site that has none of the file types chosen)
+    local name = Sources[self.source].NAME
+    local text = results_read
+            and T(
+                _("%1 listed %2 results, but none in the languages and file types chosen in Kindle Fetch's settings."),
+                name,
+                results_read
+            )
+        or T(_("%1 doesn't have books in any of the file types chosen in Kindle Fetch's settings."), name)
     UIManager:show(ConfirmBox:new {
-        text = T(
-            _("%1 listed %2 results, but none in the languages and file types chosen in Kindle Fetch's settings."),
-            Sources[self.source].NAME,
-            results_read
-        ),
+        text = text,
         ok_text = _("Settings"),
         ok_callback = function()
             SettingsPage:showSettings()

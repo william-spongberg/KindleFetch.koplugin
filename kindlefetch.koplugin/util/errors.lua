@@ -24,6 +24,13 @@ local Errors = {
     -- Library Genesis' database is refusing connections, as it does while it's very busy
     BUSY = _("Library Genesis is too busy to send books right now, try again in a few minutes"),
     BUSY_SEARCH = _("Library Genesis is too busy to search right now, try again in a few minutes"),
+    -- a site has none of the file types chosen in the settings, so nothing can be found on it
+    NO_FILE_TYPES = _("none of the file types chosen in the settings"),
+    -- none of Z-Library's addresses' names could be looked up, though Wikipedia's could, as for Library Genesis below
+    ZLIB_UNFOUND = _(
+        "none of Z-Library's addresses can be found on this network, which may be blocking them. Try another Wi-Fi "
+            .. "network or DNS server"
+    ),
     -- none of Library Genesis' mirrors' names could be looked up, though Wikipedia's could (#55)
     UNFOUND = _(
         "none of Library Genesis' sites can be found on this network, which may be blocking them. Try "

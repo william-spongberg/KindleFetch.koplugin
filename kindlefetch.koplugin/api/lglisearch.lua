@@ -6,6 +6,7 @@ local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
 local UrlApi = require("api.urlapi")
 local Errors = require("util.errors")
+local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- searches Library Genesis, and finds its books' download links (see Sources)
@@ -263,8 +264,10 @@ local function fetchResults(params, refresh)
     local unanswered = {}
     local unresolved = 0
     local answered = false
-    -- whether a mirror said Library Genesis' database is too busy, which is no fault of the mirrors
+    -- whether a mirror said Library Genesis' database is too busy, which is no fault of the mirrors, and whether one
+    -- was blocked by its DDoS protection, which is said whichever mirror answered last
     local busy = false
+    local blocked = false
     for __, url in ipairs(base_urls) do
         local html, err, status = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
         -- the search was called off, which says nothing about the mirrors
@@ -290,7 +293,7 @@ local function fetchResults(params, refresh)
                 #html,
                 "bytes)"
             )
-            last_err = BLOCKED_ERROR
+            blocked = true
         elseif html and isBusy(html) then
             LogUtil.warn(
                 "searching",
@@ -312,7 +315,12 @@ local function fetchResults(params, refresh)
                     html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
                 )
             end
-            last_err = err or _("unexpected response from Library Genesis")
+            -- with the status it answered with, as for the other sites
+            last_err = status
+                    and status >= 400
+                    and T(_("Library Genesis answered with an error (HTTP %1), try again later"), status)
+                or err
+                or _("unexpected response from Library Genesis")
             UrlApi:deleteLibgenUrl(url)
         else
             table.insert(unanswered, url)
@@ -333,13 +341,16 @@ local function fetchResults(params, refresh)
 
     -- look the mirrors up again, in case they've moved, and search again, unless they answered that they can't search
     -- right now, which looking them up again won't change
-    if not refresh and not busy and last_err ~= BLOCKED_ERROR then
+    if not refresh and not busy and not blocked then
         LogUtil.info("every mirror failed, looking them up again")
         return fetchResults(params, true)
     end
 
     if busy then
         return nil, BUSY_SEARCH_ERROR
+    end
+    if blocked then
+        return nil, BLOCKED_ERROR
     end
     return nil, explainUnfound(unresolved, base_urls, refresh) or last_err or _("all Library Genesis mirrors failed")
 end

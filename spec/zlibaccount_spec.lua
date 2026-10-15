@@ -205,6 +205,18 @@ describe("ZlibAccount", function()
             assert.are.same({ SITE }, addresses())
         end)
 
+        -- as when the network is blocking them, as for Library Genesis (#55)
+        it("says when none of its addresses can be found on this network, though Wikipedia can", function()
+            web.pages[PROFILE_URL] = function()
+                return nil, "could not resolve host"
+            end
+
+            local data, err = ZlibAccount:request("/eapi/user/profile")
+            assert.is_nil(data)
+            assert.are.equal(require("util.errors").ZLIB_UNFOUND, err)
+            assert.matches("which may be blocking them", err, 1, true)
+        end)
+
         it("says there's no internet connection when neither its addresses nor Wikipedia answer", function()
             web.pages[PROFILE_URL] = nil
             web.wikipedia_down = true

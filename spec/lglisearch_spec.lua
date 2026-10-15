@@ -697,6 +697,29 @@ describe("LlgiSearch", function()
             end)
         end)
 
+        -- which was only said when the last mirror asked was the one blocked
+        it("says searches are blocked by ddos protection, whichever mirror was", function()
+            web.pages[searchUrl(mirrors[1])] =
+                "<html><head><title>DDoS-Guard</title></head><body>Checking your browser</body></html>"
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal("Library Genesis is blocking automated searches right now, try again later", err)
+        end)
+
+        -- as for the other sites
+        it("says which error a mirror answered with", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[searchUrl(mirror)] = function()
+                    return "<html>Service Temporarily Unavailable</html>", nil, 503
+                end
+            end
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal("Library Genesis answered with an error (HTTP 503), try again later", err)
+        end)
+
         it("says when searches are blocked by ddos protection", function()
             for _, mirror in ipairs(mirrors) do
                 web.pages[searchUrl(mirror)] =

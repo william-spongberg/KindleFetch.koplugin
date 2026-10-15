@@ -5,6 +5,7 @@ local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
+local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
@@ -449,7 +450,7 @@ function IaSearch:search(query, page)
 
     if #formatTerms(file_types) == 0 then
         LogUtil.warn(self.NAME, "has none of the file types chosen")
-        return nil, T(_("%1 doesn't have any of the file types chosen in the settings"), self.NAME)
+        return nil, Errors.NO_FILE_TYPES
     end
     local search = IaSearch.buildQuery(query, languages, file_types)
     if not search then

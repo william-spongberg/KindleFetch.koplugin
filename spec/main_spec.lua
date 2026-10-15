@@ -1122,6 +1122,22 @@ describe("KindleFetch", function()
             assert.are.equal(0, #helper.state.notifications)
         end)
 
+        -- which was said to have failed, rather than offering the settings
+        it("offers the settings when the site has none of the file types chosen", function()
+            search_results[1] = { nil, "none of the file types chosen in the settings" }
+            search(openUI(), "emma", "archive")
+
+            local explanation = helper.lastShown()
+            assert.are.equal(
+                "Internet Archive doesn't have books in any of the file types chosen in Kindle Fetch's settings.",
+                explanation.text
+            )
+            assert.are.equal("Settings", explanation.ok_text)
+            assert.is_nil(helper.lastError())
+            explanation.ok_callback()
+            assert.are.equal(1, settings_shown)
+        end)
+
         -- which is why most searches that find nothing do
         describe("when Library Genesis lists results, but none in the languages and file types chosen", function()
             it("says so, and offers the settings", function()

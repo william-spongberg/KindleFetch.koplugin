@@ -58,8 +58,10 @@ function ZlibAccount:request(path, form, refresh)
     local account = KindleFetchSettings:getZlibAccount()
     local cookies = account and string.format("remix_userid=%s; remix_userkey=%s", account.user_id, account.user_key)
     local last_err
-    -- addresses that didn't answer at all, which may be down, or the device may be offline
+    -- addresses that didn't answer at all, which may be down, or the device may be offline, and how many of them
+    -- couldn't even have their names looked up
     local unanswered = {}
+    local unresolved = 0
     local answered = false
     for __, url in ipairs(urls) do
         local body, err, status = HttpUtil.getBody(url .. path, {
@@ -107,6 +109,9 @@ function ZlibAccount:request(path, form, refresh)
         else
             table.insert(unanswered, url)
             last_err = T(_("Z-Library didn't answer (%1)"), err)
+            if err == HttpUtil.UNRESOLVED then
+                unresolved = unresolved + 1
+            end
         end
     end
 
@@ -121,6 +126,12 @@ function ZlibAccount:request(path, form, refresh)
     if not refresh then
         LogUtil.info("none of Z-Library's addresses answered, looking them up again")
         return self:request(path, form, true)
+    end
+    -- none of their names could be looked up just after they were looked up on Wikipedia, so the device is online:
+    -- most likely the network is blocking them, as for Library Genesis (#55)
+    if #urls > 0 and unresolved == #urls then
+        LogUtil.warn("none of Z-Library's addresses' names could be looked up, though Wikipedia's could")
+        return nil, Errors.ZLIB_UNFOUND
     end
     return nil, last_err or _("Z-Library didn't answer")
 end
