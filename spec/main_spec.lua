@@ -19,6 +19,37 @@ describe("KindleFetch", function()
     -- KOReader's file manager and reader, of which one is open at a time (the file manager here, until a spec
     -- opens a book with readBook)
     local FileManager, ReaderUI
+    -- how many times the file manager was refreshed, and the files the buttons from KOReader's file browser were
+    -- tapped for: to show their folders, add to collections and show the information of
+    local refreshes, folders_shown, collections_chosen, info_shown
+
+    -- KOReader's collections for the file manager or a book, noting the files added to them in chosen
+    local function collections(chosen)
+        return {
+            genAddToCollectionButton = function(_, file, caller_pre_callback)
+                return {
+                    text = "Collections…",
+                    callback = function()
+                        caller_pre_callback()
+                        table.insert(chosen, file)
+                    end,
+                }
+            end,
+        }
+    end
+
+    local function fileManager()
+        return {
+            openFile = function(_, file)
+                opened = { "openFile", file }
+            end,
+            onRefresh = function()
+                refreshes = refreshes + 1
+            end,
+            collections = collections(collections_chosen),
+            bookinfo = {},
+        }
+    end
 
     local function openUI()
         opened = nil
@@ -238,13 +269,31 @@ describe("KindleFetch", function()
         curl_check_user_requested = nil
         active_downloads, downloads_shown = {}, {}
 
-        FileManager = {
-            instance = {
-                openFile = function(_, file)
-                    opened = { "openFile", file }
-                end,
-            },
-        }
+        refreshes, folders_shown, collections_chosen, info_shown = 0, {}, {}, {}
+        FileManager = { instance = fileManager() }
+        -- each closing the dialog it's in first, with what it's given to
+        helper.stub("apps/filemanager/filemanagerutil", {
+            genShowFolderButton = function(file, caller_callback, button_disabled)
+                return {
+                    text = "Show folder",
+                    enabled = not button_disabled,
+                    callback = function()
+                        caller_callback()
+                        table.insert(folders_shown, file)
+                    end,
+                }
+            end,
+            genBookInformationButton = function(doc_settings_or_file, book_props, caller_callback, button_disabled)
+                return {
+                    text = "Book information",
+                    enabled = not button_disabled,
+                    callback = function()
+                        caller_callback()
+                        table.insert(info_shown, { doc_settings_or_file, book_props })
+                    end,
+                }
+            end,
+        })
         ReaderUI = {
             showReader = function(_, file)
                 opened = { "showReader", file }
@@ -1594,6 +1643,109 @@ describe("KindleFetch", function()
             assert.is_nil(opened)
         end)
 
+        -- which didn't show it until it was left and gone back to
+        it("lists the downloaded book in the file browser", function()
+            selectBook("Dune")
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            assert.are.equal(1, refreshes)
+        end)
+
+        it("offers what KOReader's file browser has for the book, beneath the question's answers", function()
+            selectBook("Dune")
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+
+            local dialog = helper.lastShown()
+            local texts = {}
+            for i, row in ipairs(dialog.buttons) do
+                texts[i] = {}
+                for __, b in ipairs(row) do
+                    table.insert(texts[i], b.text)
+                end
+            end
+            assert.are.same(
+                { { "Not now", "Read now" }, { "Show folder", "Collections…", "Book information" } },
+                texts
+            )
+
+            -- each closing the dialog first
+            button(dialog, "Collections…").callback()
+            assert.is_true(helper.wasClosed(dialog))
+            assert.are.same({ "/mnt/us/books/Dune.epub" }, collections_chosen)
+
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+            dialog = helper.lastShown()
+            assert.is_true(button(dialog, "Book information").enabled)
+            button(dialog, "Book information").callback()
+            assert.is_true(helper.wasClosed(dialog))
+            -- what's known of the book is found out from the file, as the site's details may not be the book's own
+            assert.are.same({ { "/mnt/us/books/Dune.epub" } }, info_shown)
+        end)
+
+        it("shows the downloaded book's folder from behind the search", function()
+            selectBook("Dune")
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+
+            local dialog = helper.lastShown()
+            button(dialog, "Show folder").callback()
+            assert.are.same({ "/mnt/us/books/Dune.epub" }, folders_shown)
+            assert.is_true(helper.wasClosed(dialog))
+            -- which would otherwise hide it
+            assert.is_true(helper.wasClosed(menus[1]))
+            assert.is_true(helper.wasClosed(plugin.search_box))
+        end)
+
+        it("adds the downloaded book to collections from what's open by then", function()
+            selectBook("Dune")
+            readBook()
+            local chosen = {}
+            ReaderUI.instance.collections = collections(chosen)
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+
+            button(helper.lastShown(), "Collections…").callback()
+            assert.are.same({ "/mnt/us/books/Dune.epub" }, chosen)
+            assert.are.same({}, collections_chosen)
+        end)
+
+        it("shows the downloaded book's information as KOReader before v2024.04 does", function()
+            -- which was given what closes the dialog where it's given what's known of the book now
+            helper.stub("apps/filemanager/filemanagerutil", {
+                genBookInformationButton = function(file, caller_callback, button_disabled)
+                    return {
+                        text = "Book information",
+                        enabled = not button_disabled,
+                        callback = function()
+                            caller_callback()
+                            table.insert(info_shown, file)
+                        end,
+                    }
+                end,
+            })
+            selectBook("Dune")
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+
+            local dialog = helper.lastShown()
+            assert.is_true(button(dialog, "Book information").enabled)
+            button(dialog, "Book information").callback()
+            assert.is_true(helper.wasClosed(dialog))
+            assert.are.same({ "/mnt/us/books/Dune.epub" }, info_shown)
+        end)
+
+        it("leaves out what KOReader's file browser doesn't have", function()
+            helper.stub("apps/filemanager/filemanagerutil", {})
+            FileManager.instance.collections = nil
+            selectBook("Dune")
+            downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
+            helper.tick()
+
+            -- rather than an empty row
+            assert.are.equal(1, #helper.lastShown().buttons)
+        end)
+
         it("switches to the downloaded book when already reading one", function()
             readBook()
             selectBook("Dune")
@@ -1616,11 +1768,7 @@ describe("KindleFetch", function()
 
             -- and the other way round: started while reading a book that has been closed since
             ReaderUI.instance = nil
-            FileManager.instance = {
-                openFile = function(_, file)
-                    opened = { "openFile", file }
-                end,
-            }
+            FileManager.instance = fileManager()
             downloads[1].callback(true, nil, "/mnt/us/books/Dune.epub")
             helper.tick()
             helper.lastShown().buttons[1][2].callback()
@@ -1644,6 +1792,7 @@ describe("KindleFetch", function()
 
             downloads[1].callback(false)
             assert.are.equal("Download failed", helper.lastError())
+            assert.are.equal(0, refreshes)
         end)
 
         it("says a download was cancelled, rather than that it failed", function()
