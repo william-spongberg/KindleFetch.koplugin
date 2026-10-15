@@ -20,6 +20,8 @@ local DEFAULTS = {
     download_dir = nil,
     -- and every file type and book type, set below
     preferred_languages = { "en" },
+    -- the sites the search box searches (see Sources), until others are ticked in it
+    search_sources = { "libgen" },
 }
 
 -- available settings
@@ -697,6 +699,19 @@ end
 -- or nil, once it's been updated
 function KindleFetchSettings:setCurlUpdateDeclined(version)
     return KindleFetchSettings:setSetting("curl_update_declined", version or nil)
+end
+
+-- search_sources (the sites the search box searches, by their names in Sources, e.g. { "libgen", "archive" }), of which
+-- there's always at least one, in a list of its own
+function KindleFetchSettings:getSearchSources()
+    local sources = {}
+    for __, source in ipairs(KindleFetchSettings:getSetting("search_sources")) do
+        table.insert(sources, source)
+    end
+    return #sources > 0 and sources or { "libgen" }
+end
+function KindleFetchSettings:setSearchSources(sources)
+    return KindleFetchSettings:setSetting("search_sources", sources)
 end
 
 -- recent_searches (what was last searched for, most recent first)

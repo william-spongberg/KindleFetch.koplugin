@@ -16,6 +16,9 @@ local LogUtil = require("util.logutil")
 local ProxyUtil = require("util.proxyutil")
 local CurlUtil = require("util.curlutil")
 local StringUtil = require("util.stringutil")
+local PathUtil = require("util.pathutil")
+local Diagnostics = require("ui.diagnostics")
+local Rollback = require("updater.rollback")
 local T = require("ffi/util").template
 local _ = require("gettext")
 local N_ = _.ngettext
@@ -147,7 +150,7 @@ function SettingsPage:settingsItems()
     local proxy = ProxyUtil.get()
     local encrypted_dns = KindleFetchSettings:getEncryptedDns()
 
-    return {
+    local items = {
         {
             text = T(_("Show Book Covers: %1"), show_book_covers and "☑" or "☐"),
             callback = function()
@@ -234,6 +237,43 @@ function SettingsPage:settingsItems()
             end,
         },
     }
+
+    -- the version installed before the last update, while it's kept, in case this one doesn't work on this device
+    local previous_version = Rollback.previousVersion(PathUtil.getPluginPath())
+    if previous_version then
+        table.insert(items, {
+            text = T(_("Go back to v%1"), previous_version),
+            callback = function()
+                this:goBack(previous_version)
+            end,
+        })
+    end
+    return items
+end
+
+-- go back to the version installed before the last update (see Rollback), once KOReader has restarted
+function SettingsPage:goBack(previous_version)
+    local current_version = Diagnostics.version() or "?"
+    UIManager:show(ConfirmBox:new {
+        text = T(
+            _("Go back to Kindle Fetch v%1? v%2, the version installed now, is kept to go forward to again."),
+            previous_version,
+            current_version
+        ),
+        ok_text = _("Go back"),
+        ok_callback = function()
+            local ok, err = Rollback.goBack(PathUtil.getPluginPath())
+            if not ok then
+                NotifyUtil.error(T(_("Going back failed: %1"), err))
+                return
+            end
+            -- so it isn't offered again every day, only when asked to check for updates
+            KindleFetchSettings:setSkippedVersion(current_version)
+            UIManager:askForRestart(
+                T(_("Kindle Fetch has gone back to v%1, which KOReader will use once it restarts."), previous_version)
+            )
+        end,
+    })
 end
 
 function SettingsPage:showSettings()

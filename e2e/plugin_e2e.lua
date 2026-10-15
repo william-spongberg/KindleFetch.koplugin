@@ -31,12 +31,12 @@ describe("KindleFetch", function()
     end)
 
     it("opens search from the Search menu", function()
-        H.openMainMenu({ "Kindle Fetch", "Search Library Genesis" })
+        H.openMainMenu({ "Kindle Fetch", "Search" })
         local plugin = H.plugin()
         H.waitFor("the search dialog", 10, function()
             return plugin.search_box and H.isShown(plugin.search_box)
         end)
-        H.eq("Search Library Genesis", plugin.search_box.title, "dialog title")
+        H.eq("Search for books", plugin.search_box.title, "dialog title")
         H.shot("search-dialog")
 
         H.tapButton("Cancel")
@@ -47,7 +47,7 @@ describe("KindleFetch", function()
         UIManager:sendEvent(Event:new("KindleFetch"))
         local dialog = H.waitFor("the search dialog", 10, function()
             return H.find(function(widget)
-                return widget.title == "Search Library Genesis" and widget.getInputText
+                return widget.title == "Search for books" and widget.getInputText
             end)
         end)
 

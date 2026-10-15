@@ -217,6 +217,16 @@ describe("BookMenu", function()
             assert.are.equal("1990 · English [en] · Book (fiction) · epub · 1.2MB", info)
         end)
 
+        -- where books from several sites are shown
+        it("say which site the book was found on, where asked to", function()
+            local menu = newMenu(1)
+            menu.source_name = function()
+                return "Internet Archive"
+            end
+            local _, _, info = details(menu:createBookItemWidget(book(1)))
+            assert.are.equal("1990 · English [en] · Book (fiction) · epub · 1.2MB · Internet Archive", info)
+        end)
+
         it("leave out missing details", function()
             local menu = newMenu(1)
             local b = book(1, { year = "" })
