@@ -786,7 +786,8 @@ describe("KindleFetch", function()
         end)
 
         describe("recent searches", function()
-            it("are remembered", function()
+            it("are remembered once they've found books", function()
+                search_results[1] = { { book("Dune") } }
                 search(openUI(), "  dune  ")
                 assert.are.same({ "dune" }, settings.recent_searches)
 
@@ -795,6 +796,15 @@ describe("KindleFetch", function()
                 settings.languages = {}
                 search(openUI(), "emma")
                 assert.are.same({ "dune" }, settings.recent_searches)
+            end)
+
+            -- which were remembered as they started
+            it("aren't remembered when they fail, or find nothing, as with a typo", function()
+                search_results[1] = { nil, "request timed out" }
+                search(openUI(), "dune")
+                search_results[1] = { {} }
+                search(openUI(), "dnue")
+                assert.are.same({}, settings.recent_searches)
             end)
 
             it("are offered from the search box, to search for again", function()
@@ -821,7 +831,8 @@ describe("KindleFetch", function()
                 plugin:setupUI("libgen")
                 assert.is_false(button(plugin.search_box, "Recent").enabled)
 
-                -- until something has been searched for from the search box that's open
+                -- until something has been found from the search box that's open
+                search_results[1] = { { book("Dune") } }
                 local enabled = false
                 plugin.search_box.button_table = {
                     getButtonById = function(_, id)
