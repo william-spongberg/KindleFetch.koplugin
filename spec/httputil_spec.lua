@@ -535,15 +535,16 @@ describe("HttpUtil", function()
             )
             local CurlUtil = require("util.curlutil")
             local download
-            CurlUtil.download = function(url, filepath, use_proxy)
-                download = { url, filepath, use_proxy }
+            CurlUtil.download = function(url, filepath, use_proxy, max_time, opts)
+                download = { url, filepath, use_proxy, max_time, opts }
                 return nil, "request timed out"
             end
 
             local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
             assert.is_nil(ok)
             assert.are.equal("request timed out", err)
-            assert.are.same({ "https://github.example/curl-armhf", path, false }, download)
+            -- for at most 5 minutes, and 30 seconds without anything arriving, as it holds KOReader up meanwhile
+            assert.are.same({ "https://github.example/curl-armhf", path, false, 300, { stall_time = 30 } }, download)
             assert.are.equal(0, #requests)
         end)
     end)

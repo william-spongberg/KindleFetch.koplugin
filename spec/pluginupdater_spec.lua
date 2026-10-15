@@ -112,8 +112,8 @@ for _, layout in ipairs(LAYOUTS) do
                 checkForUpdates()
 
                 local dialog = helper.state.shown[1]
-                assert.are.equal("Update KindleFetch?", dialog.title)
-                assert.matches("KindleFetch v0.3 is installed.", dialog.input, 1, true)
+                assert.are.equal("Update Kindle Fetch?", dialog.title)
+                assert.matches("Kindle Fetch v0.3 is installed.", dialog.input, 1, true)
                 assert.matches("New version available: v0.4", dialog.input, 1, true)
                 assert.matches("Bug fixes\n- fixed updates on android", dialog.input, 1, true)
             end)
@@ -133,7 +133,7 @@ for _, layout in ipairs(LAYOUTS) do
                 assert.are.equal(0, #helper.state.shown)
 
                 helper.runScheduled()
-                assert.are.equal("Update KindleFetch?", helper.state.shown[1].title)
+                assert.are.equal("Update Kindle Fetch?", helper.state.shown[1].title)
             end)
 
             it("waits for curl to finish looking up the latest release", function()
@@ -155,7 +155,7 @@ for _, layout in ipairs(LAYOUTS) do
                 helper.writeFile(release_file, LATEST_RELEASE:format("v0.4", "v0.4", "v0.4"))
                 helper.writeFile(exit_file, "0")
                 helper.runScheduled()
-                assert.are.equal("Update KindleFetch?", helper.state.shown[1].title)
+                assert.are.equal("Update Kindle Fetch?", helper.state.shown[1].title)
                 assert.is_false(helper.exists(release_file))
             end)
 
@@ -181,7 +181,7 @@ for _, layout in ipairs(LAYOUTS) do
                 latestRelease("v0.3")
                 checkForUpdates()
 
-                assert.matches("KindleFetch v0.0.0 is installed.", helper.state.shown[1].input, 1, true)
+                assert.matches("Kindle Fetch v0.0.0 is installed.", helper.state.shown[1].input, 1, true)
             end)
 
             it("quietly gives up when the latest release cannot be fetched", function()
@@ -197,7 +197,7 @@ for _, layout in ipairs(LAYOUTS) do
 
             it("reports when the latest release cannot be fetched, if the user asked", function()
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal("Checking for updates failed: could not resolve host", helper.lastError())
             end)
 
             -- which KOReader would have exited on
@@ -207,7 +207,7 @@ for _, layout in ipairs(LAYOUTS) do
                     error("unexpected")
                 end
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal("Checking for updates failed: something went wrong, see crash.log", helper.lastError())
                 assert.is_truthy(helper.logged("err", "^looking up the latest release went wrong:.*unexpected"))
             end)
 
@@ -216,7 +216,7 @@ for _, layout in ipairs(LAYOUTS) do
                     return nil, "could not start curl"
                 end
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal("Checking for updates failed: could not start curl", helper.lastError())
             end)
 
             -- e.g. when github limits how often it can be asked
@@ -226,14 +226,20 @@ for _, layout in ipairs(LAYOUTS) do
 
                 -- and nothing else, such as an offer to update
                 assert.are.equal(1, #helper.state.shown)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal(
+                    "Checking for updates failed: GitHub says: API rate limit exceeded for 203.0.113.7.",
+                    helper.lastError()
+                )
                 assert.matches("API rate limit exceeded", helper.logged("warn", "^could not read the latest release"))
             end)
 
             it("gives up when the answer can't be read at all", function()
                 release_response = "<html>Bad gateway</html>"
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal(
+                    "Checking for updates failed: GitHub didn't answer with the latest release",
+                    helper.lastError()
+                )
 
                 -- KOReader's json gives an error rather than nothing
                 helper.stub("json", {
@@ -245,13 +251,46 @@ for _, layout in ipairs(LAYOUTS) do
                 PluginUpdater = require("updater.pluginupdater")
                 helper.state.shown = {}
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal(
+                    "Checking for updates failed: GitHub didn't answer with the latest release",
+                    helper.lastError()
+                )
             end)
+
+            -- which both wrote the latest release to the same file
+            it(
+                "doesn't look it up again while it's being looked up, saying how it went once it has, if asked",
+                function()
+                    latestRelease("v0.3")
+                    local lookups, exit_file = 0, nil
+                    CurlUtil.startDownload = function(_, filepath)
+                        lookups = lookups + 1
+                        exit_file = CurlUtil.createExitFile()
+                        helper.writeFile(filepath, release_response)
+                        return 4000, exit_file
+                    end
+                    CurlUtil.isPidRunning = function()
+                        return true
+                    end
+
+                    PluginUpdater.checkForUpdates(false)
+                    helper.tick()
+                    PluginUpdater.checkForUpdates(true)
+                    assert.are.equal(1, lookups)
+
+                    helper.writeFile(exit_file, "0")
+                    helper.runScheduled()
+                    assert.are.equal("Kindle Fetch is up to date", helper.lastNotification())
+                    -- and it can be looked up again once it has been
+                    PluginUpdater.checkForUpdates(true)
+                    assert.are.equal(2, lookups)
+                end
+            )
 
             it("says it is up to date, if the user asked", function()
                 latestRelease("v0.3")
                 checkForUpdates(true)
-                assert.are.equal("KindleFetch is up to date", helper.lastNotification())
+                assert.are.equal("Kindle Fetch is up to date", helper.lastNotification())
 
                 helper.state.notifications = {}
                 checkForUpdates(false)
@@ -310,12 +349,12 @@ for _, layout in ipairs(LAYOUTS) do
                         requests
                     )
                     assert.are.same({}, release_lookups)
-                    assert.are.equal("Update KindleFetch?", helper.lastShown().title)
+                    assert.are.equal("Update Kindle Fetch?", helper.lastShown().title)
                 end)
 
                 it("reports when it cannot be looked up", function()
                     checkForUpdates(true)
-                    assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                    assert.are.equal("Checking for updates failed: could not resolve host", helper.lastError())
                 end)
 
                 -- which would hold KOReader up while it's in use
@@ -415,11 +454,86 @@ for _, layout in ipairs(LAYOUTS) do
                 )
             end)
 
+            -- in case the new version doesn't work on this device (see Rollback)
+            it("keeps the version installed before to go back to, in place of any kept before", function()
+                helper.writeFile(plugin_path .. "/main.lua", "-- v0.3\n")
+                helper.writeFile(plugin_path .. ".previous/version.txt", "0.2\n")
+                acceptUpdate()
+
+                assert.are.equal("0.3\n", helper.readFile(plugin_path .. ".previous/version.txt"))
+                assert.is_true(helper.exists(plugin_path .. ".previous/util/pathutil.lua"))
+                assert.are.equal("0.3", require("updater.rollback").previousVersion(plugin_path))
+            end)
+
             it("cleans up the backup and downloaded files", function()
                 acceptUpdate()
 
                 assert.is_false(helper.exists(plugin_path .. ".backup"))
+                assert.is_false(helper.exists(plugin_path .. ".new"))
                 assert.is_false(helper.exists(data_dir .. "/cache/kindlefetch"))
+            end)
+
+            -- which it was unzipped over, keeping files the release no longer has
+            it("removes what's left of an install that didn't finish first", function()
+                helper.writeFile(plugin_path .. ".new/kindlefetch.koplugin/stale.lua", "-- v0.2")
+                acceptUpdate()
+
+                assert.are.equal("-- v0.4\n", helper.readFile(plugin_path .. "/main.lua"))
+                assert.is_false(helper.exists(plugin_path .. "/stale.lua"))
+            end)
+
+            -- as not every device has unzip (stock Android before 9 doesn't, so updating failed there every time)
+            it("unzips the release with KOReader's own archiver where it has one", function()
+                local opened = {}
+                helper.stub("ffi/archiver", {
+                    Reader = {
+                        new = function(self)
+                            return setmetatable({}, { __index = self })
+                        end,
+                        open = function(self, path)
+                            table.insert(opened, path)
+                            self.path = path
+                            return true
+                        end,
+                        iterate = function(self)
+                            local pipe = io.popen("unzip -Z1 " .. helper.quote(self.path))
+                            local entries = {}
+                            for line in pipe:lines() do
+                                table.insert(entries, { path = line })
+                            end
+                            pipe:close()
+                            local i = 0
+                            return function()
+                                i = i + 1
+                                return entries[i]
+                            end
+                        end,
+                        extractToPath = function(self, entry, dest)
+                            if entry:find("/$") then
+                                helper.run("mkdir -p " .. helper.quote(dest))
+                            else
+                                helper.run(
+                                    string.format(
+                                        "mkdir -p %s && unzip -p %s %s > %s",
+                                        helper.quote(dest:match("^(.*)/")),
+                                        helper.quote(self.path),
+                                        helper.quote(entry),
+                                        helper.quote(dest)
+                                    )
+                                )
+                            end
+                            return true
+                        end,
+                        close = function() end,
+                    },
+                })
+                helper.stubExecute("unzip -q", function()
+                    error("unzipped with unzip")
+                end)
+                acceptUpdate()
+
+                assert.are.equal(1, #opened)
+                assert.are.equal("-- v0.4\n", helper.readFile(plugin_path .. "/main.lua"))
             end)
 
             it("does nothing when the user cancels", function()
@@ -446,28 +560,71 @@ for _, layout in ipairs(LAYOUTS) do
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to install update", helper.lastError())
+                assert.are.equal("Updating Kindle Fetch failed: it has no Kindle Fetch in it", helper.lastError())
             end)
 
-            it("keeps the installed plugin when it cannot be moved aside", function()
-                helper.stubExecute(string.format("mv '%s' '%s.backup'", plugin_path, plugin_path), function()
-                    return 256
+            -- moving a folder fails as KOReader's os.rename does, for those to the given place
+            local function failMovesTo(to, err)
+                local rename = os.rename
+                os.rename = function(from, dest)
+                    if dest == to then
+                        return nil, err
+                    end
+                    return rename(from, dest)
+                end
+                finally(function()
+                    os.rename = rename
                 end)
+            end
+
+            it("keeps the installed plugin when it cannot be moved aside", function()
+                failMovesTo(plugin_path .. ".backup", "Permission denied")
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to install update", helper.lastError())
+                assert.are.equal(
+                    "Updating Kindle Fetch failed: the installed version couldn't be moved aside (Permission denied)",
+                    helper.lastError()
+                )
+                assert.is_false(helper.exists(plugin_path .. ".new"))
             end)
 
             it("restores the installed plugin when the new one cannot be moved into place", function()
-                helper.stubExecute("/cache/kindlefetch/kindlefetch.koplugin' '" .. plugin_path .. "'", function()
-                    return 256
+                local rename = os.rename
+                os.rename = function(from, to)
+                    if from == plugin_path .. ".new/kindlefetch.koplugin" then
+                        return nil, "Device or resource busy"
+                    end
+                    return rename(from, to)
+                end
+                finally(function()
+                    os.rename = rename
                 end)
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
                 assert.is_false(helper.exists(plugin_path .. ".backup"))
-                assert.are.equal("Failed to install update", helper.lastError())
+                assert.are.equal(
+                    "Updating Kindle Fetch failed: the new version couldn't be moved into place (Device or resource "
+                        .. "busy)",
+                    helper.lastError()
+                )
+            end)
+
+            -- which leaves Kindle Fetch out of KOReader's menu
+            it("says where the installed plugin is when it can't be put back", function()
+                failMovesTo(plugin_path, "No space left on device")
+                acceptUpdate()
+
+                assert.are.equal("0.3\n", helper.readFile(plugin_path .. ".backup/version.txt"))
+                assert.are.equal(
+                    "Updating Kindle Fetch failed: the new version couldn't be moved into place (No space left on "
+                        .. "device), and the installed version couldn't be put back from "
+                        .. plugin_path
+                        .. ".backup",
+                    helper.lastError()
+                )
+                assert.is_truthy(helper.logged("err", "^could not put the installed version back from"))
             end)
 
             -- as a Kindle's own curl can be too old to connect to GitHub (#57)
@@ -503,17 +660,20 @@ for _, layout in ipairs(LAYOUTS) do
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to download update", helper.lastError())
+                assert.are.equal("Updating Kindle Fetch failed: nothing downloaded", helper.lastError())
             end)
 
             it("keeps the installed plugin when the download fails", function()
                 downloadRelease = function()
-                    return false, "request timed out"
+                    return nil, "request timed out"
                 end
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to download update", helper.lastError())
+                assert.are.equal(
+                    "Updating Kindle Fetch failed: it couldn't be downloaded (request timed out)",
+                    helper.lastError()
+                )
             end)
 
             it("keeps the installed plugin when the download is not a valid zip", function()
@@ -524,7 +684,9 @@ for _, layout in ipairs(LAYOUTS) do
                 acceptUpdate()
 
                 assert.are.equal("0.3\n", helper.readFile(plugin_path .. "/version.txt"))
-                assert.are.equal("Failed to install update", helper.lastError())
+                -- with what unzip said, for crash.log
+                assert.matches("^Updating Kindle Fetch failed: it couldn't be unzipped %(.+%)", helper.lastError())
+                assert.is_truthy(helper.logged("warn", "^could not unzip the release:"))
             end)
         end)
     end)

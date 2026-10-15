@@ -2,6 +2,7 @@ local Device = require("device")
 local UIManager = require("ui/uimanager")
 local InputDialog = require("ui/widget/inputdialog")
 local JSON = require("json")
+local lfs = require("libs/libkoreader-lfs")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
 local HttpUtil = require("util.httputil")
@@ -10,8 +11,11 @@ local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
 local StringUtil = require("util.stringutil")
 local PathUtil = require("util.pathutil")
+local ShellUtil = require("util.shellutil")
 local KindleFetchSettings = require("settings.settings")
 local Guard = require("util.guard")
+local Rollback = require("updater.rollback")
+local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- constants
@@ -27,20 +31,24 @@ local CHECK_MAX_TIME = 15
 
 local PluginUpdater = {}
 
--- the version and release notes in github's description of the latest release
+-- the check for updates going on, if there is one, so another isn't started meanwhile (they wrote the same file)
+local checking
+
+-- the version and release notes in github's description of the latest release, or nil and why not
 local function parseUpdateInfo(output)
     local ok, release = pcall(JSON.decode, output)
     if not ok or type(release) ~= "table" or type(release.tag_name) ~= "string" then
-        -- e.g. GitHub's rate limit
+        -- e.g. GitHub's rate limit, which says so
         LogUtil.warn("could not read the latest release from GitHub:", output:gsub("%s+", " "):sub(1, 300))
-        return nil
+        local message = ok and type(release) == "table" and type(release.message) == "string" and release.message
+        return nil, message and T(_("GitHub says: %1"), message) or _("GitHub didn't answer with the latest release")
     end
     local tag = release.tag_name:gsub("^v", "")
 
     local version = VersionUtil.parseVersion(tag)
     if not version then
         LogUtil.warn("could not read the version of the latest release, tagged", tag)
-        return nil
+        return nil, T(_("the latest release's version can't be read (%1)"), tag)
     end
 
     return {
@@ -51,7 +59,7 @@ local function parseUpdateInfo(output)
 end
 
 -- look up the latest release on github in the background, as KOReader is in use and it can take a while. calls
--- callback with its version and release notes, or with nothing if it couldn't be looked up
+-- callback with its version and release notes, or nil and why it couldn't be looked up
 local function fetchUpdateInfo(callback)
     -- with KOReader's own HTTP where curl can't fetch, as a Kindle's own curl can be too old to connect to GitHub
     -- (#57), which holds KOReader up until GitHub has answered (so it's only asked when checking for updates is)
@@ -59,7 +67,7 @@ local function fetchUpdateInfo(callback)
         local body, err = HttpUtil.getBody(REPO_VERSION_URL .. "/releases/latest")
         if not body then
             LogUtil.warn("could not look up the latest release on GitHub:", err)
-            callback(nil)
+            callback(nil, err)
             return
         end
         callback(parseUpdateInfo(body))
@@ -72,13 +80,13 @@ local function fetchUpdateInfo(callback)
     if not pid then
         -- (which is then why not)
         LogUtil.warn("could not start curl to look up the latest release:", exit_file)
-        callback(nil)
+        callback(nil, exit_file)
         return
     end
 
     -- as if it couldn't be looked up, once something goes wrong (see Guard)
-    local function failed()
-        callback(nil)
+    local function failed(err)
+        callback(nil, err)
     end
     local function poll()
         local exit_code = CurlUtil.getExitCode(exit_file)
@@ -100,7 +108,7 @@ local function fetchUpdateInfo(callback)
                 tostring(exit_code),
                 "(" .. CurlUtil.getErrorMeaning(exit_code) .. ")"
             )
-            callback(nil)
+            callback(nil, exit_code and CurlUtil.explainExitCode(exit_code) or _("GitHub didn't answer"))
             return
         end
 
@@ -124,7 +132,7 @@ local function getInstalledVersion(plugin_path)
     return VersionUtil.parseVersion(version_str)
 end
 
--- download plugin release from github
+-- download plugin release from github, returning where it downloaded to, or nil and what went wrong
 local function downloadPluginRelease(version_str)
     LogUtil.info("downloading KindleFetch", version_str)
     local download_url = string.format(REPO_DOWNLOAD_URL .. "/releases/download/v%s/%s.zip", version_str, PLUGIN_NAME)
@@ -136,7 +144,7 @@ local function downloadPluginRelease(version_str)
     local success, err = HttpUtil.downloadFile(download_url, zip_path)
     if not success then
         LogUtil.warn("could not download KindleFetch", version_str, "from", download_url, "error:", err)
-        return nil, err
+        return nil, T(_("it couldn't be downloaded (%1)"), err)
     end
 
     if not FileUtil.isValidFile(zip_path) then
@@ -148,114 +156,142 @@ local function downloadPluginRelease(version_str)
             FileUtil.getSize(zip_path),
             "bytes"
         )
-        return nil, "downloaded plugin file is invalid"
+        return nil, _("nothing downloaded")
     end
 
     LogUtil.debug("plugin release downloaded successfully", zip_path)
     return zip_path
 end
 
--- extract and install plugin from zip
+-- unzip the release into folder, with KOReader's own archiver where it has one, as not every device has unzip (stock
+-- Android before 9 doesn't, so updating failed there every time), otherwise unzip. returns true, or nil and why not
+local function extract(zip_path, folder)
+    local has_archiver, Archiver = pcall(require, "ffi/archiver")
+    if has_archiver and type(Archiver) == "table" and Archiver.Reader then
+        local archive = Archiver.Reader:new()
+        if not archive:open(zip_path) then
+            LogUtil.warn("could not open", zip_path, "to unzip it:", archive.err)
+            return nil, T(_("it couldn't be opened (%1)"), tostring(archive.err))
+        end
+        local extracted = true
+        for entry in archive:iterate() do
+            if not archive:extractToPath(entry.path, folder .. "/" .. entry.path) then
+                extracted = false
+                break
+            end
+        end
+        local err = archive.err
+        archive:close()
+        if not extracted or err then
+            LogUtil.warn("could not unzip", zip_path, err)
+            return nil, T(_("it couldn't be unzipped (%1)"), tostring(err))
+        end
+        return true
+    end
+
+    local ok, err = ShellUtil.run(
+        "unzip the release",
+        string.format("unzip -q -o %s -d %s", CurlUtil.shellQuote(zip_path), CurlUtil.shellQuote(folder))
+    )
+    if not ok then
+        return nil, T(_("it couldn't be unzipped (%1)"), err)
+    end
+    return true
+end
+
+-- install the release from the zip in place of the installed plugin, keeping the installed one until the new one is
+-- in place, and putting it back if it couldn't be, then for going back to (see Rollback). returns true, or nil and
+-- what went wrong
 local function installPluginRelease(plugin_path, zip_path, version_str)
     LogUtil.info("installing KindleFetch from", zip_path, "to", plugin_path)
 
-    -- extract zip to temp directory (use -d rather than cd, as paths may be relative to the koreader dir)
-    local tmp_path = PathUtil.getTmpPath()
-    local extract_cmd =
-        string.format("unzip -q -o %s -d %s", CurlUtil.shellQuote(zip_path), CurlUtil.shellQuote(tmp_path))
-    if os.execute(extract_cmd .. " 2>/dev/null") ~= 0 then
-        LogUtil.warn("could not unzip", zip_path)
-        return false
+    -- unzipped next to the plugin, rather than in KOReader's cache, so it can be moved into place by renaming it, which
+    -- only works within a file system (KOReader only loads plugins from folders whose names end in .koplugin). anything
+    -- left there by an install that didn't finish is removed first, rather than unzipped over
+    local staging = plugin_path .. ".new"
+    local backup = plugin_path .. ".backup"
+    FileUtil.removeDir(staging)
+    lfs.mkdir(staging)
+
+    local ok, err = extract(zip_path, staging)
+    local extracted = staging .. "/" .. PLUGIN_NAME
+    if ok and not FileUtil.isValidFile(extracted .. "/main.lua") then
+        LogUtil.warn("the release has no", PLUGIN_NAME, "folder with a main.lua in it")
+        ok, err = nil, _("it has no Kindle Fetch in it")
     end
 
-    -- find extracted directory
-    local extracted_dir = tmp_path .. "/" .. PLUGIN_NAME
-    if not FileUtil.isValidDirectory(extracted_dir) then
-        LogUtil.warn("extracted plugin directory not found", extracted_dir)
-        return false
-    end
+    if ok then
+        -- the version it is, in case the release doesn't say (while it's still apart, so that failing to write it
+        -- doesn't fail an install that worked)
+        local written, write_err = FileUtil.writeFile(extracted .. "/version.txt", version_str)
+        if not written then
+            LogUtil.warn("could not write", extracted .. "/version.txt:", write_err)
+        end
 
-    -- backup current plugin
-    local backup_dir = plugin_path .. ".backup"
-    if FileUtil.isValidDirectory(plugin_path) then
-        LogUtil.debug("backing up current plugin to", backup_dir)
-        if
-            os.execute(
-                string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(plugin_path), CurlUtil.shellQuote(backup_dir))
-            ) ~= 0
-        then
-            LogUtil.warn("could not back up the installed plugin to", backup_dir)
-            return false
+        FileUtil.removeDir(backup)
+        local moved, move_err = os.rename(plugin_path, backup)
+        if not moved then
+            LogUtil.warn("could not move", plugin_path, "aside to", backup .. ":", move_err)
+            ok, err = nil, T(_("the installed version couldn't be moved aside (%1)"), move_err)
+        else
+            moved, move_err = os.rename(extracted, plugin_path)
+            if moved then
+                -- in place of any kept before, in case the new version doesn't work on this device
+                local previous = Rollback.previousPath(plugin_path)
+                FileUtil.removeDir(previous)
+                local kept, keep_err = os.rename(backup, previous)
+                if not kept then
+                    LogUtil.warn("could not keep", backup, "as", previous, "to go back to:", keep_err)
+                    FileUtil.removeDir(backup)
+                end
+            else
+                LogUtil.warn("could not move", extracted, "to", plugin_path .. ":", move_err)
+                local restored, restore_err = os.rename(backup, plugin_path)
+                if restored then
+                    ok, err = nil, T(_("the new version couldn't be moved into place (%1)"), move_err)
+                else
+                    -- which leaves Kindle Fetch out of KOReader's menu, so where it is is said
+                    LogUtil.err("could not put the installed version back from", backup .. ":", restore_err)
+                    ok, err =
+                        nil,
+                        T(
+                            _(
+                                "the new version couldn't be moved into place (%1), and the installed version couldn't "
+                                    .. "be put back from %2"
+                            ),
+                            move_err,
+                            backup
+                        )
+                end
+            end
         end
     end
 
-    -- move extracted plugin to plugin directory
-    LogUtil.debug("installing new plugin to", plugin_path)
-    if
-        os.execute(
-            string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(extracted_dir), CurlUtil.shellQuote(plugin_path))
-        ) ~= 0
-    then
-        LogUtil.warn("could not move", extracted_dir, "to", plugin_path)
-        -- restore backup
-        if FileUtil.isValidDirectory(backup_dir) then
-            os.execute(
-                string.format("mv %s %s 2>/dev/null", CurlUtil.shellQuote(backup_dir), CurlUtil.shellQuote(plugin_path))
-            )
-        end
-        return false
+    -- what's left of the release, whether or not it installed
+    FileUtil.removeDir(staging)
+    FileUtil.removeDir(PathUtil.getTmpPath())
+    if ok then
+        LogUtil.info("installed KindleFetch", version_str)
     end
-
-    -- remove backup after successful install
-    os.execute(string.format("rm -rf %s 2>/dev/null", CurlUtil.shellQuote(backup_dir)))
-
-    -- write new version to version file
-    if not FileUtil.writeFile(plugin_path .. "/version.txt", version_str) then
-        LogUtil.warn("could not write", plugin_path .. "/version.txt")
-        return false
-    end
-
-    -- cleanup temp directory
-    os.execute(string.format("rm -rf %s 2>/dev/null", CurlUtil.shellQuote(tmp_path)))
-
-    LogUtil.info("installed KindleFetch", version_str)
-    return true
+    return ok, err
 end
 
--- download and install new plugin version
+-- download and install new plugin version, returning true, or nil and what went wrong
 local function updatePlugin(plugin_path, version_str)
     LogUtil.debug("updating plugin to version", version_str)
-    NotifyUtil.info("Downloading KindleFetch v" .. version_str .. "...")
+    NotifyUtil.info(T(_("Downloading Kindle Fetch v%1..."), version_str))
 
-    -- download the release
     local zip_path, err = downloadPluginRelease(version_str)
     if not zip_path then
-        LogUtil.warn("failed to dowload plugin update", err)
-        NotifyUtil.error("Failed to download update")
-        return false
+        FileUtil.removeDir(PathUtil.getTmpPath())
+        return nil, err
     end
-
-    -- install the plugin
-    if not installPluginRelease(plugin_path, zip_path, version_str) then
-        LogUtil.warn("failed to install plugin release from zip:", zip_path)
-        NotifyUtil.error("Failed to install update")
-        return false
-    end
-
-    LogUtil.debug("plugin update completed successfully")
-
-    -- KOReader loads plugins as it starts, so the new version is used once it restarts, which it offers to do now
-    -- where it can restart itself (rather than a notification that's gone after a couple of seconds)
-    UIManager:askForRestart(
-        string.format(_("Kindle Fetch has updated to v%s, which KOReader will use once it restarts."), version_str)
-    )
-
-    return true
+    return installPluginRelease(plugin_path, zip_path, version_str)
 end
 
 local function promptPluginUpdate(plugin_path, installed_version, available_update)
-    local message = string.format(
-        "KindleFetch v%s is installed.\nNew version available: v%s\n\n%s\n\nUpdate plugin now?",
+    local message = T(
+        _("Kindle Fetch v%1 is installed.\nNew version available: v%2\n\n%3\n\nUpdate Kindle Fetch now?"),
         installed_version,
         available_update.version.str,
         StringUtil.replaceCarriageReturns(available_update.notes)
@@ -265,7 +301,7 @@ local function promptPluginUpdate(plugin_path, installed_version, available_upda
 
     local confirm_dialog
     confirm_dialog = InputDialog:new {
-        title = _("Update KindleFetch?"),
+        title = _("Update Kindle Fetch?"),
         input_type = "text",
         input = message,
         readonly = true,
@@ -284,7 +320,21 @@ local function promptPluginUpdate(plugin_path, installed_version, available_upda
                     text = _("Update"),
                     callback = function()
                         UIManager:close(confirm_dialog)
-                        updatePlugin(plugin_path, available_update.version.str)
+                        local version_str = available_update.version.str
+                        local ok, err = updatePlugin(plugin_path, version_str)
+                        if not ok then
+                            NotifyUtil.error(T(_("Updating Kindle Fetch failed: %1"), err))
+                            return
+                        end
+                        -- KOReader loads plugins as it starts, so the new version is used once it restarts, which it
+                        -- offers to do now where it can restart itself (rather than a notification that's gone after a
+                        -- couple of seconds)
+                        UIManager:askForRestart(
+                            T(
+                                _("Kindle Fetch has updated to v%1, which KOReader will use once it restarts."),
+                                version_str
+                            )
+                        )
                     end,
                 },
             },
@@ -309,6 +359,15 @@ function PluginUpdater.checkForUpdates(user_requested)
     end
     LogUtil.debug("checking for plugin updates from", REPO_VERSION_URL)
 
+    -- the one going on says how it went once it's over, when that's asked for meanwhile
+    if checking then
+        LogUtil.info("already checking for updates")
+        checking.user_requested = checking.user_requested or user_requested
+        return
+    end
+    local check = { user_requested = user_requested }
+    checking = check
+
     local plugin_path = PathUtil.getPluginPath()
 
     local installed_version = getInstalledVersion(plugin_path)
@@ -317,11 +376,13 @@ function PluginUpdater.checkForUpdates(user_requested)
         installed_version = VersionUtil.parseVersion("0.0.0")
     end
 
-    fetchUpdateInfo(function(repo_update)
+    fetchUpdateInfo(function(repo_update, err)
+        checking = nil
+        user_requested = check.user_requested
         if not repo_update then
             LogUtil.warn("could not check for KindleFetch updates")
             if user_requested then
-                NotifyUtil.error("Failed to fetch updates for KindleFetch")
+                NotifyUtil.error(T(_("Checking for updates failed: %1"), err or _("GitHub didn't answer")))
             end
             return
         end
@@ -339,7 +400,7 @@ function PluginUpdater.checkForUpdates(user_requested)
         if cmp >= 0 then
             LogUtil.debug("plugin is up to date")
             if user_requested then
-                NotifyUtil.info("KindleFetch is up to date")
+                NotifyUtil.info(_("Kindle Fetch is up to date"))
             end
             return
         end

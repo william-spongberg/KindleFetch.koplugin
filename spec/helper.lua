@@ -292,6 +292,19 @@ local function createStubs(state)
                 return names[i]
             end
         end,
+        -- the mode of what's at the path, without following a link to what it links to
+        symlinkattributes = function(path, request)
+            local mode
+            if succeeded("test -L " .. quote(path)) then
+                mode = "link"
+            else
+                mode = stubs.lfs.attributes(path, "mode")
+            end
+            if request == "mode" then
+                return mode
+            end
+            return mode and { mode = mode } or nil
+        end,
         mkdir = function(path)
             if succeeded("mkdir " .. quote(path) .. " 2>/dev/null") then
                 return true
@@ -369,6 +382,19 @@ local function createStubs(state)
 
     -- what plugins share with each other, such as whether AutoSuspend is to wait
     stubs.pluginshare = {}
+
+    -- the parts of KOReader's ffi/util the plugin uses
+    stubs.ffiutil = {
+        -- a translated message with what's said in it put in place of %1, %2..., as KOReader does
+        template = function(text, ...)
+            local params = { ... }
+            return (
+                text:gsub("%%([1-9][0-9]?)", function(i)
+                    return tostring(params[tonumber(i)])
+                end)
+            )
+        end,
+    }
 
     stubs.inputdialog = {
         new = function(_, o)
@@ -662,6 +688,7 @@ local MODULE_STUBS = {
     ["ui/geometry"] = "geometry",
     ["ui/downloadmgr"] = "downloadmgr",
     ["pluginshare"] = "pluginshare",
+    ["ffi/util"] = "ffiutil",
 }
 
 -- widgets the plugin only builds and lays out

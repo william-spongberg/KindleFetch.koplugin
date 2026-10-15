@@ -87,6 +87,34 @@ function FileUtil.isValidDirectory(path)
     return lfs.attributes(path, "mode") == "directory"
 end
 
+-- remove a folder and everything in it, without following links out of it, returning true (also when there's no
+-- such folder), or nil and why not
+function FileUtil.removeDir(path)
+    if not StringUtil.assertValidString(path) then
+        return nil, "no folder to remove"
+    end
+    if lfs.attributes(path, "mode") ~= "directory" then
+        return true
+    end
+    local names, err = FileUtil.listDir(path)
+    if not names then
+        return nil, err
+    end
+    for _, name in ipairs(names) do
+        local child = path .. "/" .. name
+        local ok, child_err
+        if lfs.symlinkattributes(child, "mode") == "directory" then
+            ok, child_err = FileUtil.removeDir(child)
+        else
+            ok, child_err = os.remove(child)
+        end
+        if not ok then
+            return nil, child_err
+        end
+    end
+    return os.remove(path)
+end
+
 -- whether files can be saved in a folder, returning true, or nil and why not: it doesn't exist (e.g. once deleted, or
 -- on an SD card that has been taken out), or can't be written to
 function FileUtil.checkWritableDir(path)
