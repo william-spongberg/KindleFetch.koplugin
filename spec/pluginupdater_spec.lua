@@ -197,7 +197,7 @@ for _, layout in ipairs(LAYOUTS) do
 
             it("reports when the latest release cannot be fetched, if the user asked", function()
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal("Checking for updates failed: could not resolve host", helper.lastError())
             end)
 
             -- which KOReader would have exited on
@@ -207,7 +207,7 @@ for _, layout in ipairs(LAYOUTS) do
                     error("unexpected")
                 end
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal("Checking for updates failed: something went wrong, see crash.log", helper.lastError())
                 assert.is_truthy(helper.logged("err", "^looking up the latest release went wrong:.*unexpected"))
             end)
 
@@ -216,7 +216,7 @@ for _, layout in ipairs(LAYOUTS) do
                     return nil, "could not start curl"
                 end
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal("Checking for updates failed: could not start curl", helper.lastError())
             end)
 
             -- e.g. when github limits how often it can be asked
@@ -226,14 +226,20 @@ for _, layout in ipairs(LAYOUTS) do
 
                 -- and nothing else, such as an offer to update
                 assert.are.equal(1, #helper.state.shown)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal(
+                    "Checking for updates failed: GitHub says: API rate limit exceeded for 203.0.113.7.",
+                    helper.lastError()
+                )
                 assert.matches("API rate limit exceeded", helper.logged("warn", "^could not read the latest release"))
             end)
 
             it("gives up when the answer can't be read at all", function()
                 release_response = "<html>Bad gateway</html>"
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal(
+                    "Checking for updates failed: GitHub didn't answer with the latest release",
+                    helper.lastError()
+                )
 
                 -- KOReader's json gives an error rather than nothing
                 helper.stub("json", {
@@ -245,8 +251,41 @@ for _, layout in ipairs(LAYOUTS) do
                 PluginUpdater = require("updater.pluginupdater")
                 helper.state.shown = {}
                 checkForUpdates(true)
-                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.are.equal(
+                    "Checking for updates failed: GitHub didn't answer with the latest release",
+                    helper.lastError()
+                )
             end)
+
+            -- which both wrote the latest release to the same file
+            it(
+                "doesn't look it up again while it's being looked up, saying how it went once it has, if asked",
+                function()
+                    latestRelease("v0.3")
+                    local lookups, exit_file = 0, nil
+                    CurlUtil.startDownload = function(_, filepath)
+                        lookups = lookups + 1
+                        exit_file = CurlUtil.createExitFile()
+                        helper.writeFile(filepath, release_response)
+                        return 4000, exit_file
+                    end
+                    CurlUtil.isPidRunning = function()
+                        return true
+                    end
+
+                    PluginUpdater.checkForUpdates(false)
+                    helper.tick()
+                    PluginUpdater.checkForUpdates(true)
+                    assert.are.equal(1, lookups)
+
+                    helper.writeFile(exit_file, "0")
+                    helper.runScheduled()
+                    assert.are.equal("Kindle Fetch is up to date", helper.lastNotification())
+                    -- and it can be looked up again once it has been
+                    PluginUpdater.checkForUpdates(true)
+                    assert.are.equal(2, lookups)
+                end
+            )
 
             it("says it is up to date, if the user asked", function()
                 latestRelease("v0.3")
@@ -315,7 +354,7 @@ for _, layout in ipairs(LAYOUTS) do
 
                 it("reports when it cannot be looked up", function()
                     checkForUpdates(true)
-                    assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                    assert.are.equal("Checking for updates failed: could not resolve host", helper.lastError())
                 end)
 
                 -- which would hold KOReader up while it's in use

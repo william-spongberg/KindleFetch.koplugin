@@ -30,20 +30,24 @@ local CHECK_MAX_TIME = 15
 
 local PluginUpdater = {}
 
--- the version and release notes in github's description of the latest release
+-- the check for updates going on, if there is one, so another isn't started meanwhile (they wrote the same file)
+local checking
+
+-- the version and release notes in github's description of the latest release, or nil and why not
 local function parseUpdateInfo(output)
     local ok, release = pcall(JSON.decode, output)
     if not ok or type(release) ~= "table" or type(release.tag_name) ~= "string" then
-        -- e.g. GitHub's rate limit
+        -- e.g. GitHub's rate limit, which says so
         LogUtil.warn("could not read the latest release from GitHub:", output:gsub("%s+", " "):sub(1, 300))
-        return nil
+        local message = ok and type(release) == "table" and type(release.message) == "string" and release.message
+        return nil, message and T(_("GitHub says: %1"), message) or _("GitHub didn't answer with the latest release")
     end
     local tag = release.tag_name:gsub("^v", "")
 
     local version = VersionUtil.parseVersion(tag)
     if not version then
         LogUtil.warn("could not read the version of the latest release, tagged", tag)
-        return nil
+        return nil, T(_("the latest release's version can't be read (%1)"), tag)
     end
 
     return {
@@ -54,7 +58,7 @@ local function parseUpdateInfo(output)
 end
 
 -- look up the latest release on github in the background, as KOReader is in use and it can take a while. calls
--- callback with its version and release notes, or with nothing if it couldn't be looked up
+-- callback with its version and release notes, or nil and why it couldn't be looked up
 local function fetchUpdateInfo(callback)
     -- with KOReader's own HTTP where curl can't fetch, as a Kindle's own curl can be too old to connect to GitHub
     -- (#57), which holds KOReader up until GitHub has answered (so it's only asked when checking for updates is)
@@ -62,7 +66,7 @@ local function fetchUpdateInfo(callback)
         local body, err = HttpUtil.getBody(REPO_VERSION_URL .. "/releases/latest")
         if not body then
             LogUtil.warn("could not look up the latest release on GitHub:", err)
-            callback(nil)
+            callback(nil, err)
             return
         end
         callback(parseUpdateInfo(body))
@@ -75,13 +79,13 @@ local function fetchUpdateInfo(callback)
     if not pid then
         -- (which is then why not)
         LogUtil.warn("could not start curl to look up the latest release:", exit_file)
-        callback(nil)
+        callback(nil, exit_file)
         return
     end
 
     -- as if it couldn't be looked up, once something goes wrong (see Guard)
-    local function failed()
-        callback(nil)
+    local function failed(err)
+        callback(nil, err)
     end
     local function poll()
         local exit_code = CurlUtil.getExitCode(exit_file)
@@ -103,7 +107,7 @@ local function fetchUpdateInfo(callback)
                 tostring(exit_code),
                 "(" .. CurlUtil.getErrorMeaning(exit_code) .. ")"
             )
-            callback(nil)
+            callback(nil, exit_code and CurlUtil.explainExitCode(exit_code) or _("GitHub didn't answer"))
             return
         end
 
@@ -346,6 +350,15 @@ function PluginUpdater.checkForUpdates(user_requested)
     end
     LogUtil.debug("checking for plugin updates from", REPO_VERSION_URL)
 
+    -- the one going on says how it went once it's over, when that's asked for meanwhile
+    if checking then
+        LogUtil.info("already checking for updates")
+        checking.user_requested = checking.user_requested or user_requested
+        return
+    end
+    local check = { user_requested = user_requested }
+    checking = check
+
     local plugin_path = PathUtil.getPluginPath()
 
     local installed_version = getInstalledVersion(plugin_path)
@@ -354,11 +367,13 @@ function PluginUpdater.checkForUpdates(user_requested)
         installed_version = VersionUtil.parseVersion("0.0.0")
     end
 
-    fetchUpdateInfo(function(repo_update)
+    fetchUpdateInfo(function(repo_update, err)
+        checking = nil
+        user_requested = check.user_requested
         if not repo_update then
             LogUtil.warn("could not check for KindleFetch updates")
             if user_requested then
-                NotifyUtil.error(_("Failed to fetch updates for KindleFetch"))
+                NotifyUtil.error(T(_("Checking for updates failed: %1"), err or _("GitHub didn't answer")))
             end
             return
         end
