@@ -275,13 +275,16 @@ function CurlUtil.createExitFile()
     return exit_file
 end
 
+-- curl's exit code once it has finished, or nil while it's running, including while the shell is still writing it
+-- (see saveExitCode), when the file is there but empty
 function CurlUtil.getExitCode(exit_file)
     local exit_code_str = FileUtil.readFile(exit_file)
-    if not exit_code_str then
-        return nil -- file doesn't exist yet, process still running
+    local exit_code = exit_code_str and tonumber(exit_code_str)
+    if not exit_code then
+        return nil
     end
     FileUtil.removeFile(exit_file)
-    return tonumber(exit_code_str)
+    return exit_code
 end
 
 function CurlUtil.getProxyFlag(use_proxy)

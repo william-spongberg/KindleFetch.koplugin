@@ -364,6 +364,18 @@ describe("CurlUtil", function()
             assert.are.equal(22, CurlUtil.getExitCode(exit_file))
             assert.is_false(helper.exists(exit_file))
         end)
+
+        -- a download that finished was said to have ended unexpectedly, when checked on between the shell creating
+        -- the file and writing curl's exit code in it
+        it("waits for the exit code to be written, rather than losing it", function()
+            local exit_file = CurlUtil.createExitFile()
+            helper.writeFile(exit_file, "")
+            assert.is_nil(CurlUtil.getExitCode(exit_file))
+            assert.is_true(helper.exists(exit_file))
+
+            helper.writeFile(exit_file, "0\n")
+            assert.are.equal(0, CurlUtil.getExitCode(exit_file))
+        end)
     end)
 
     -- KOReader may close while downloads are running, leaving their files with nothing to remove them
