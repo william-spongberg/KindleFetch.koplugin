@@ -373,6 +373,23 @@ describe("IaSearch", function()
             )
         end)
 
+        -- which what arrives is checked against (see Downloader)
+        it("says what it lists the file as", function()
+            web.pages[FILES_URL] = fixtures.archiveFiles({
+                {
+                    name = "emma00aust_text.pdf",
+                    format = "Text PDF",
+                    size = "9000000",
+                    md5 = "0123456789abcdef0123456789abcdef",
+                },
+            })
+
+            local url, err, _, listed = IaSearch.findDownloadLink(book)
+            assert.is_nil(err)
+            assert.are.equal("https://archive.org/download/emma00aust/emma00aust_text.pdf", url)
+            assert.are.same({ md5 = "0123456789abcdef0123456789abcdef", bytes = "9000000" }, listed)
+        end)
+
         -- which only those who can borrow it can download
         it("leaves out files that are private", function()
             book.file_type = "epub"

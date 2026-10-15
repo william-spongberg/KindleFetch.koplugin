@@ -640,18 +640,36 @@ local function createStubs(state)
         end,
     }
 
-    -- KOReader's hashes, worked out with sha256sum instead
+    -- KOReader's hashes, worked out with sha256sum and md5sum instead
+    local function hash(command, message)
+        local path = os.tmpname()
+        local f = assert(io.open(path, "wb"))
+        f:write(message)
+        f:close()
+        local pipe = real_popen(command .. " " .. quote(path))
+        local digest = pipe:read("*l"):match("^(%x+)")
+        pipe:close()
+        os.remove(path)
+        return digest
+    end
     stubs.sha2 = {
         sha256 = function(message)
-            local path = os.tmpname()
-            local f = assert(io.open(path, "wb"))
-            f:write(message)
-            f:close()
-            local pipe = real_popen("sha256sum " .. quote(path))
-            local digest = pipe:read("*l"):match("^(%x+)")
-            pipe:close()
-            os.remove(path)
-            return digest
+            return hash("sha256sum", message)
+        end,
+        -- given the whole message, or, as KOReader's can be, a piece at a time, then nothing for the md5
+        md5 = function(message)
+            if message then
+                return hash("md5sum", message)
+            end
+            local pieces = {}
+            local function append(piece)
+                if not piece then
+                    return hash("md5sum", table.concat(pieces))
+                end
+                table.insert(pieces, piece)
+                return append
+            end
+            return append
         end,
     }
 

@@ -575,7 +575,8 @@ function LlgiSearch.findDownloadLink(book, retrying)
 
     if download_url then
         UrlApi:preferLibgenUrl(found_on)
-        return download_url
+        -- whose file is the one with the book's id as its md5
+        return download_url, nil, nil, { md5 = book.id }
     end
     return nil,
         explainUnfound(unresolved, base_urls, retrying)

@@ -64,7 +64,7 @@ describe("CoverCache", function()
                 assert.are.equal("https://covers.example/abc.jpg", url)
                 -- the download prompt waits for the cover, so a stalled one mustn't hold it up
                 assert.are.equal(10, max_time)
-                helper.writeFile(path, "jpeg")
+                helper.writeFile(path, fixtures.JPEG)
                 return true
             end
 
@@ -73,13 +73,26 @@ describe("CoverCache", function()
             assert.are.equal(covers_dir .. "abc.jpg", CoverCache:get("abc"))
         end)
 
+        -- e.g. a web page sent in its place, which would be kept for good, as covers are
+        it("doesn't keep a cover that isn't an image", function()
+            CurlUtil.download = function(_, path)
+                helper.writeFile(path, "<!DOCTYPE html><html><title>Not Found</title></html>")
+                return true
+            end
+
+            assert.is_nil(CoverCache:download("abc", "https://covers.example/abc.jpg"))
+            assert.is_false(CoverCache:cacheExists("abc"))
+            assert.is_false(helper.exists(covers_dir .. "abc.jpg"))
+            assert.is_truthy(helper.logged("warn", "^left out the cover of abc as it isn't an image: Not Found$"))
+        end)
+
         it("retries through PROXY_URL when the direct download fails", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"
             local attempts = {}
             CurlUtil.download = function(_, path, use_proxy)
                 table.insert(attempts, use_proxy)
                 if use_proxy then
-                    helper.writeFile(path, "jpeg")
+                    helper.writeFile(path, fixtures.JPEG)
                     return true
                 end
                 return nil, "TLS/SSL connection failed"
@@ -151,7 +164,7 @@ describe("CoverCache", function()
 
         it("agrees with cacheExists for covers dropped from the cache", function()
             -- older versions dropped covers from the cache once it was full, but left their files behind
-            helper.writeFile(covers_dir .. "abc.jpg", "jpeg")
+            helper.writeFile(covers_dir .. "abc.jpg", fixtures.JPEG)
 
             assert.is_nil(CoverCache:get("abc"))
             assert.is_false(CoverCache:cacheExists("abc"))
@@ -159,7 +172,7 @@ describe("CoverCache", function()
 
         it("forgets covers whose file has been deleted", function()
             CurlUtil.download = function(_, path)
-                helper.writeFile(path, "jpeg")
+                helper.writeFile(path, fixtures.JPEG)
                 return true
             end
             CoverCache:download("abc", "https://covers.example/abc.jpg")
@@ -190,7 +203,7 @@ describe("CoverCache", function()
     -- which left every cover a placeholder on a device without curl, as a Kobo can be (#63)
     it("downloads covers with KOReader's own HTTP where curl can't", function()
         helper.stubs.http.request = function(request)
-            request.sink("jpeg " .. request.url)
+            request.sink(fixtures.JPEG .. " " .. request.url)
             return 1, 200, {}, "HTTP/1.1 200 OK"
         end
         local counts = {}
@@ -204,7 +217,7 @@ describe("CoverCache", function()
         helper.runScheduled()
 
         assert.are.same({ 2 }, counts)
-        assert.are.equal("jpeg https://covers.example/b.jpg", helper.readFile(CoverCache:get("b")))
+        assert.are.equal(fixtures.JPEG .. " https://covers.example/b.jpg", helper.readFile(CoverCache:get("b")))
         assert.is_true(helper.state.subprocesses_collected[helper.state.subprocesses[1]])
     end)
 
@@ -215,7 +228,7 @@ describe("CoverCache", function()
         local function finishRun(run, succeeded, exit_code)
             for i, path in ipairs(run.paths) do
                 if succeeded[i] then
-                    helper.writeFile(path, "jpeg")
+                    helper.writeFile(path, fixtures.JPEG)
                 end
             end
             helper.writeFile(run.exit_file, tostring(exit_code or 0))
@@ -247,6 +260,25 @@ describe("CoverCache", function()
             CurlUtil.isPidRunning = function()
                 return true
             end
+        end)
+
+        it("leaves out covers that aren't images, rather than keeping them for good", function()
+            CoverCache:downloadMultiple(
+                { book("a", "https://covers.example/a.jpg"), book("b", "https://covers.example/b.jpg") },
+                6,
+                onDone
+            )
+            finishRun(runs[1], { true, true })
+            helper.writeFile(covers_dir .. "b.jpg", "<html><head><title>Not Found</title></head></html>")
+            helper.runScheduled()
+
+            assert.are.same({ 1 }, results)
+            assert.is_true(CoverCache:cacheExists("a"))
+            assert.is_false(CoverCache:cacheExists("b"))
+            assert.is_false(helper.exists(covers_dir .. "b.jpg"))
+            -- showing no placeholder for it
+            assert.is_false(CoverCache:isComing(book("b", "https://covers.example/b.jpg")))
+            assert.is_truthy(helper.logged("warn", "^left out the cover of b as it isn't an image: Not Found$"))
         end)
 
         it("downloads missing covers in the background", function()
@@ -291,7 +323,7 @@ describe("CoverCache", function()
                 local lines = {}
                 for _, result in ipairs({ ... }) do
                     if result[2] == 0 then
-                        helper.writeFile(covers_dir .. result[1] .. ".jpg", "jpeg")
+                        helper.writeFile(covers_dir .. result[1] .. ".jpg", fixtures.JPEG)
                     end
                     table.insert(lines, result[2] .. " " .. covers_dir .. result[1] .. ".jpg")
                 end
@@ -393,8 +425,8 @@ describe("CoverCache", function()
                 }
             end
             helper.state.settings_files[data_dir .. "/settings/kindlefetch_covercache.lua"] = covers
-            helper.writeFile(covers_dir .. "old1.jpg", "jpeg")
-            helper.writeFile(covers_dir .. "old2.jpg", "jpeg")
+            helper.writeFile(covers_dir .. "old1.jpg", fixtures.JPEG)
+            helper.writeFile(covers_dir .. "old2.jpg", fixtures.JPEG)
 
             CoverCache:downloadMultiple({ book("new", "https://covers.example/new.jpg") }, 6, onDone)
             finishRun(runs[1], { true })
@@ -408,8 +440,8 @@ describe("CoverCache", function()
         -- older versions forgot covers once the cache was full, without removing their files
         it("removes covers left behind without being in the cache, once per session", function()
             fixtures.cacheCover(helper, "cached")
-            helper.writeFile(covers_dir .. "orphan.jpg", "jpeg")
-            helper.writeFile(covers_dir .. "orphan_full.jpg", "jpeg")
+            helper.writeFile(covers_dir .. "orphan.jpg", fixtures.JPEG)
+            helper.writeFile(covers_dir .. "orphan_full.jpg", fixtures.JPEG)
             helper.writeFile(covers_dir .. "notes.txt", "not a cover")
 
             CoverCache:downloadMultiple({ book("new", "https://covers.example/new.jpg") }, 6, onDone)
@@ -420,7 +452,7 @@ describe("CoverCache", function()
             assert.is_truthy(helper.logged("info", "^removed 2 covers that were no longer in the cache$"))
 
             -- there are no more to find until the plugin is next updated, so it doesn't look again
-            helper.writeFile(covers_dir .. "later.jpg", "jpeg")
+            helper.writeFile(covers_dir .. "later.jpg", fixtures.JPEG)
             CoverCache:downloadMultiple({ book("another", "https://covers.example/another.jpg") }, 6, onDone)
             assert.is_true(helper.exists(covers_dir .. "later.jpg"))
         end)

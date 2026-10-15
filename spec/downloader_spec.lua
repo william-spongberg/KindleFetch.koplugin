@@ -5,6 +5,8 @@ local fixtures = require("fixtures")
 describe("Downloader", function()
     local MB = 1024 * 1024
     local data_dir, filepath, book, web, mirrors, prompts, spawned, running, killed, results, remote_size
+    -- the md5 of what arrived, where it isn't the one the site listed (see FileCheck)
+    local arrived_md5
     -- whether curl can fetch, and which downloads were started with KOReader's own HTTP, as they are where it can't
     local can_fetch, koreader_downloads
     local cover_downloads
@@ -57,10 +59,37 @@ describe("Downloader", function()
                 "HTTP/2 200\r\ncontent-type: application/epub+zip\r\ncontent-length: " .. remote_size .. "\r\n\r\n"
             )
         end
-        helper.writeFile(spawned[#spawned].path, string.rep("x", bytes))
+        helper.writeFile(spawned[#spawned].path, fixtures.bookFile(book.file_type, bytes))
         if exit_code then
             helper.writeFile(spawned[#spawned].exit_file, tostring(exit_code))
         end
+    end
+
+    -- what a site sends in place of a book, e.g. to say it's busy
+    local PAGE = "<!DOCTYPE html>\n<html><head><title>Please wait</title></head><body>Busy</body></html>"
+
+    -- simulate curl downloading what the site sent in place of the book, all of it, then exiting
+    local function curlSent(content)
+        helper.writeFile(spawned[#spawned].headers_file, "HTTP/2 200\r\ncontent-length: " .. #content .. "\r\n\r\n")
+        helper.writeFile(spawned[#spawned].path, content)
+        helper.writeFile(spawned[#spawned].exit_file, "0")
+    end
+
+    -- the md5 of the book that arrived, worked out a step at a time: none until the given step, then the md5 listed
+    local function checkTakesSteps(steps)
+        local checks = { steps = 0 }
+        require("util.filecheck").md5 = function()
+            return {
+                step = function()
+                    checks.steps = checks.steps + 1
+                    return checks.steps >= steps and book.id:lower() or nil
+                end,
+                close = function()
+                    checks.closed = true
+                end,
+            }
+        end
+        return checks
     end
 
     before_each(function()
@@ -119,6 +148,16 @@ describe("Downloader", function()
         end
         CurlUtil.killPid = function(pid)
             table.insert(killed, pid)
+        end
+        -- worked out a piece at a time, all at once here
+        arrived_md5 = nil
+        require("util.filecheck").md5 = function()
+            return {
+                step = function()
+                    return arrived_md5 or book.id:lower()
+                end,
+                close = function() end,
+            }
         end
 
         helper.stub("ui.downloadprompt", {
@@ -496,11 +535,12 @@ describe("Downloader", function()
             end, onOpenExisting)
             prompts[1].on_download(prompts[1].filepath)
             curlWrote(MB, 0)
-            helper.tick()
+            helper.runScheduled()
 
             assert.are.same({ { ok = true } }, results)
             assert.is_true(helper.exists(filepath))
-            assert.is_truthy(helper.logged("err", "^checking on a download went wrong:.*unexpected"))
+            -- once it was checked
+            assert.is_truthy(helper.logged("err", "^checking a downloaded book went wrong:.*unexpected"))
         end)
 
         -- which was only lost, as Trapper drops what goes wrong once its function has waited on something
@@ -688,7 +728,7 @@ describe("Downloader", function()
                     .. 2 * MB
                     .. "\r\n\r\n"
             )
-            helper.writeFile(spawned[1].path, string.rep("x", MB / 2))
+            helper.writeFile(spawned[1].path, fixtures.bookFile(book.file_type, MB / 2))
             helper.tick()
             assert.are.equal("25% · 0.5 / 2.0 MB", widget.status_widget.text)
             assert.is_truthy(helper.logged("info", "^the file is " .. 2 * MB .. " bytes$"))
@@ -731,6 +771,125 @@ describe("Downloader", function()
             curlWrote(MB / 2)
             helper.tick()
             assert.are.equal("0.5 MB", widget.status_widget.text)
+        end)
+
+        describe("checking what arrived is the book", function()
+            it("checks it's the file listed, by its md5", function()
+                download()
+                curlWrote(MB, 0)
+                helper.runScheduled()
+
+                assert.are.same({ { ok = true } }, results)
+                assert.is_truthy(helper.logged("info", "^it has the md5 listed$"))
+            end)
+
+            it("fails when it isn't the file listed, which may be damaged", function()
+                arrived_md5 = string.rep("0", 32)
+                download()
+                curlWrote(MB, 0)
+                helper.runScheduled()
+
+                assert.are.same({
+                    { ok = false, err = "the file that downloaded doesn't match the one listed, and may be damaged" },
+                }, results)
+                assert.is_false(helper.exists(filepath))
+                assert.is_false(helper.exists(filepath .. ".part"))
+                assert.is_truthy(
+                    helper.logged("warn", '^"Dune" has the md5 0+, rather than the ' .. book.id .. " listed$")
+                )
+            end)
+
+            it("says when a web page arrived in place of the book", function()
+                download()
+                curlSent(PAGE)
+                helper.runScheduled()
+
+                assert.are.same({
+                    { ok = false, err = "Library Genesis sent a web page rather than the book, try again later" },
+                }, results)
+                assert.is_false(helper.exists(filepath))
+                assert.is_false(helper.exists(filepath .. ".part"))
+                assert.is_truthy(helper.logged("warn", '^a web page arrived in place of "Dune": Please wait$'))
+            end)
+
+            it("says when what arrived isn't in the book's file type", function()
+                download()
+                curlSent(fixtures.bookFile("pdf", MB))
+                helper.runScheduled()
+
+                assert.are.same(
+                    { { ok = false, err = "the file that downloaded isn't the EPUB it should be" } },
+                    results
+                )
+                assert.is_false(helper.exists(filepath))
+            end)
+
+            -- which curl doesn't always notice
+            it("fails when less arrived than the site said it would send", function()
+                download()
+                curlWrote(MB / 2, 0)
+                helper.runScheduled()
+
+                assert.are.same({ { ok = false, err = "partial file transfer (download interrupted)" } }, results)
+                assert.is_false(helper.exists(filepath))
+                assert.is_truthy(helper.logged("warn", '^only 524288 of the 1048576 bytes of "Dune" arrived$'))
+            end)
+
+            -- e.g. a page from the network the device is on, rather than the site
+            it("tries again through PROXY_URL from the beginning, rather than carrying on from what arrived", function()
+                helper.state.env.PROXY_URL = "http://proxy.example:8080"
+                download()
+                curlSent(PAGE)
+                helper.tick()
+
+                assert.are.equal(2, #spawned)
+                assert.is_true(spawned[2].use_proxy)
+                assert.is_false(spawned[2].resume)
+                assert.is_false(helper.exists(filepath .. ".part"))
+
+                curlWrote(MB, 0)
+                helper.runScheduled()
+                assert.are.same({ { ok = true } }, results)
+                assert.are.equal(MB, #helper.readFile(filepath))
+            end)
+
+            it("says it's checking the book, which takes a while for a large one, and can be cancelled", function()
+                local checks = checkTakesSteps(10)
+                download()
+                local widget = progress()
+                curlWrote(MB, 0)
+                helper.tick()
+                helper.tick()
+                assert.are.equal("Checking the book...", widget.status_widget.text)
+                assert.are.equal(1, widget.bar_widget.percentage)
+                assert.are.same({}, results)
+
+                widget.cancel_button.callback()
+                helper.runScheduled()
+                assert.are.same({ { ok = false, err = "request cancelled" } }, results)
+                -- as curl had finished
+                assert.are.same({}, killed)
+                assert.is_true(checks.closed)
+                assert.is_true(checks.steps < 10)
+                assert.is_false(helper.exists(filepath .. ".part"))
+                assert.is_false(helper.exists(filepath))
+                assert.are.same({}, Downloader:getActiveDownloads())
+            end)
+
+            -- as it has all arrived
+            it("carries on checking the book while the device sleeps", function()
+                checkTakesSteps(3)
+                download()
+                curlWrote(MB, 0)
+                helper.tick()
+                Downloader:onSuspend()
+                Downloader:onNetworkDisconnected()
+                Downloader:onResume()
+                helper.runScheduled()
+
+                assert.are.same({ { ok = true } }, results)
+                assert.are.equal(1, #spawned)
+            end)
         end)
 
         it("finishes once curl exits successfully", function()
@@ -1142,6 +1301,44 @@ describe("Downloader", function()
             assert.are.same({ { ok = true } }, results)
         end)
 
+        describe("checking the book is the one it lists", function()
+            local LISTED = "0123456789ABCDEF0123456789ABCDEF"
+
+            before_each(function()
+                web.pages["https://archive.org/metadata/emma00aust/files"] = fixtures.archiveFiles({
+                    { name = "emma00aust.epub", format = "EPUB", md5 = LISTED, size = tostring(2 * MB) },
+                })
+                remote_size = 2 * MB
+            end)
+
+            it("checks its md5", function()
+                arrived_md5 = LISTED:lower()
+                download()
+                curlWrote(2 * MB, 0)
+                helper.runScheduled()
+                assert.are.same({ { ok = true } }, results)
+            end)
+
+            it("fails when its md5 isn't the one listed", function()
+                arrived_md5 = string.rep("0", 32)
+                download()
+                curlWrote(2 * MB, 0)
+                helper.runScheduled()
+                assert.are.same({
+                    { ok = false, err = "the file that downloaded doesn't match the one listed, and may be damaged" },
+                }, results)
+            end)
+
+            -- however big the site said it was when sending it
+            it("fails when it's smaller than listed", function()
+                remote_size = MB
+                download()
+                curlWrote(MB, 0)
+                helper.runScheduled()
+                assert.are.same({ { ok = false, err = "partial file transfer (download interrupted)" } }, results)
+            end)
+        end)
+
         it("says Internet Archive is too busy when its servers fail to send the book", function()
             download()
             helper.writeFile(spawned[1].headers_file, "HTTP/2 503 \r\ncontent-length: 212\r\n\r\n")
@@ -1215,6 +1412,21 @@ describe("Downloader", function()
             helper.runScheduled()
             assert.are.same({ { ok = true } }, results)
             assert.are.equal(MB, #helper.readFile(filepath))
+        end)
+
+        it("asks for another link once the server the link went to sends a web page in place of the book", function()
+            download()
+            curlSent(PAGE)
+            helper.tick()
+
+            assert.are.equal(2, links)
+            assert.are.equal("https://dl2.example/1984.epub", spawned[2].url)
+            assert.are.same({}, results)
+            assert.is_truthy(helper.logged("info", "^asking for another download link, .* didn't send the book$"))
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
         end)
 
         -- which can count as another of the few downloads Z-Library allows a day
