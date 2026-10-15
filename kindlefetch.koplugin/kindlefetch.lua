@@ -45,6 +45,12 @@ local version_checked = false
 local UPDATE_CHECK_INTERVAL = 24 * 60 * 60
 -- the sites, in the order Kindle Fetch's menu lists them
 local SOURCES = { "libgen", "archive", "zlib" }
+-- the most of what's highlighted in a book that's searched for (see searchFor), as a whole paragraph can't be
+local MAX_QUERY_LENGTH = 100
+-- the plugin made for whichever of the file manager or a book was opened last, which what's added to KOReader's own
+-- dialogs once a session searches with (see addFileDialogButtons)
+local latest
+local file_dialog_buttons_added = false
 
 local function updateCheckDue()
     local last_check = KindleFetchSettings:getLastUpdateCheck()
@@ -156,9 +162,56 @@ function KindleFetch:onKindleFetchZlib()
     return true
 end
 
+-- the first of a book's authors, from what's known of it (as KOReader lists them, on lines of their own), or nil
+-- where nothing is
+local function firstAuthor(props)
+    local authors = type(props) == "table" and props.authors
+    local author = type(authors) == "string" and StringUtil.trim(authors:match("^[^\n]*")) or ""
+    return author ~= "" and author or nil
+end
+
+-- add More by this author to the dialog KOReader shows on holding a book (in the file browser, history, collections
+-- and file search), where this KOReader lets plugins add to them, once a session, as they're KOReader's own
+local function addFileDialogButtons()
+    local FileManager = require("apps/filemanager/filemanager")
+    if file_dialog_buttons_added or not FileManager.addFileDialogButtons then
+        return
+    end
+    file_dialog_buttons_added = true
+    local widgets = { FileManager }
+    for __, name in ipairs({ "filemanagerhistory", "filemanagercollection", "filemanagerfilesearcher" }) do
+        local found, widget = pcall(require, "apps/filemanager/" .. name)
+        if found then
+            table.insert(widgets, widget)
+        end
+    end
+    for __, widget in ipairs(widgets) do
+        FileManager.addFileDialogButtons(widget, "kindlefetch", function(__, is_file, book_props)
+            -- (nothing, rather than KOReader's dialog, where something goes wrong, see Guard)
+            local author = is_file and Guard.call("finding a book's author", firstAuthor, Guard.quiet, book_props)
+            if not author then
+                return nil
+            end
+            return {
+                {
+                    text = _("More by this author"),
+                    callback = Guard.wrap("searching for more by an author", function()
+                        local menu = widget.getMenuInstance and widget.getMenuInstance()
+                        if menu and menu.file_dialog then
+                            UIManager:close(menu.file_dialog)
+                        end
+                        latest:searchFor(author)
+                    end),
+                },
+            }
+        end)
+    end
+end
+
 function KindleFetch:init()
     -- load settings
     KindleFetchSettings:load()
+    latest = self
 
     if not version_checked then
         version_checked = true
@@ -176,6 +229,11 @@ function KindleFetch:init()
     -- register to main menu
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
+    -- and to KOReader's own dialogs, to search from books (see searchFor)
+    addFileDialogButtons()
+    if self.ui.highlight and self.ui.highlight.addToHighlightDialog then
+        self:addToHighlightDialog()
+    end
 
     -- if network is connected, schedule update checks after UI is ready
     if
@@ -264,6 +322,22 @@ function KindleFetch:addToMainMenu(menu_items)
             },
         },
     }
+
+    -- in a book, more by its author, where it's known (see searchFor), after the sites
+    if self.ui.document then
+        table.insert(menu_items.kindlefetch.sub_item_table, 4, {
+            text_func = function()
+                local author = firstAuthor(self.ui.doc_props)
+                return author and T(_("More by %1"), author) or _("More by this author")
+            end,
+            enabled_func = function()
+                return firstAuthor(self.ui.doc_props) ~= nil
+            end,
+            callback = function()
+                self:searchFor(firstAuthor(self.ui.doc_props))
+            end,
+        })
+    end
 
     -- the version installed before the last update, while it's kept, in case this one doesn't work on this device
     local previous_version = Rollback.previousVersion(PathUtil.getPluginPath())
@@ -421,6 +495,70 @@ function KindleFetch:setupUI(source, query)
     if query then
         self:performSearch()
     end
+end
+
+-- add Search Kindle Fetch to the dialog KOReader shows on highlighting text in a book, to search for it (see
+-- searchFor), second to last, as KOReader's own plugins add theirs, so its own Search stays last
+function KindleFetch:addToHighlightDialog()
+    self.ui.highlight:addToHighlightDialog("12_kindlefetch_search", function(this)
+        return {
+            text = _("Search Kindle Fetch"),
+            callback = Guard.wrap("searching for what's highlighted", function()
+                local text = this.selected_text and this.selected_text.text
+                this:onClose()
+                self:searchFor(text)
+            end),
+        }
+    end)
+end
+
+-- search for query, e.g. more by a book's author, or what's highlighted in one, on whichever site is chosen (Z-Library
+-- only once logged in, as for otherSites): on one line, and only the start of it when it's long (see MAX_QUERY_LENGTH)
+function KindleFetch:searchFor(query)
+    query = StringUtil.trim(query or ""):gsub("%s+", " ")
+    if #query > MAX_QUERY_LENGTH then
+        -- at a space, or otherwise between characters, rather than partway through one (whose next byte would carry
+        -- on from it)
+        local start = query:sub(1, MAX_QUERY_LENGTH)
+        if query:sub(MAX_QUERY_LENGTH + 1, MAX_QUERY_LENGTH + 1):find("^[\128-\191]") then
+            start = start:gsub("[\192-\255][\128-\191]*$", "")
+        end
+        query = start:match("^(.*%S)%s") or start
+    end
+    if query == "" then
+        return
+    end
+
+    local dialog
+    local row = {}
+    for __, source in ipairs(SOURCES) do
+        if not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn() then
+            table.insert(row, {
+                text = Sources[source].NAME,
+                callback = function()
+                    UIManager:close(dialog)
+                    LogUtil.info(string.format("searching %s for %q, from a book", Sources[source].NAME, query))
+                    self:setupUI(source, query)
+                end,
+            })
+        end
+    end
+    dialog = ButtonDialog:new {
+        title = T(_("Search for “%1” on"), query),
+        title_align = "center",
+        buttons = {
+            row,
+            {
+                {
+                    text = _("Cancel"),
+                    callback = function()
+                        UIManager:close(dialog)
+                    end,
+                },
+            },
+        },
+    }
+    UIManager:show(dialog)
 end
 
 -- buttons for searching the other sites for query, from what says this one found nothing or failed: Z-Library only

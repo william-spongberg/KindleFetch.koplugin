@@ -1382,6 +1382,173 @@ describe("KindleFetch", function()
         end)
     end)
 
+    describe("searching from books", function()
+        local function texts(row)
+            local result = {}
+            for _, b in ipairs(row) do
+                table.insert(result, b.text)
+            end
+            return result
+        end
+
+        it("offers each site to search for what's given, opening the search box for the one chosen", function()
+            local plugin = openUI()
+            plugin:searchFor("  Frank\n  Herbert ")
+
+            local chooser = helper.lastShown()
+            assert.are.equal("Search for “Frank Herbert” on", chooser.title)
+            assert.are.same({ "Library Genesis", "Internet Archive", "Z-Library" }, texts(chooser.buttons[1]))
+            chooser.buttons[1][2].callback()
+            assert.is_true(helper.wasClosed(chooser))
+            assert.are.equal("Search Internet Archive", plugin.search_box.title)
+            assert.are.same({ { "Frank Herbert", 1 } }, archive_searches)
+        end)
+
+        -- as it can only be searched with an account
+        it("only offers Z-Library once logged in", function()
+            zlib_logged_in = false
+            openUI():searchFor("Frank Herbert")
+            assert.are.same({ "Library Genesis", "Internet Archive" }, texts(helper.lastShown().buttons[1]))
+        end)
+
+        -- as a whole paragraph can't be searched for
+        it("searches for the start of what's long, up to a space", function()
+            local plugin = openUI()
+            plugin:searchFor(string.rep("word ", 30))
+            assert.are.equal("Search for “" .. string.rep("word ", 19) .. "word” on", helper.lastShown().title)
+
+            -- or between characters, rather than partway through one
+            plugin:searchFor(string.rep("é", 60))
+            assert.are.equal("Search for “" .. string.rep("é", 50) .. "” on", helper.lastShown().title)
+            plugin:searchFor("a" .. string.rep("é", 60))
+            assert.are.equal("Search for “a" .. string.rep("é", 49) .. "” on", helper.lastShown().title)
+        end)
+
+        it("doesn't search for nothing", function()
+            openUI():searchFor(" \n ")
+            assert.are.equal(0, #helper.state.shown)
+        end)
+
+        describe("from KOReader's dialog for a book", function()
+            local added, widgets
+
+            before_each(function()
+                added, widgets = {}, {}
+                FileManager.addFileDialogButtons = function(widget, row_id, row_func)
+                    table.insert(added, { widget = widget, row_id = row_id, row_func = row_func })
+                end
+                for _, name in ipairs({ "filemanagerhistory", "filemanagercollection", "filemanagerfilesearcher" }) do
+                    local menu = { file_dialog = { name = name } }
+                    widgets[name] = {
+                        getMenuInstance = function()
+                            return menu
+                        end,
+                    }
+                    helper.stub("apps/filemanager/" .. name, widgets[name])
+                end
+            end)
+
+            it("offers more by the book's author, in the file browser, history, collections and file search", function()
+                openUI()
+                openUI()
+
+                -- once a session
+                assert.are.equal(4, #added)
+                assert.are.equal(FileManager, added[1].widget)
+                assert.are.equal(widgets.filemanagerhistory, added[2].widget)
+                assert.are.equal("kindlefetch", added[1].row_id)
+
+                local row = added[2].row_func("/books/Dune.epub", true, { authors = "Frank Herbert\nBrian Herbert" })
+                assert.are.same({ "More by this author" }, texts(row))
+                row[1].callback()
+                assert.are.equal("Search for “Frank Herbert” on", helper.lastShown().title)
+            end)
+
+            it("closes the dialog it's in", function()
+                openUI()
+                local history_dialog = widgets.filemanagerhistory.getMenuInstance().file_dialog
+                local row = added[2].row_func("/books/Dune.epub", true, { authors = "Frank Herbert" })
+                row[1].callback()
+                assert.is_true(helper.wasClosed(history_dialog))
+            end)
+
+            it("offers nothing for folders, or books whose author isn't known", function()
+                openUI()
+                assert.is_nil(added[1].row_func("/books", false, nil))
+                assert.is_nil(added[1].row_func("/books/Dune.epub", true, nil))
+                assert.is_nil(added[1].row_func("/books/Dune.epub", true, { authors = "" }))
+            end)
+
+            -- rather than one for a book that has been closed since
+            it("searches from what's open by then", function()
+                openUI()
+                local latest = openUI()
+                added[1].row_func("/books/Dune.epub", true, { authors = "Frank Herbert" })[1].callback()
+                helper.lastShown().buttons[1][1].callback()
+                assert.are.equal("Search Library Genesis", latest.search_box.title)
+            end)
+        end)
+
+        it("searches for what's highlighted in a book", function()
+            local added = {}
+            KindleFetch:new {
+                ui = {
+                    menu = { registerToMainMenu = function() end },
+                    highlight = {
+                        addToHighlightDialog = function(_, idx, fn_button)
+                            added[idx] = fn_button
+                        end,
+                    },
+                },
+            }
+            local closed = false
+            local search_button = added["12_kindlefetch_search"]({
+                selected_text = { text = "the spice\nmust flow" },
+                onClose = function()
+                    closed = true
+                end,
+            })
+
+            assert.are.equal("Search Kindle Fetch", search_button.text)
+            search_button.callback()
+            assert.is_true(closed)
+            assert.are.equal("Search for “the spice must flow” on", helper.lastShown().title)
+        end)
+
+        it("offers more by the author of the book being read, in Kindle Fetch's menu", function()
+            local function menuTexts(plugin)
+                local menu_items = {}
+                plugin:addToMainMenu(menu_items)
+                local result = {}
+                for _, item in ipairs(menu_items.kindlefetch.sub_item_table) do
+                    table.insert(result, item.text or item.text_func())
+                end
+                return result, menu_items.kindlefetch.sub_item_table
+            end
+
+            local reading = KindleFetch:new {
+                ui = {
+                    menu = { registerToMainMenu = function() end },
+                    document = {},
+                    doc_props = { authors = "Frank Herbert" },
+                },
+            }
+            local menu_texts, items = menuTexts(reading)
+            assert.are.equal("More by Frank Herbert", menu_texts[4])
+            items[4].callback()
+            assert.are.equal("Search for “Frank Herbert” on", helper.lastShown().title)
+
+            -- which there's nothing to search for without
+            reading.ui.doc_props = {}
+            menu_texts, items = menuTexts(reading)
+            assert.are.equal("More by this author", menu_texts[4])
+            assert.is_false(items[4].enabled_func())
+            -- or a book
+            menu_texts = menuTexts(openUI())
+            assert.are.equal("Downloads", menu_texts[4])
+        end)
+    end)
+
     describe("changing what the books found can be in, from the results", function()
         local plugin
 
