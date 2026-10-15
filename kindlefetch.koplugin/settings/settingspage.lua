@@ -415,7 +415,8 @@ end
 
 -- a menu of choices to tick, each with its text and the code it's saved as, or a heading to go above the choices
 -- after it. the ticked codes are passed to save when the menu is closed, unless there are none, as nothing could
--- then be found, which none_text says. (a change isn't otherwise said, as the settings show it, and each
+-- then be found, which none_text says, and it stays open where save returns false (e.g. for the books found, where
+-- what's ticked would hide all of them). (a change isn't otherwise said, as the settings show it, and each
 -- notification refreshes the screen twice.) once it has closed, on_closed is called, where given, with whether
 -- what's ticked has changed
 function SettingsPage:tickSeveral(title, choices, ticked, save, none_text, on_closed)
@@ -459,13 +460,18 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, none_text, on_cl
             end
         end
 
+        local refused = false
         if #result == 0 then
             NotifyUtil.info(none_text)
             if not going_home then
                 return
             end
         else
-            save(result)
+            refused = save(result) == false
+            if refused and not going_home then
+                -- what's ticked can't be saved, as save has said
+                return
+            end
         end
         UIManager:close(menu)
         this:refresh()
@@ -474,7 +480,7 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, none_text, on_cl
             for __, code in ipairs(ticked) do
                 changed = changed or not selected[code]
             end
-            on_closed(changed and #result > 0)
+            on_closed(changed and #result > 0 and not refused)
         end
     end)
     if Menu.onHome then

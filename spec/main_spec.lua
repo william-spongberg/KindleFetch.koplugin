@@ -16,8 +16,8 @@ describe("KindleFetch", function()
     -- pages of results saved from earlier searches, as "query page"
     local saved
     -- the settings' menus for choosing languages, file types and book types that were opened, and what each calls once
-    -- closed
-    local choosers
+    -- closed, and the lists of what the books found have to tick (see SettingsPage:tickSeveral)
+    local choosers, tick_lists
     -- whether curl can look names up with encrypted DNS
     local can_use_encrypted_dns
 
@@ -248,7 +248,7 @@ describe("KindleFetch", function()
                 return plugin_dir
             end,
         })
-        choosers = {}
+        choosers, tick_lists = {}, {}
         local function chooser(name)
             return function(_, on_closed)
                 table.insert(choosers, { name = name, on_closed = on_closed })
@@ -261,6 +261,16 @@ describe("KindleFetch", function()
             changeLanguages = chooser("languages"),
             changeFileTypes = chooser("file types"),
             changeBookTypes = chooser("book types"),
+            tickSeveral = function(_, title, choices, ticked, save, none_text, on_closed)
+                table.insert(tick_lists, {
+                    title = title,
+                    choices = choices,
+                    ticked = ticked,
+                    save = save,
+                    none_text = none_text,
+                    on_closed = on_closed,
+                })
+            end,
         })
         can_cancel, trap_widgets = true, {}
         local trap_widget
@@ -1998,29 +2008,36 @@ describe("KindleFetch", function()
     describe("changing what the books found can be in, from the results", function()
         local plugin
 
+        -- the results' menu's Search again, offering what can be changed, from the menu that's open
+        local function searchAgain(menu)
+            menu:onLeftButtonTap()
+            local results_menu = helper.lastShown()
+            button(results_menu, "Search again…").callback()
+            assert.is_true(helper.wasClosed(results_menu))
+            return helper.lastShown()
+        end
+
         before_each(function()
             search_results[1] = { { book("1984"), book("Animal Farm") } }
             plugin = openUI()
             search(plugin, "orwell")
-            menus[1]:onLeftButtonTap()
         end)
 
         it("offers the languages, file types and book types", function()
-            local results_menu = helper.lastShown()
-            button(results_menu, "Languages…").callback()
-            assert.is_true(helper.wasClosed(results_menu))
+            local dialog = searchAgain(menus[1])
+            assert.are.equal("Change the settings, and search again:", dialog.title)
+            button(dialog, "Languages…").callback()
+            assert.is_true(helper.wasClosed(dialog))
             assert.are.equal("languages", choosers[1].name)
 
-            menus[1]:onLeftButtonTap()
-            button(helper.lastShown(), "File types…").callback()
-            menus[1]:onLeftButtonTap()
-            button(helper.lastShown(), "Book types…").callback()
+            button(searchAgain(menus[1]), "File types…").callback()
+            button(searchAgain(menus[1]), "Book types…").callback()
             assert.are.equal("file types", choosers[2].name)
             assert.are.equal("book types", choosers[3].name)
         end)
 
         it("searches again once they've changed, in place of the results", function()
-            button(helper.lastShown(), "Languages…").callback()
+            button(searchAgain(menus[1]), "Languages…").callback()
             search_results[1] = { { book("Nineteen Eighty-Four") } }
             andSearch(choosers[1].on_closed, true)
 
@@ -2030,7 +2047,7 @@ describe("KindleFetch", function()
         end)
 
         it("leaves the results as they are when nothing has changed", function()
-            button(helper.lastShown(), "File types…").callback()
+            button(searchAgain(menus[1]), "File types…").callback()
             choosers[1].on_closed(false)
 
             assert.is_false(helper.wasClosed(menus[1]))
@@ -2041,9 +2058,9 @@ describe("KindleFetch", function()
         it("leaves book types out for the other sites", function()
             search_results[1] = { { book("Emma") } }
             search(plugin, "emma", "archive")
-            menus[2]:onLeftButtonTap()
-            assert.is_false(pcall(button, helper.lastShown(), "Book types…"))
-            assert.is_true(pcall(button, helper.lastShown(), "Languages…"))
+            local dialog = searchAgain(menus[2])
+            assert.is_false(pcall(button, dialog, "Book types…"))
+            assert.is_true(pcall(button, dialog, "Languages…"))
         end)
     end)
 
@@ -2076,8 +2093,8 @@ describe("KindleFetch", function()
         it("shows only the books with the text in their title, authors or file type, from the page number", function()
             -- KOReader's Search, on tapping the page number
             menus[1].search_callback("orwell")
-            -- without Load more, as the books it would load wouldn't be among them
-            assert.are.same({ "1984", "Animal Farm" }, itemTexts(menus[1]))
+            -- with Load more, whose books are looked through as these are
+            assert.are.same({ "1984", "Animal Farm", "Load more" }, itemTexts(menus[1]))
             assert.are.equal("dystopia · 2 of 3 books", menus[1].title)
             assert.are.equal(1, menus[1].page)
             assert.are.same({ 1, 1 }, menus[1].covers_loaded)
@@ -2085,7 +2102,7 @@ describe("KindleFetch", function()
             assert.are.same({ { "dystopia", 1 } }, searches)
 
             menus[1].search_callback(" PDF ")
-            assert.are.same({ "Brave New World" }, itemTexts(menus[1]))
+            assert.are.same({ "Brave New World", "Load more" }, itemTexts(menus[1]))
         end)
 
         it("shows every book again, with Load more, once there's no text to look for", function()
@@ -2099,7 +2116,7 @@ describe("KindleFetch", function()
             menus[1].search_callback("orwell")
             menus[1].search_callback("tolkien")
             assert.are.equal("None of the books found have “tolkien” in them.", helper.lastShown().text)
-            assert.are.same({ "1984", "Animal Farm" }, itemTexts(menus[1]))
+            assert.are.same({ "1984", "Animal Farm", "Load more" }, itemTexts(menus[1]))
         end)
 
         it("is offered from the menu at the top of the results, along with showing every book again", function()
@@ -2116,7 +2133,7 @@ describe("KindleFetch", function()
             dialog.input_text = "huxley"
             button(dialog, "Look through").callback()
             assert.is_true(helper.wasClosed(dialog))
-            assert.are.same({ "Brave New World" }, itemTexts(menus[1]))
+            assert.are.same({ "Brave New World", "Load more" }, itemTexts(menus[1]))
 
             menus[1]:onLeftButtonTap()
             -- with what's being looked for, to change it
@@ -2133,6 +2150,236 @@ describe("KindleFetch", function()
             search(plugin, "dune")
             assert.are.same({ "Dune" }, itemTexts(menus[2]))
             assert.are.equal("dune · 1 book", menus[2].title)
+        end)
+    end)
+
+    describe("showing only some of the books found", function()
+        local plugin
+
+        -- a book found on the site, in the language, and the file type where given
+        local function siteBook(title, source, language, file_type)
+            local found = book(title, file_type)
+            found.source = source
+            found.language = language
+            return found
+        end
+
+        local function searchDune()
+            plugin:setupUI()
+            plugin.search_box.input_text = "dune"
+            andSearch(button(plugin.search_box, "Search").callback)
+        end
+
+        -- the texts of the buttons in the menu at the top of the results that are showing, and the menu
+        local function resultsMenu()
+            menus[#menus]:onLeftButtonTap()
+            local results_menu = helper.lastShown()
+            local texts = {}
+            for _, row in ipairs(results_menu.buttons) do
+                for _, b in ipairs(row) do
+                    table.insert(texts, b.text)
+                end
+            end
+            return texts, results_menu
+        end
+
+        -- the button in the menu at the top of the results whose text starts with start
+        local function filterButton(start)
+            local _, results_menu = resultsMenu()
+            for _, row in ipairs(results_menu.buttons) do
+                for _, b in ipairs(row) do
+                    if b.text:sub(1, #start) == start then
+                        return b
+                    end
+                end
+            end
+            error("no button " .. start)
+        end
+
+        local function choiceTexts(list)
+            local texts = {}
+            for _, choice in ipairs(list.choices) do
+                table.insert(texts, choice.text)
+            end
+            return texts
+        end
+
+        -- show only the books with the codes of what the button's list has, as if they were all that was ticked once
+        -- it was closed, returning what saving it did: it's closed, with what's ticked changed, unless that's false
+        local function show(start, codes)
+            filterButton(start).callback()
+            local list = tick_lists[#tick_lists]
+            local taken = list.save(codes)
+            if taken ~= false then
+                list.on_closed(true)
+            end
+            return taken
+        end
+
+        local function loadMore()
+            local items = menus[#menus].item_table
+            andSearch(items[#items].callback)
+        end
+
+        before_each(function()
+            settings.search_sources = { "zlib", "libgen", "archive" }
+            zlib_logged_in = true
+            site_results.zlib = {
+                { { siteBook("Dune", "zlib", "english"), siteBook("Dune Messiah", "zlib", "French") }, nil, 2 },
+            }
+            search_results[1] = { { siteBook("Children of Dune", "libgen", "English", "pdf") }, nil, 2 }
+            site_results.archive = { { { siteBook("Emma", "archive") } } }
+            plugin = openUI()
+            searchDune()
+        end)
+
+        it("offers to show only the books from some of the sites, languages and file types found", function()
+            assert.are.same({
+                "Look through the books found…",
+                "Sites: All",
+                "Languages: All",
+                "File types: All",
+                "Downloaded: All",
+                "Search again…",
+            }, (resultsMenu()))
+
+            filterButton("Sites:").callback()
+            assert.is_true(helper.wasClosed(helper.state.shown[#helper.state.shown]))
+            local list = tick_lists[1]
+            assert.are.equal("Sites", list.title)
+            -- each with how many of the books have it, in the order the sites are offered
+            assert.are.same({ "Z-Library (2)", "Library Genesis (1)", "Internet Archive (1)" }, choiceTexts(list))
+            assert.are.same({ "zlib", "libgen", "archive" }, list.ticked)
+            assert.are.equal("That would hide every book found.", list.none_text)
+
+            -- the most common first, each site's spelling of a language as the same, and books that don't say last
+            filterButton("Languages:").callback()
+            assert.are.same({ "English (2)", "French (1)", "Unknown (1)" }, choiceTexts(tick_lists[2]))
+            filterButton("File types:").callback()
+            assert.are.same({ "EPUB (3)", "PDF (1)" }, choiceTexts(tick_lists[3]))
+        end)
+
+        it("shows only the books with what's ticked, without searching again", function()
+            local covers_loaded = #menus[1].covers_loaded
+            show("Sites:", { "zlib", "archive" })
+            assert.are.same({ "Dune", "Dune Messiah", "Emma", "Load more" }, itemTexts(menus[1]))
+            assert.are.equal("dune · 3 of 4 books", menus[1].title)
+            -- from the first page, with its covers
+            assert.are.equal(1, menus[1].page)
+            assert.are.equal(covers_loaded + 1, #menus[1].covers_loaded)
+            assert.are.equal(1, menus[1].covers_loaded[covers_loaded + 1])
+            assert.are.same({ { "dune", 1 } }, searches)
+            -- which the menu says, offering to show them all again
+            assert.are.equal("Sites: Z-Library, Internet Archive", filterButton("Sites:").text)
+
+            show("Languages:", { "english", "" })
+            assert.are.same({ "Dune", "Emma", "Load more" }, itemTexts(menus[1]))
+            filterButton("Show all 4 books").callback()
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "Emma", "Load more" }, itemTexts(menus[1]))
+            assert.are.equal("dune · 4+ books", menus[1].title)
+            assert.are.equal("Sites: All", filterButton("Sites:").text)
+        end)
+
+        it("leaves the list on the page it's on where nothing has changed", function()
+            menus[1].page = 2
+            filterButton("Sites:").callback()
+            local list = tick_lists[1]
+            list.save(list.ticked)
+            list.on_closed(false)
+            assert.are.equal(2, menus[1].page)
+            assert.are.equal("dune · 4+ books", menus[1].title)
+        end)
+
+        it("doesn't hide every book, leaving the list open to tick something else", function()
+            show("Languages:", { "french" })
+            assert.is_false(show("Sites:", { "libgen", "archive" }))
+            assert.are.equal("That would hide every book found.", helper.lastNotification())
+            assert.are.same({ "Dune Messiah", "Load more" }, itemTexts(menus[1]))
+            assert.are.equal("Sites: All", filterButton("Sites:").text)
+        end)
+
+        it("looks through the books shown for text", function()
+            show("Sites:", { "libgen" })
+            menus[1].search_callback("messiah")
+            assert.are.equal("None of the books shown have “messiah” in them.", helper.lastShown().text)
+            menus[1].search_callback("children")
+            assert.are.same({ "Children of Dune", "Load more" }, itemTexts(menus[1]))
+            -- and shows all of them again, whatever was hidden
+            filterButton("Show all 4 books").callback()
+            assert.are.equal(5, #menus[1].item_table)
+        end)
+
+        -- as there's nothing to choose between
+        it("doesn't offer what all the books found have the same of", function()
+            search_results[1] =
+                { { siteBook("Dune", "libgen", "English"), siteBook("Dune Messiah", "libgen", "English") } }
+            search(plugin, "dune")
+            assert.are.same({
+                "Look through the books found…",
+                -- which takes looking in the download folder to know
+                "Downloaded: All",
+                "Search again…",
+            }, (resultsMenu()))
+        end)
+
+        it("shows which books have been downloaded already, or haven't", function()
+            helper.state.fs["/mnt/us/documents/Dune.epub"] = "file"
+            filterButton("Downloaded:").callback()
+            assert.are.same({ "Yes (1)", "No (3)" }, choiceTexts(tick_lists[1]))
+            tick_lists[1].save({ "no" })
+            tick_lists[1].on_closed(true)
+            assert.are.same({ "Dune Messiah", "Children of Dune", "Emma", "Load more" }, itemTexts(menus[1]))
+            assert.are.equal("Downloaded: No", filterButton("Downloaded:").text)
+        end)
+
+        -- as nothing was said about what they have, which wasn't there to untick
+        it("shows the books of the sites that finish later, but for what's hidden", function()
+            site_results.archive = {
+                function()
+                    -- once Z-Library's and Library Genesis' books are showing
+                    show("Languages:", { "english" })
+                    return { siteBook("Emma", "archive", "German"), siteBook("Madame Bovary", "archive", "French") }
+                end,
+            }
+            searchDune()
+            assert.are.same({ "Dune", "Children of Dune", "Emma", "Load more" }, itemTexts(menus[2]))
+            assert.are.equal("dune · 3 of 5 books", menus[2].title)
+        end)
+
+        it("loads more only from the sites shown", function()
+            show("Sites:", { "libgen", "archive" })
+            site_results.zlib[2] = { { siteBook("God Emperor of Dune", "zlib", "English") } }
+            search_results[2] = { { siteBook("Heretics of Dune", "libgen", "English") } }
+            loadMore()
+            assert.are.same({ { "dune", 1 } }, zlib_searches)
+            assert.are.same({ { "dune", 1 }, { "dune", 2 } }, searches)
+            -- and has no more to load, though the sites hidden do
+            assert.are.same({ "Children of Dune", "Emma", "Heretics of Dune" }, itemTexts(menus[1]))
+        end)
+
+        it("turns to the first of the books loaded that's shown", function()
+            show("Sites:", { "zlib", "libgen" })
+            site_results.zlib[2] = { { siteBook("God Emperor of Dune", "zlib", "English") } }
+            search_results[2] = { { siteBook("Heretics of Dune", "libgen", "English") } }
+            loadMore()
+            -- the fourth shown, on the second page, rather than the fifth found
+            assert.are.equal(2, menus[1].page)
+        end)
+
+        it("says when the books loaded are all hidden", function()
+            show("Languages:", { "french" })
+            site_results.zlib[2] = { { siteBook("God Emperor of Dune", "zlib", "English") } }
+            search_results[2] = { {} }
+            loadMore()
+            assert.are.equal("1 more book was found, but it isn't among those shown.", helper.lastShown().text)
+            assert.are.same({ "Dune Messiah" }, itemTexts(menus[1]))
+        end)
+
+        it("starts afresh for the next search", function()
+            show("Sites:", { "zlib" })
+            searchDune()
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "Emma", "Load more" }, itemTexts(menus[2]))
+            assert.are.equal("Sites: All", filterButton("Sites:").text)
         end)
     end)
 

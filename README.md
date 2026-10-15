@@ -12,7 +12,7 @@ KindleFetch integrates Library Genesis, Internet Archive, Project Gutenberg and 
 
 - **Four sites, searched at once**: Z-Library (with your account), Library Genesis, Internet Archive and Project Gutenberg, each site's books shown as soon as it finds them
 - **Narrower searches**: search only titles, authors or ISBNs (Library Genesis and Internet Archive)
-- **Filters**: show only books in the languages, file types and book types you choose, and look through the results for a title or author
+- **Filters**: search in the languages, file types and book types you choose, then show only the books found on some sites, in some languages, file types or book types, or not downloaded yet, or look through them for a title or author, without searching again
 - **Search from your books**: find more by a book's author, or search for text you've highlighted
 - **Covers**: in the results, and full size with a tap
 - **Background downloads**: hide a download and carry on, then check on it from the menu
@@ -58,7 +58,7 @@ Project Gutenberg has over 75,000 free ebooks, mostly older books whose US copyr
 
 <img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" /> <img width="350" alt="Message saying it's searching, with a button to cancel" src="docs/screenshots/04-searching.png" />
 
-2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download. To show only the books with some text in their title, authors or file type, tap the menu at the top left of the list, or tap the page number, type the text and tap Search.
+2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download. The menu at the top left of the list shows only some of the books found, without searching again: tap Sites, Languages, File types, Book types or Downloaded (each offered where the books found don't all have the same) and untick what to hide, each listed with how many of the books have it, or tap Look through the books found to show only those with some text in their title, authors or file type (as does tapping the page number, typing the text and tapping Search). Show all brings the rest back, Load more only loads from the sites shown, and Search again changes the languages, file types or book types in the settings and searches again.
 
 <img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" /> <img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" /> <img width="350" alt="Searching Internet Archive: opening Kindle Fetch, typing a search, the covers arriving, and loading more books" src="docs/gifs/searching.gif" />
 
@@ -192,6 +192,7 @@ kindlefetch.koplugin/
 │   └── urlapi.lua             # Scrapes Wikipedia to discover the current Library Genesis mirrors and Z-Library addresses
 ├── ui/
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination
+│   ├── bookfilter.lua         # What the books found can be shown by without searching again (their sites, languages, file types, book types, and whether they're downloaded), with how many have each
 │   ├── coverplaceholder.lua   # Placeholder shown in place of a cover while it downloads
 │   ├── downloadprompt.lua     # Dialog showing a book's details and cover (full size when tapped), where to save it, and a Download button
 │   ├── diagnostics.lua        # What's known about Kindle Fetch, KOReader and the device, with a test of the connection to the sites and the recent log, to copy or save
@@ -252,6 +253,7 @@ kindlefetch.koplugin/
    - As Library Genesis can't filter by language or file type, and sends 25 results a page, further pages of its results are read until at least 10 books are found (up to 5 pages at a time), and "Load more" carries on from there, for as long as Library Genesis says it has more pages, adding the books to the list where it was tapped. Calling the search off while it reads further pages shows the books it has found so far
    - Results are cached (2 weeks by default, 100 entries max) to minimise requests
    - Search results are displayed in a menu, marking the books that are in the download folder already
+   - The books found can be narrowed down without searching again (`BookFilter`), by the values they have for their site, languages, file type, book type and whether they're in the download folder already. What's unticked is what's hidden, so books with other values, from a site that answers later or from loading more, are shown, and what would hide every book isn't taken
    - When Library Genesis lists results but none are in the preferred languages and file types, the plugin says how many it listed, and offers the settings or to keep searching through the rest
    - Z-Library (`ZlibSearch`) is searched with the API its own app uses, as the account logged into, in the preferred languages and file types, 50 books at a time. As it moves between addresses as they're taken down, they're looked up on its Wikipedia page, like Library Genesis' mirrors (kept for a week by default), and the next is asked when one doesn't answer
    - Internet Archive (`IaSearch`) is searched with its search API for the books with each word searched for in their title or author's name, in the preferred languages (or no known language) and the formats of the preferred file types, that anyone can download, the most downloaded first, 50 at a time. Each is given the first of the preferred file types it's in, as most are in several
