@@ -66,7 +66,7 @@ describe("HttpUtil", function()
 
         local body, err = HttpUtil.getBody("https://libgen.example")
         assert.is_nil(body)
-        assert.matches("wantread", err)
+        assert.are.equal("TLS/SSL connection failed", err)
         assert.is_nil(helper.state.http_timeouts)
         assert.is_truthy(helper.logged("warn", "^KOReader's HTTP raised an error rather than returning it"))
     end)
@@ -100,11 +100,31 @@ describe("HttpUtil", function()
 
         local body, err = HttpUtil.getBody("https://libgen.example")
         assert.is_nil(body)
-        assert.are.equal("timeout", err)
+        assert.are.equal("request timed out", err)
         assert.are.equal(
-            "could not fetch https://libgen.example error: timeout",
+            "could not fetch https://libgen.example error: request timed out",
             helper.logged("warn", "^could not fetch")
         )
+        -- and what KOReader's HTTP said itself
+        assert.is_truthy(helper.logged("info", "^KOReader's HTTP said: timeout"))
+    end)
+
+    -- which said luasocket's and its TLS library's own words, e.g. "wantread", unlike when curl fetched the page
+    it("says what went wrong as curl says it", function()
+        for luasocket_err, said in pairs({
+            ["timeout"] = "request timed out",
+            ["connection refused"] = "failed to connect to server",
+            ["Network is unreachable"] = "failed to connect to server",
+            ["wantread"] = "TLS/SSL connection failed",
+            ["certificate verify failed"] = "TLS certificate verification failed",
+            ["closed"] = "failed receiving network data",
+            -- and as it was, when curl has no words of its own for it
+            ["something else"] = "something else",
+        }) do
+            respond({ "", nil, luasocket_err })
+            local _, err = HttpUtil.getBody("https://libgen.example")
+            assert.are.equal(said, err)
+        end
     end)
 
     it("treats an empty page as a failure", function()
@@ -494,7 +514,7 @@ describe("HttpUtil", function()
 
             local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
             assert.is_nil(ok)
-            assert.are.equal("timeout", err)
+            assert.are.equal("request timed out", err)
             assert.is_false(helper.exists(path))
         end)
 
@@ -505,7 +525,7 @@ describe("HttpUtil", function()
 
             local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
             assert.is_nil(ok)
-            assert.matches("closed", err)
+            assert.are.equal("failed receiving network data", err)
             assert.is_false(helper.exists(path))
             assert.is_nil(helper.state.http_timeouts)
         end)

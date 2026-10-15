@@ -49,6 +49,14 @@ describe("CurlUtil", function()
     end)
 
     -- a Kindle's own curl can't connect to Library Genesis, so says the TLS connection failed
+    -- which were said only as their numbers, including the TLS ones curl gives a Kindle's own curl's failing on
+    it("explains each exit code of curl's that can come up", function()
+        for _, exit_code in ipairs({ 16, 51, 58, 59, 77, 83, 92 }) do
+            assert.is_nil(CurlUtil.getErrorMeaning(exit_code):find("exit code", 1, true), tostring(exit_code))
+        end
+        assert.are.equal("(curl exit code 99)", CurlUtil.getErrorMeaning(99))
+    end)
+
     it("explains that a Kindle's curl is too old, and how to update it, when that's why it couldn't connect", function()
         helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
         assert.is_true(CurlUtil.isOutdated())

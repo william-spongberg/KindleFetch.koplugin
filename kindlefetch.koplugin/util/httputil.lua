@@ -38,13 +38,43 @@ local UNRESOLVED_ERRORS = {
     ["host not found"] = true,
 }
 
--- what went wrong when KOReader's own HTTP had no answer, as curl says it when it's that a name couldn't be looked up
+-- the curl exit codes whose meanings say what else KOReader's own HTTP says, in lower case, which is otherwise said
+-- as luasocket and its TLS library say it (e.g. "wantread"), and differently from when curl fetched the page
+local LUASOCKET_ERRORS = {
+    { "timeout", 28 },
+    { "connection refused", 7 },
+    { "no route to host", 7 },
+    { "network is unreachable", 7 },
+    { "certificate", 60 },
+    { "wantread", 35 },
+    { "wantwrite", 35 },
+    { "handshake", 35 },
+    { "ssl", 35 },
+    { "tls", 35 },
+    { "closed", 56 },
+    { "connection reset", 56 },
+}
+
+-- what went wrong when KOReader's own HTTP had no answer, as curl says it (logging what it said itself, for
+-- crash.log)
 local function explainFailure(err)
     err = tostring(err or _("no response"))
-    if UNRESOLVED_ERRORS[err:lower()] then
-        return HttpUtil.UNRESOLVED
+    local lower = err:lower()
+    local explained = err
+    if UNRESOLVED_ERRORS[lower] then
+        explained = HttpUtil.UNRESOLVED
+    else
+        for __, known in ipairs(LUASOCKET_ERRORS) do
+            if lower:find(known[1], 1, true) then
+                explained = CurlUtil.getErrorMeaning(known[2])
+                break
+            end
+        end
     end
-    return err
+    if explained ~= err then
+        LogUtil.info("KOReader's HTTP said:", err)
+    end
+    return explained
 end
 
 -- luasocket's http.request, which returns what went wrong, but can raise it instead, e.g. from the TLS library, which
