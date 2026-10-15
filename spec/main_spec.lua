@@ -1012,6 +1012,24 @@ describe("KindleFetch", function()
                 assert.are.equal(0, #menus)
             end)
 
+            -- which left the search going, and what it found shown once it was over
+            it("is called off when KOReader closes the message, as its Home key does", function()
+                local dismissed = 0
+                search_results[1] = function()
+                    message().dismiss_callback = function()
+                        dismissed = dismissed + 1
+                    end
+                    -- as ButtonDialog's onClose does, before closing it
+                    message().tap_close_callback()
+                    return nil, "request cancelled"
+                end
+                search(openUI(), "dune")
+
+                assert.are.equal(1, dismissed)
+                assert.is_true(message().cancelled)
+                assert.are.equal(0, #menus)
+            end)
+
             it("doesn't offer to call it off when it can't be", function()
                 can_cancel = false
                 search_results[1] = { { book("Dune") } }

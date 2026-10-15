@@ -17,6 +17,16 @@ function WaitingMessage.new(text)
     end
 
     local message
+    -- (set by Trapper:dismissablePopen while it waits)
+    local function cancel()
+        if message.cancelled then
+            return
+        end
+        message.cancelled = true
+        if message.dismiss_callback then
+            message.dismiss_callback()
+        end
+    end
     message = ButtonDialog:new {
         title = text,
         title_align = "center",
@@ -26,16 +36,14 @@ function WaitingMessage.new(text)
                 {
                     text = _("Cancel"),
                     callback = function()
-                        message.cancelled = true
                         UIManager:close(message)
-                        -- set by Trapper:dismissablePopen while it waits
-                        if message.dismiss_callback then
-                            message.dismiss_callback()
-                        end
+                        cancel()
                     end,
                 },
             },
         },
+        -- as KOReader's Home key closes it, which left the wait going, and what it was waiting for shown once over
+        tap_close_callback = cancel,
     }
     return message
 end
