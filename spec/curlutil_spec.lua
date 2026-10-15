@@ -139,6 +139,18 @@ describe("CurlUtil", function()
             assert.is_true(CurlUtil.canFetch())
         end)
 
+        -- as every site is https, which it fetched none of, rather than KOReader's own HTTP fetching them
+        it("isn't left to a curl that can't make secure connections", function()
+            helper.stubCommand(
+                "curl --version",
+                "curl 7.88.1 (arm-linux) libcurl/7.88.1\nRelease-Date: 2023-02-20\nProtocols: file ftp http\n"
+            )
+            assert.is_false(CurlUtil.canFetch())
+            assert.is_truthy(
+                helper.logged("info", "^fetching pages with KOReader, as curl can't make secure connections")
+            )
+        end)
+
         it("isn't left to curl when there isn't one", function()
             assert.is_false(CurlUtil.canFetch())
             assert.is_truthy(helper.logged("info", "^fetching pages with KOReader, as curl is missing or too old,"))
