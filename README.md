@@ -157,7 +157,9 @@ To put the old curl back, run `mntroot rw`, then `cp /usr/bin/curl.system.bak /u
 
 ### Anything else
 
-KOReader's `crash.log`, in its `koreader` folder, says what Kindle Fetch was doing when something went wrong: attach it to an [issue](https://github.com/william-spongberg/KindleFetch.koplugin/issues).
+Kindle Fetch → Diagnostics shows what's needed to work out what went wrong: the versions of Kindle Fetch, KOReader and curl, the device, the settings, the mirrors, and what Kindle Fetch has logged since KOReader started. Tap Test connection to see which of the sites (Wikipedia, each of Library Genesis' mirrors, Internet Archive and Z-Library) the device can reach, then Copy or Save (to `kindlefetch-diagnostics.txt` in KOReader's folder) to attach it to an [issue](https://github.com/william-spongberg/KindleFetch.koplugin/issues). It has nothing in it that would let anyone into your Z-Library account.
+
+KOReader's `crash.log`, in its `koreader` folder, says what Kindle Fetch was doing when something went wrong too.
 
 ## How It Works
 
@@ -184,6 +186,7 @@ kindlefetch.koplugin/
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination
 │   ├── coverplaceholder.lua   # Placeholder shown in place of a cover while it downloads
 │   ├── downloadprompt.lua     # Dialog showing a book's details and cover (full size when tapped), where to save it, and a Download button
+│   ├── diagnostics.lua        # What's known about Kindle Fetch, KOReader and the device, with a test of the connection to the sites and the recent log, to copy or save
 │   ├── waitingmessage.lua     # Message saying what's being waited for, with a Cancel button that calls the wait off
 │   ├── zliblogin.lua          # Dialog asking for the email and password of a Z-Library account, and logging in with them
 │   └── downloadprogress.lua   # Renders a centered progress widget with cancel and hide buttons

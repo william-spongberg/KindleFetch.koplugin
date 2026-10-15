@@ -233,6 +233,9 @@ local function createStubs(state)
             inhibitInputUntil = function(_, set_or_seconds)
                 state.input_inhibited = set_or_seconds
             end,
+            setClipboardText = function(text)
+                state.clipboard = text
+            end,
             group = {
                 Back = { "Back" },
             },
@@ -781,6 +784,7 @@ local WIDGET_MODULES = {
     "ui/widget/iconwidget",
     "ui/widget/buttontable",
     "ui/widget/focusmanager",
+    "ui/widget/textviewer",
 }
 
 local CONSTANT_MODULES = {
