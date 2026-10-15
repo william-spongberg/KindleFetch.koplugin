@@ -16,6 +16,7 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
   - Library Genesis' mirrors and Z-Library's addresses (1 week expiry by default)
   - Book covers (500 entries max, the oldest removed to make room)
 - **Preferences**: Filter results by preferred languages, file types, and book types (on Library Genesis)
+- **Looking Through Results**: Show only the books found with some text in their title, authors or file type, without searching again
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders until each one arrives; tap a cover in the download prompt to see it full size
 - **Download Progress**: Visual download progress bar with real-time file size information, saying what it's waiting for until the book starts to arrive, and when the download has stalled
 - **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes
@@ -54,7 +55,7 @@ Internet Archive only has the books that anyone can download, rather than borrow
 
 <img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" /> <img width="350" alt="Message saying it's searching, with a button to cancel" src="docs/screenshots/04-searching.png" />
 
-2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download.
+2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download. To show only the books with some text in their title, authors or file type, tap the menu at the top left of the list, or tap the page number, type the text and tap Search.
 
 <img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" /> <img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" /> <img width="350" alt="Searching Library Genesis: opening Kindle Fetch, typing a search, the covers arriving, and loading more books" src="docs/gifs/searching.gif" />
 
