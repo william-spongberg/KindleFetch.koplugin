@@ -32,6 +32,8 @@ local STALL_NOTICE_TIME = 10
 -- e.g. the device's storage being full: couldn't find it or connect to it, nothing arrived for a while, nothing came
 -- back, or the connection broke
 local SERVER_FAILURES = { [6] = true, [7] = true, [28] = true, [52] = true, [56] = true }
+-- how often a download that's waiting for Wi-Fi checks whether it's back, as KOReader doesn't say so on every device
+local RECONNECT_POLL_INTERVAL = 2
 
 local function hasProxy()
     local proxy_url = os.getenv("PROXY_URL")
@@ -108,6 +110,52 @@ local function startCurl(transfer)
     return true
 end
 
+-- stop downloading the book while the device sleeps or Wi-Fi is off, rather than it failing for want of Wi-Fi as if
+-- the site had, keeping what has arrived to carry on from once it's back (see resumeTransfer)
+local function pauseTransfer(transfer, why)
+    if transfer.paused or not transfer.download_url or transfer.progress_widget.cancelled then
+        return
+    end
+    transfer.paused = true
+    -- (whose exit code isn't looked at)
+    CurlUtil.killPid(transfer.pid)
+    transfer.pid = nil
+    LogUtil.info(
+        string.format(
+            "pausing the download of %q at %d bytes, as %s",
+            transfer.book.title,
+            FileUtil.getSize(transfer.part_path),
+            why
+        )
+    )
+    transfer.progress_widget:update(transfer.progress_widget.percentage or 0, _("Waiting for Wi-Fi..."))
+end
+
+-- carry on downloading the book once the device is awake and connected again, from what had arrived, with the same
+-- link (rather than asking for another, which for Z-Library can count as another download). returns false when curl
+-- couldn't be started again, and the download has failed
+local function resumeTransfer(transfer)
+    if not transfer.paused then
+        return true
+    end
+    LogUtil.info(string.format("carrying on with the download of %q, now Wi-Fi is back", transfer.book.title))
+    transfer.paused = nil
+    transfer.resume = true
+    FileUtil.removeFile(transfer.exit_file)
+    local started, err = startCurl(transfer)
+    if not started then
+        LogUtil.warn("could not start curl to carry on with the download:", err)
+        FileUtil.removeFile(transfer.part_path)
+        transfer.on_finish(false, err)
+        return false
+    end
+    transfer.progress_widget:update(
+        transfer.progress_widget.percentage or 0,
+        string.format(_("Waiting for %s..."), Sources[transfer.book.source].NAME)
+    )
+    return true
+end
+
 -- check on curl downloading a book until it has finished, showing how far it has got. transfer is what's known
 -- about the download (see _startDownload), and its on_finish is called with whether the book downloaded, and what
 -- went wrong if it didn't
@@ -120,6 +168,23 @@ local function pollDownload(transfer)
         CurlUtil.killPid(transfer.pid)
         FileUtil.removeFile(part_path)
         transfer.on_finish(false, Errors.CANCELLED)
+        return
+    end
+
+    -- waiting for Wi-Fi to come back (see pauseTransfer), which is checked for here too, as KOReader doesn't say so
+    -- on every device
+    if transfer.paused then
+        if not transfer.sleeping and NetworkMgr:isConnected() and not resumeTransfer(transfer) then
+            return
+        end
+        Guard.scheduleIn(
+            transfer.paused and RECONNECT_POLL_INTERVAL or DOWNLOAD_POLL_INTERVAL,
+            "checking on a download",
+            function()
+                pollDownload(transfer)
+            end,
+            transfer.abandon
+        )
         return
     end
 
@@ -215,6 +280,18 @@ local function pollDownload(transfer)
                 tostring(total_size or "unknown")
             )
         )
+
+        -- Wi-Fi went off, rather than the site failing (where KOReader didn't say so, see onNetworkDisconnected):
+        -- carry on from what has arrived once it's back, rather than trying again now, which can't work
+        if SERVER_FAILURES[exit_code] and not NetworkMgr:isConnected() then
+            -- (as curl has stopped, there's nothing to stop)
+            transfer.pid = nil
+            pauseTransfer(transfer, "Wi-Fi is off")
+            Guard.scheduleIn(RECONNECT_POLL_INTERVAL, "checking on a download", function()
+                pollDownload(transfer)
+            end, transfer.abandon)
+            return
+        end
 
         -- try again, from the beginning if the site wouldn't carry on from where the download stopped, otherwise
         -- through the proxy as a backup (carrying on from there)
@@ -504,6 +581,48 @@ function Downloader:downloadBook(book, filepath, callback, open_existing)
     end)
 
     prompt:show()
+end
+
+-- each download whose book has started to download, whose curl can be stopped and started again
+local function eachTransfer(active_downloads, fn)
+    for _, download in pairs(active_downloads) do
+        if download.transfer then
+            fn(download.transfer)
+        end
+    end
+end
+
+-- the device is going to sleep, which turns Wi-Fi off, so stop each download until it's awake again (see
+-- pauseTransfer). sent by KOReader through the plugin (see main.lua), as are the events below
+function Downloader:onSuspend()
+    eachTransfer(self.active_downloads, function(transfer)
+        transfer.sleeping = true
+        pauseTransfer(transfer, "the device is going to sleep")
+    end)
+end
+
+-- carry on with each download once the device is awake, as soon as it's connected again (see pollDownload)
+function Downloader:onResume()
+    eachTransfer(self.active_downloads, function(transfer)
+        transfer.sleeping = nil
+        if transfer.paused and NetworkMgr:isConnected() then
+            resumeTransfer(transfer)
+        end
+    end)
+end
+
+function Downloader:onNetworkDisconnected()
+    eachTransfer(self.active_downloads, function(transfer)
+        pauseTransfer(transfer, "Wi-Fi went off")
+    end)
+end
+
+function Downloader:onNetworkConnected()
+    eachTransfer(self.active_downloads, function(transfer)
+        if transfer.paused and not transfer.sleeping then
+            resumeTransfer(transfer)
+        end
+    end)
 end
 
 -- show the progress of a download, if it was hidden. returns whether the book with that id is downloading

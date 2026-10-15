@@ -333,6 +333,23 @@ describe("KindleFetch", function()
             assert.are.equal(1, cancelled_downloads)
         end)
 
+        -- so downloads wait for the device to wake up and Wi-Fi to come back, rather than failing
+        it("tells the downloader when the device sleeps and wakes, and Wi-Fi goes off and comes back", function()
+            local told = {}
+            local Downloader = require("api.downloader")
+            for _, event in ipairs({ "onSuspend", "onResume", "onNetworkDisconnected", "onNetworkConnected" }) do
+                Downloader[event] = function()
+                    table.insert(told, event)
+                end
+            end
+            local plugin = openUI()
+            for _, event in ipairs({ "onSuspend", "onResume", "onNetworkDisconnected", "onNetworkConnected" }) do
+                -- letting the event carry on to the rest of KOReader
+                assert.is_nil(plugin[event](plugin))
+            end
+            assert.are.same({ "onSuspend", "onResume", "onNetworkDisconnected", "onNetworkConnected" }, told)
+        end)
+
         -- as when the device is powered off or restarted, or its storage is shared over USB, which curl carried on
         -- writing to
         it("cancels downloads when KOReader closes without exiting", function()

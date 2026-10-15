@@ -259,6 +259,7 @@ kindlefetch.koplugin/
 
 5. **Error Handling & Resilience**
    - Wi-Fi is turned on before searching if it's off
+   - A download waits while the device sleeps or Wi-Fi is off, rather than failing as if the site had, then carries on from what had arrived, with the same link, once Wi-Fi is back (so Z-Library isn't asked for another, which can count as another download)
    - Failed searches, cover downloads and book downloads automatically retry through a configured proxy (if `PROXY_URL` env var is set) and empty or failed downloads are deleted
    - Failed mirrors are removed from cache; if all cached URLs fail they are re-scraped from Wikipedia
    - When none of Library Genesis' sites can be found, though Wikipedia can, as when the network is blocking them, the plugin says so, rather than only that the last couldn't be found (see [Troubleshooting](#troubleshooting))

@@ -138,6 +138,20 @@ end
 KindleFetch.onRestart = KindleFetch.onExit
 KindleFetch.onClose = KindleFetch.onExit
 
+-- downloads wait while the device sleeps or Wi-Fi is off, carrying on once it's back (again without returning true)
+function KindleFetch:onSuspend()
+    Downloader:onSuspend()
+end
+function KindleFetch:onResume()
+    Downloader:onResume()
+end
+function KindleFetch:onNetworkDisconnected()
+    Downloader:onNetworkDisconnected()
+end
+function KindleFetch:onNetworkConnected()
+    Downloader:onNetworkConnected()
+end
+
 -- sent by the dispatcher actions, e.g. when a gesture is assigned to one
 function KindleFetch:onKindleFetch()
     self:setupUI("libgen")

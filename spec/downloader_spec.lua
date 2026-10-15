@@ -1027,6 +1027,20 @@ describe("Downloader", function()
             assert.are.equal(MB, #helper.readFile(filepath))
         end)
 
+        -- which can count as another of the few downloads Z-Library allows a day
+        it("doesn't ask for another link when Wi-Fi went off, carrying on with the same one once it's back", function()
+            download()
+            require("ui/network/manager").connected = false
+            curlWrote(MB / 2, 6)
+            helper.tick()
+            assert.are.equal(1, links)
+
+            require("ui/network/manager").connected = true
+            helper.tick()
+            assert.are.equal(1, links)
+            assert.are.equal("https://dl1.example/1984.epub", spawned[2].url)
+        end)
+
         it("asks for another link when the server doesn't answer at all", function()
             download()
             helper.writeFile(spawned[1].exit_file, "7")
@@ -1056,6 +1070,106 @@ describe("Downloader", function()
 
             assert.are.equal(1, links)
             assert.are.same({ { ok = false, err = "HTTP error response (HTTP 404)" } }, results)
+        end)
+    end)
+
+    -- which failed the download as if the site had, removing what had arrived, and for Z-Library, asking for another
+    -- link, which can count as another download
+    describe("when Wi-Fi goes off, or the device goes to sleep", function()
+        local network
+
+        before_each(function()
+            network = require("ui/network/manager")
+            download()
+            curlWrote(MB / 2)
+            helper.tick()
+        end)
+
+        local function progressText()
+            return progress().status_text
+        end
+
+        it("waits for Wi-Fi to come back, then carries on from what had arrived with the same link", function()
+            network.connected = false
+            curlWrote(MB / 2, 6)
+            helper.tick()
+            assert.are.same({}, results)
+            assert.are.equal("Waiting for Wi-Fi...", progressText())
+            assert.are.equal(MB / 2, #helper.readFile(filepath .. ".part"))
+            assert.are.same({}, killed)
+            -- still waiting
+            helper.tick()
+            assert.are.equal(1, #spawned)
+
+            -- found to be back, as KOReader doesn't say so on every device
+            network.connected = true
+            helper.tick()
+            assert.are.equal(2, #spawned)
+            assert.are.equal(spawned[1].url, spawned[2].url)
+            assert.is_true(spawned[2].resume)
+            assert.are.equal("Waiting for Library Genesis...", progressText())
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
+            assert.are.equal(MB, #helper.readFile(filepath))
+        end)
+
+        it("stops curl as soon as KOReader says Wi-Fi went off, and starts it again once it says it's back", function()
+            Downloader:onNetworkDisconnected()
+            assert.are.same({ 1000 }, killed)
+            assert.are.equal("Waiting for Wi-Fi...", progressText())
+            helper.tick()
+            assert.are.same({}, results)
+
+            Downloader:onNetworkConnected()
+            assert.are.equal(2, #spawned)
+            assert.is_true(spawned[2].resume)
+        end)
+
+        it("stops curl while the device sleeps, carrying on once it's awake", function()
+            Downloader:onSuspend()
+            assert.are.same({ 1000 }, killed)
+            assert.is_true(helper.exists(filepath .. ".part"))
+            -- not while it's asleep, whatever it says about Wi-Fi
+            Downloader:onNetworkConnected()
+            helper.tick()
+            assert.are.equal(1, #spawned)
+
+            Downloader:onResume()
+            assert.are.equal(2, #spawned)
+            assert.is_true(spawned[2].resume)
+        end)
+
+        it("waits once the device is awake for Wi-Fi to reconnect", function()
+            Downloader:onSuspend()
+            network.connected = false
+            Downloader:onResume()
+            helper.tick()
+            assert.are.equal(1, #spawned)
+
+            network.connected = true
+            Downloader:onNetworkConnected()
+            assert.are.equal(2, #spawned)
+        end)
+
+        it("can be cancelled while it waits", function()
+            Downloader:onNetworkDisconnected()
+            progress().cancel_button.callback()
+            helper.runScheduled()
+            assert.are.same({ { ok = false, err = "request cancelled" } }, results)
+            assert.is_false(helper.exists(filepath .. ".part"))
+        end)
+
+        it("fails when curl can't be started again", function()
+            Downloader:onNetworkDisconnected()
+            CurlUtil.startDownload = function()
+                return nil, "could not start curl"
+            end
+            Downloader:onNetworkConnected()
+            assert.are.same({ { ok = false, err = "could not start curl" } }, results)
+            assert.is_false(helper.exists(filepath .. ".part"))
+            assert.are.same({}, Downloader:getActiveDownloads())
         end)
     end)
 
