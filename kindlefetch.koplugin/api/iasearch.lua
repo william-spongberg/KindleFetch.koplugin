@@ -522,6 +522,9 @@ local function pickFile(files, file_type)
                 and file.format:lower() == format:lower()
                 and type(file.name) == "string"
                 and file.name ~= ""
+                -- which only those who can borrow it can download, so it would fail
+                and file.private ~= "true"
+                and file.private ~= true
             then
                 return file
             end

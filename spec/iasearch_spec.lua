@@ -373,6 +373,23 @@ describe("IaSearch", function()
             )
         end)
 
+        -- which only those who can borrow it can download
+        it("leaves out files that are private", function()
+            book.file_type = "epub"
+            web.pages[FILES_URL] = fixtures.archiveFiles({
+                { name = "emma_lending.epub", format = "EPUB", private = "true" },
+                { name = "emma.epub", format = "EPUB" },
+            })
+            assert.are.equal("https://archive.org/download/emma00aust/emma.epub", IaSearch.findDownloadLink(book))
+
+            web.pages[FILES_URL] = fixtures.archiveFiles({
+                { name = "emma_lending.epub", format = "EPUB", private = "true" },
+            })
+            local url, err = IaSearch.findDownloadLink(book)
+            assert.is_nil(url)
+            assert.are.equal("Internet Archive no longer has this book as EPUB", err)
+        end)
+
         it("links to the first file in the format, when there are several", function()
             book.file_type = "epub"
             web.pages[FILES_URL] = fixtures.archiveFiles({
