@@ -372,7 +372,7 @@ describe("CurlUpdater", function()
         end)
 
         -- so a newer curl isn't asked for without its SHA-256, which no Kindle would then install
-        it("knows the SHA-256 of the static curl build on GitHub", function()
+        it("knows the SHA-256 of the static curl build on GitHub #live", function()
             helper.stubs.http.request = helper.useLiveHttp().request
             local path = data_dir .. "/curl-armhf"
             local url = string.format(

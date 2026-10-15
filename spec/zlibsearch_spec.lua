@@ -408,7 +408,7 @@ describe("ZlibSearch", function()
     -- one counts towards how many books the account can download a day
     local email, password = os.getenv("KINDLEFETCH_ZLIB_EMAIL"), os.getenv("KINDLEFETCH_ZLIB_PASSWORD")
     if email and password then
-        it("finds books on the live Z-Library site", function()
+        it("finds books on the live Z-Library site #live", function()
             web.live = true
             -- at the addresses Wikipedia lists
             require("cache.urlcache"):clear()

@@ -481,7 +481,7 @@ describe("IaSearch", function()
     end)
 
     -- catches Internet Archive changing its search, or what it says about its books
-    describe("on the live Internet Archive site", function()
+    describe("on the live Internet Archive site #live", function()
         before_each(function()
             web.live = true
         end)

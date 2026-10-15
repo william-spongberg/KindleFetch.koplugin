@@ -251,7 +251,7 @@ describe("ZlibAccount", function()
     -- KINDLEFETCH_ZLIB_PASSWORD, so it's skipped without them (as in CI)
     local email, password = os.getenv("KINDLEFETCH_ZLIB_EMAIL"), os.getenv("KINDLEFETCH_ZLIB_PASSWORD")
     if email and password then
-        it("logs in to the live Z-Library site", function()
+        it("logs in to the live Z-Library site #live", function()
             web.live = true
             -- at the addresses Wikipedia lists
             require("cache.urlcache"):clear()
