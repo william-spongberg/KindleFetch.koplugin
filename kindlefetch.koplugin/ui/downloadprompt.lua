@@ -19,6 +19,7 @@ local Size = require("ui/size")
 local Geom = require("ui/geometry")
 local Screen = require("device").screen
 local UIManager = require("ui/uimanager")
+local util = require("util")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local NotifyUtil = require("util.notifyutil")
@@ -453,7 +454,10 @@ function DownloadPrompt:choosePath()
                 NotifyUtil.error(T(_("Books can't be downloaded to %1: %2"), dir, err))
                 return
             end
-            self.filepath = dir .. "/" .. self:filename()
+            -- named safely for that folder's file system, as well as the one it was to go to, as a FAT card's
+            -- can't have names with some of what other file systems can
+            local name = self.book.title and self.book.file_type and self.book.title .. "." .. self.book.file_type
+            self.filepath = dir .. "/" .. (name and util.getSafeFilename(name, dir) or self:filename())
 
             -- recreate the button rather than setting its text, which keeps the old text's size
             self:buildPathButton()

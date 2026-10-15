@@ -161,6 +161,24 @@ describe("DownloadPrompt", function()
         assert.are.same({ books .. "/Dune.epub" }, downloads)
     end)
 
+    -- a FAT card's file system can't have names with some of what others can, which the name kept for the folder before
+    -- could have
+    it("names the book safely for the folder chosen", function()
+        local folders = {}
+        require("util").getSafeFilename = function(name, folder)
+            table.insert(folders, folder)
+            return (name:gsub(":", "_"))
+        end
+        book.title = "Dune: Messiah"
+        local fat = helper.tmpdir("fat")
+        local prompt = newPrompt()
+        prompt.path_widget.callback()
+        helper.state.dir_choosers[1].onConfirm(fat)
+
+        assert.are.same({ fat }, folders)
+        assert.are.equal(fat .. "/Dune_ Messiah.epub", prompt.filepath)
+    end)
+
     -- which was only found out once the download had started, after its link had been looked up
     it("keeps the folder it was when the one chosen can't be written to", function()
         local prompt = newPrompt()
