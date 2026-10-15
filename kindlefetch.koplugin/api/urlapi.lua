@@ -35,6 +35,9 @@ local ZLIB_FALLBACK_URLS = {
     "https://z-lib.sk",
 }
 
+-- Wikipedia's page Library Genesis' mirrors are looked up on, e.g. to test connecting to it (see Diagnostics)
+UrlApi.LIBGEN_PAGE = LIBGEN_URL
+
 local function parseLibgenUrls(html)
     local urls = {}
 
@@ -173,6 +176,18 @@ function UrlApi.explainLookupFailure(err)
     return T(_("the mirrors couldn't be looked up on Wikipedia (%1)"), err)
 end
 
+-- a site's urls without looking them up: those looked up before, however long ago, or otherwise those known when
+-- KindleFetch was written (fallback), in a new list, then whether they were looked up before
+local function knownUrls(key, fallback)
+    local known = UrlCache:peek(key)
+    local looked_up = type(known) == "table" and #known > 0
+    local urls = {}
+    for __, url in ipairs(looked_up and known or fallback) do
+        table.insert(urls, url)
+    end
+    return urls, looked_up
+end
+
 -- a site's urls, looked up on its Wikipedia page again when refresh is set (see getUrls), those that didn't answer
 -- in the last while last (see restUrl). when the page can't be reached, e.g. where Wikipedia is blocked, they're the
 -- ones looked up before, however long ago, or otherwise the ones known when KindleFetch was written, which may well
@@ -187,20 +202,15 @@ function UrlApi:getSiteUrls(key, url, parse, fallback, refresh, name)
         return nil, err, answered
     end
     if not answered then
-        local known = UrlCache:peek(key)
-        if type(known) == "table" and #known > 0 then
+        local known, looked_up = knownUrls(key, fallback)
+        if looked_up then
             LogUtil.warn("using the mirrors looked up before, as Wikipedia couldn't be reached:", err)
         else
             LogUtil.warn("using the mirrors known when KindleFetch was written, as Wikipedia couldn't be reached:", err)
-            known = fallback
         end
         -- kept for as long as any others would be, as they're looked up again as soon as they fail
-        local known_urls = {}
-        for __, known_url in ipairs(known) do
-            table.insert(known_urls, known_url)
-        end
-        UrlCache:set(known_urls, key)
-        return restedLast(known_urls)
+        UrlCache:set(known, key)
+        return restedLast(known)
     end
 
     -- Wikipedia answered, but not with the mirrors. they're kept like any others, so Wikipedia is asked again
@@ -217,6 +227,11 @@ end
 -- Library Genesis' mirrors, looked up on Wikipedia again when refresh is set (see getUrls)
 function UrlApi:getLibgenUrls(refresh)
     return self:getSiteUrls(LIBGEN_KEY, LIBGEN_URL, parseLibgenUrls, FALLBACK_URLS, refresh, "Library Genesis")
+end
+
+-- Library Genesis' mirrors without looking them up (see knownUrls), e.g. to test connecting to them (see Diagnostics)
+function UrlApi:peekLibgenUrls()
+    return (knownUrls(LIBGEN_KEY, FALLBACK_URLS))
 end
 
 -- try this mirror first from now on, as it has just answered, when the ones before it may have been too busy
@@ -246,6 +261,11 @@ end
 -- set (see getUrls)
 function UrlApi:getZlibUrls(refresh)
     return self:getSiteUrls(ZLIB_KEY, ZLIB_URL, parseZlibUrls, ZLIB_FALLBACK_URLS, refresh, "Z-Library")
+end
+
+-- as peekLibgenUrls, for Z-Library's addresses
+function UrlApi:peekZlibUrls()
+    return (knownUrls(ZLIB_KEY, ZLIB_FALLBACK_URLS))
 end
 
 -- try this address first from now on, as it has just answered

@@ -10,6 +10,7 @@ local Screen = Device.screen
 local UIManager = require("ui/uimanager")
 local KindleFetchSettings = require("settings.settings")
 local SettingsPage = require("settings.settingspage")
+local Diagnostics = require("ui.diagnostics")
 local util = require("util")
 local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
@@ -57,27 +58,7 @@ end
 
 -- what's needed to make sense of a crash.log from someone else's device
 local function logEnvironment()
-    local CurlUtil = require("util.curlutil")
-    local ok, koreader_version = pcall(function()
-        return require("version"):getCurrentRevision()
-    end)
-    local device = Device:isKindle() and "Kindle"
-        or (Device.isKobo and Device:isKobo()) and "Kobo"
-        or Device:isAndroid() and "Android"
-        or Device:isSDL() and "computer"
-        or "device"
-    local proxy_url = os.getenv("PROXY_URL")
-    LogUtil.info(
-        string.format(
-            "KindleFetch %s on KOReader %s, %s %s, curl %s%s",
-            installedVersion() or "unknown",
-            ok and koreader_version or "unknown",
-            device,
-            tostring(Device.model),
-            CurlUtil.getVersion() or "not found",
-            proxy_url and proxy_url ~= "" and ", with PROXY_URL set" or ""
-        )
-    )
+    LogUtil.info(Diagnostics.summary())
     LogUtil.info(
         "downloading to",
         KindleFetchSettings:getDownloadDir(),
@@ -271,6 +252,14 @@ function KindleFetch:addToMainMenu(menu_items)
                 text = _("Check for updates"),
                 callback = function()
                     self:checkForUpdates()
+                end,
+            },
+            {
+                -- what to copy or save for whoever's helping with a problem, and a test of the connection to the
+                -- sites
+                text = _("Diagnostics"),
+                callback = function()
+                    Diagnostics.show()
                 end,
             },
         },
