@@ -99,6 +99,11 @@ describe("StringUtil", function()
 
     it("makes titles safe to use as file names", function()
         assert.are.equal("Dune- Messiah", StringUtil.cleanFileName("Dune: Messiah (Book 2)"))
+        -- which was left empty, naming the book's file only for its type, which hid it
+        assert.are.equal("[Poems]", StringUtil.cleanFileName("[Poems]"))
+        assert.are.equal("(Untitled) [2020]", StringUtil.cleanFileName(" (Untitled) [2020] "))
+        -- unless there's nothing to name it after at all
+        assert.are.equal("", StringUtil.cleanFileName("..."))
         assert.are.equal("AC-DC - The Story", StringUtil.cleanFileName("AC/DC -- The Story"))
         assert.are.equal("Title", StringUtil.cleanFileName("...Title... "))
         assert.are.equal("Mr. Mercedes", StringUtil.cleanFileName("Mr. Mercedes"))

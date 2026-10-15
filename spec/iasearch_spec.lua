@@ -161,6 +161,13 @@ describe("IaSearch", function()
             )
         end)
 
+        -- rather than leaving its file named only for its type, e.g. ".epub", which hid it
+        it("names a book's file after its identifier when there's nothing in its title to name it after", function()
+            results({ doc({ title = "..." }) })
+            local books = IaSearch:search("emma", 1)
+            assert.are.equal("emma00aust", books[1].title)
+        end)
+
         -- as a library writes them
         it("names the authors with their surnames last, without when they lived or what they did", function()
             results({

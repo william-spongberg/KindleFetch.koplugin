@@ -88,7 +88,8 @@ local function parseBook(book, is_preferred)
         id = SOURCE .. "_" .. id,
         zlib_id = id,
         hash = hash,
-        title = StringUtil.cleanFileName(title),
+        -- (or after the book's id, when there's nothing in its title to name its file after)
+        title = StringUtil.cleanFileName(title) ~= "" and StringUtil.cleanFileName(title) or SOURCE .. "_" .. id,
         display_title = StringUtil.cleanTitle(title),
         authors = authors ~= "" and authors or "Unknown author",
         year = year and year > 0 and tostring(year) or nil,

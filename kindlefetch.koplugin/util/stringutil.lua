@@ -77,18 +77,26 @@ function StringUtil.isSafeUrl(text)
     return type(text) == "string" and text:find('^https?://[^%c%s"\\]+$') ~= nil
 end
 
+local function safeFileName(text)
+    text = text:gsub('[<>:"/\\|?*]', "-") -- replace invalid chars with dash
+    text = text:gsub("^[%s%.]+", "") -- remove leading spaces/dots
+    text = text:gsub("[%s%.]+$", "") -- remove trailing spaces/dots
+    return StringUtil.collapseWhitespace(StringUtil.collapseDashes(StringUtil.collapseDots(text)))
+end
+
+-- a title as a book's file is named, without what Library Genesis adds to it in brackets (such as the series it's
+-- in), unless that's all there is of it: a title such as "[Poems]" left the file named only for its file type, e.g.
+-- ".epub", which hid it, and every such book shared. "" only when there's nothing to name it after at all
 function StringUtil.cleanFileName(text)
     if not StringUtil.assertValidString(text) then
         return ""
     end
 
-    text = StringUtil.removeParentheses(text)
-    text = text:gsub('[<>:"/\\|?*]', "-") -- replace invalid chars with dash
-    text = text:gsub("^[%s%.]+", "") -- remove leading spaces/dots
-    text = text:gsub("[%s%.]+$", "") -- remove trailing spaces/dots
-    text = StringUtil.collapseWhitespace(StringUtil.collapseDashes(StringUtil.collapseDots(text)))
-
-    return text
+    local name = safeFileName(StringUtil.removeParentheses(text))
+    if name == "" then
+        name = safeFileName(text)
+    end
+    return name
 end
 
 function StringUtil.replaceCarriageReturns(text)

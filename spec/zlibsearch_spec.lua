@@ -101,6 +101,14 @@ describe("ZlibSearch", function()
             assert.are.same(Settings:getPreferredFileTypes(), field(request.form, "extensions[]"))
         end)
 
+        -- rather than leaving its file named only for its type, e.g. ".epub", which hid it
+        it("names a book's file after its title in brackets, or its id when there's nothing else", function()
+            results({ book({ title = "[Poems]" }), book({ id = 2, hash = "abc", title = "..." }) })
+            local books = ZlibSearch:search("orwell", 1)
+            assert.are.equal("[Poems]", books[1].title)
+            assert.are.equal("zlib_2", books[2].title)
+        end)
+
         it("reads each book from the results", function()
             results({
                 book(),
