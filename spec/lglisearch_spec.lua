@@ -695,27 +695,102 @@ describe("LlgiSearch", function()
             assert.matches("Under maintenance", helper.logged("warn", "^unexpected search page from"))
         end)
 
-        it("scrapes the mirrors again when every mirror fails", function()
-            -- every mirror is down until they have been scraped again
-            web.pages[searchUrl(mirrors[1])] = function()
-                if web.scrapes > 1 then
-                    return fixtures.libgenResults({ fixtures.DUNE })
-                end
+        -- on what's waiting, e.g. the message saying a search is going on, so it doesn't look stuck while a mirror
+        -- that doesn't answer is waited for
+        describe("says which mirror it's trying", function()
+            local statuses
+            before_each(function()
+                require("api.urlapi"):getLibgenUrls()
+                statuses = {}
+                require("util.httputil").setTrapWidget({
+                    setStatus = function(_, status)
+                        table.insert(statuses, status)
+                    end,
+                })
+            end)
+
+            local function site(mirror)
+                return (mirror:gsub("^https://", ""))
             end
+
+            it("and that the one before didn't answer", function()
+                results(mirrors[2], { fixtures.DUNE })
+                LlgiSearch:search("dune", 1)
+
+                assert.are.same({
+                    string.format("Trying %s (mirror 1 of %d)...", site(mirrors[1]), #mirrors),
+                    string.format(
+                        "%s didn't answer.\nTrying %s (mirror 2 of %d)...",
+                        site(mirrors[1]),
+                        site(mirrors[2]),
+                        #mirrors
+                    ),
+                }, statuses)
+            end)
+
+            it("and what was wrong with what the one before sent", function()
+                web.pages[searchUrl(mirrors[1])] = "<html><body>Loading...</body></html>"
+                results(mirrors[2], { fixtures.DUNE })
+                LlgiSearch:search("dune", 1)
+
+                assert.are.equal(
+                    string.format(
+                        "%s sent a page that isn't Library Genesis' results.\nTrying %s (mirror 2 of %d)...",
+                        site(mirrors[1]),
+                        site(mirrors[2]),
+                        #mirrors
+                    ),
+                    statuses[2]
+                )
+            end)
+
+            it("when looking up a book's download link", function()
+                web.pages[mirrors[1] .. "/ads.php?md5=" .. fixtures.DUNE.md5] = function()
+                    return "<html>Service Unavailable</html>", nil, 503
+                end
+                web.pages[mirrors[2] .. "/ads.php?md5=" .. fixtures.DUNE.md5] = fixtures.libgenAds(fixtures.DUNE.md5)
+                LlgiSearch.findDownloadLink({ id = fixtures.DUNE.md5 })
+
+                assert.are.equal(
+                    string.format(
+                        "%s answered with an error (HTTP 503).\nTrying %s (mirror 2 of %d)...",
+                        site(mirrors[1]),
+                        site(mirrors[2]),
+                        #mirrors
+                    ),
+                    statuses[2]
+                )
+            end)
+        end)
+
+        it("scrapes the mirrors again when every mirror fails, searching those that have moved", function()
+            -- every mirror is down, as Library Genesis has moved to another, which Wikipedia lists once it's scraped
+            -- again
+            local moved = "https://libgen.moved"
+            web.pages[require("api.urlapi").LIBGEN_PAGE] = function()
+                local items = {}
+                for _, mirror in ipairs(web.scrapes > 1 and { moved } or mirrors) do
+                    table.insert(items, "<li>" .. mirror:gsub("^https://", "") .. "</li>")
+                end
+                return "<html><body><ul>" .. table.concat(items) .. "</ul></body></html>"
+            end
+            results(moved, { fixtures.DUNE })
 
             local books = LlgiSearch:search("dune", 1)
             assert.are.equal(2, web.scrapes)
             assert.are.equal(1, #books)
             assert.are.equal("Dune", books[1].title)
+            assert.are.equal(searchUrl(moved), searches()[#searches()])
         end)
 
-        it("gives up after scraping the mirrors again once", function()
+        -- which have just failed, some (such as one that takes the connection but never answers) only after a while
+        it("gives up once scraping the mirrors again finds no others, without asking them again", function()
             local books, err = LlgiSearch:search("dune", 1)
 
             assert.is_nil(books)
             assert.are.equal("failed to connect to server", err)
             assert.are.equal(2, web.scrapes)
-            assert.are.equal(2 * #mirrors, #searches())
+            assert.are.equal(#mirrors, #searches())
         end)
 
         -- which its mirrors all say at once, as they share it, rather than that each sent something unexpected, which

@@ -37,8 +37,10 @@ function fixtures.fakeWeb(helper)
                 return nil, type(web.wikipedia_down) == "string" and web.wikipedia_down or "could not resolve host"
             end
             web.scrapes = web.scrapes + 1
-            -- or a page given in its place
-            if web.pages[url] then
+            -- or a page given in its place, or what gives it, e.g. listing other mirrors once they've moved
+            if type(web.pages[url]) == "function" then
+                return web.pages[url]()
+            elseif web.pages[url] then
                 return web.pages[url]
             end
             return fetchWithLuasocket(url)
