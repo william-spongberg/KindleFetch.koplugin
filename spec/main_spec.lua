@@ -273,6 +273,9 @@ describe("KindleFetch", function()
             end,
         })
         helper.stub("ui.bookmenu", {
+            isSupported = function()
+                return true
+            end,
             new = function(_, menu)
                 menu.covers_loaded = {}
                 menu.page = 1
@@ -1088,6 +1091,28 @@ describe("KindleFetch", function()
             search(openUI(), "dune")
             assert.are.equal("dune · 1+ books", menus[3].title)
         end)
+
+        -- whose results were blank, and whose covers failed to load, as its menu lacks what laying them out builds on
+        it(
+            "lists the books as KOReader's own menu does, without covers, on a KOReader that can't lay them out",
+            function()
+                require("ui.bookmenu").isSupported = function()
+                    return false
+                end
+                search_results[1] = { { book("Dune") }, nil, 2 }
+                local plugin = openUI()
+                search(plugin, "dune")
+
+                assert.are.equal(0, #menus)
+                local list = plugin.books_menu
+                assert.are.equal(list, helper.lastShown())
+                assert.are.same({ "Dune · EPUB", "Load more" }, { list.item_table[1].text, list.item_table[2].text })
+                assert.is_nil(list.loadCoversForPage)
+                -- saying which are downloaded already, where KOReader's menu says such things
+                assert.is_nil(list.item_table[1].mandatory_func())
+                assert.is_truthy(helper.logged("warn", "^showing results as a list without covers"))
+            end
+        )
 
         -- rounded corners aren't painted, and show what was on screen before
         it("fills the screen with the books, to its corners", function()

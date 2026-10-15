@@ -306,6 +306,18 @@ describe("BookMenu", function()
         end)
     end)
 
+    -- older versions of KOReader's menu lack what laying the books out builds on
+    it("says whether KOReader's menu can lay the books out", function()
+        local Menu = require("ui/widget/menu")
+        Menu.setupItemHeights = function() end
+        Menu._recalculateDimen = function() end
+        Menu.updatePageInfo = function() end
+        Menu.mergeTitleBarIntoLayout = function() end
+        assert.is_true(BookMenu.isSupported())
+        Menu.setupItemHeights = nil
+        assert.is_false(BookMenu.isSupported())
+    end)
+
     describe("redrawing as covers arrive", function()
         -- covers arrive several times a page, and each redraw refreshes the screen
         it("doesn't redraw the page until one of its own covers has downloaded, or been given up on", function()

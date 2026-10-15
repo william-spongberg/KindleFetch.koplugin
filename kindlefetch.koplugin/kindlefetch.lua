@@ -19,6 +19,7 @@ local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
+local Menu = require("ui/widget/menu")
 local WaitingMessage = require("ui.waitingmessage")
 local ZlibLogin = require("ui.zliblogin")
 local ZlibAccount = require("api.zlibaccount")
@@ -83,6 +84,9 @@ local function logEnvironment()
         "and update checks",
         KindleFetchSettings:getCheckForUpdates() and "on" or "off"
     )
+    if not BookMenu.isSupported() then
+        LogUtil.warn("showing results as a list without covers, as this KOReader's menu can't lay them out")
+    end
 end
 
 -- clear caches left by other versions of the plugin, as their contents may not work with this one
@@ -629,6 +633,12 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
     end))
 end
 
+-- whether the results show the books' covers: when they're turned on, and KOReader's menu can lay them out (see
+-- BookMenu.isSupported)
+local function coversShown()
+    return BookMenu.isSupported() and KindleFetchSettings:getShowBookCovers()
+end
+
 -- a book's title, authors and file type, which the results are looked through for (see filterBooks), as is each
 -- entry's text by KOReader's own Go to letter, which KOReader exited on for an entry without text
 local function bookText(book)
@@ -657,6 +667,10 @@ function KindleFetch:bookMenuItems(books)
             table.insert(menu_items, {
                 book = book,
                 text = text,
+                -- (where it's KOReader's own menu that lists them, see showBooks)
+                mandatory_func = function()
+                    return this:isDownloaded(book) and _("Downloaded") or nil
+                end,
                 callback = function()
                     this:downloadBook(book)
                 end,
@@ -718,7 +732,7 @@ function KindleFetch:filterBooks(text)
 
     local menu = self.books_menu
     menu:switchItemTable(self:booksTitle(shown), items, 1)
-    if KindleFetchSettings:getShowBookCovers() then
+    if coversShown() then
         menu:loadCoversForPage(1)
     end
 end
@@ -809,8 +823,10 @@ function KindleFetch:showBooks(books)
     self.downloaded = nil
     self.filter = nil
 
+    -- or as KOReader's own menu lists things, where its menu can't lay them out with their covers
+    local MenuClass = BookMenu.isSupported() and BookMenu or Menu
     local menu
-    menu = BookMenu:new {
+    menu = MenuClass:new {
         title = self:booksTitle(),
         -- rather than cutting a long search short
         title_shrink_font_to_fit = true,
@@ -836,7 +852,7 @@ function KindleFetch:showBooks(books)
             return this:isDownloaded(book)
         end,
         onPageChange = Guard.wrap("loading covers", function(page)
-            if KindleFetchSettings:getShowBookCovers() then
+            if coversShown() then
                 LogUtil.debug("loading covers for page", page)
                 menu:loadCoversForPage(page)
             end
@@ -849,7 +865,7 @@ function KindleFetch:showBooks(books)
     UIManager:setDirty(menu, "full")
 
     -- load covers for first page
-    if KindleFetchSettings:getShowBookCovers() then
+    if coversShown() then
         LogUtil.debug("loading covers for page 1")
         menu:loadCoversForPage(1)
     end
@@ -911,7 +927,7 @@ function KindleFetch:loadMoreBooks()
         -- rather than going back to the first
         local menu = self.books_menu
         menu:switchItemTable(self:booksTitle(), self:bookMenuItems(self.books), first_new_book)
-        if KindleFetchSettings:getShowBookCovers() then
+        if coversShown() then
             LogUtil.debug("loading covers for page", menu.page)
             menu:loadCoversForPage(menu.page)
         end

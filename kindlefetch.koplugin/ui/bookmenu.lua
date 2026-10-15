@@ -83,6 +83,15 @@ end
 -- is_downloaded is optionally called with each book shown, saying whether it's in the download folder already
 local BookMenu = Menu:extend {}
 
+-- whether KOReader's menu has what laying the books out with their covers builds on (see setupItemHeights and
+-- updateItems), which it hasn't always: on older versions, the results were blank, and loading covers failed
+function BookMenu.isSupported()
+    return Menu.setupItemHeights ~= nil
+        and Menu._recalculateDimen ~= nil
+        and Menu.updatePageInfo ~= nil
+        and Menu.mergeTitleBarIntoLayout ~= nil
+end
+
 function BookMenu:onMenuSelect(entry)
     if entry and entry.callback then
         return entry.callback()
