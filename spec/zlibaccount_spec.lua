@@ -197,6 +197,23 @@ describe("ZlibAccount", function()
             assert.matches("for sale", helper.logged("warn", "^unexpected answer from z%-library%.example"))
         end)
 
+        -- on what's waiting, e.g. the message saying a search is going on, so it doesn't look stuck
+        it("says which address it's trying, and what happened with the one before", function()
+            require("cache.urlcache"):set({ OTHER_SITE, SITE }, "zlib")
+            local statuses = {}
+            require("util.httputil").setTrapWidget({
+                setStatus = function(_, status)
+                    table.insert(statuses, status)
+                end,
+            })
+
+            ZlibAccount:request("/eapi/user/profile")
+            assert.are.same({
+                "Trying z-library.example (address 1 of 2)...",
+                "z-library.example didn't answer.\nTrying z-lib.example (address 2 of 2)...",
+            }, statuses)
+        end)
+
         it("looks the addresses up on Wikipedia again when none of them answer", function()
             require("cache.urlcache"):set({ OTHER_SITE }, "zlib")
 

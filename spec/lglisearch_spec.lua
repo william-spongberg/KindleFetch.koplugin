@@ -695,6 +695,74 @@ describe("LlgiSearch", function()
             assert.matches("Under maintenance", helper.logged("warn", "^unexpected search page from"))
         end)
 
+        -- on what's waiting, e.g. the message saying a search is going on, so it doesn't look stuck while a mirror
+        -- that doesn't answer is waited for
+        describe("says which mirror it's trying", function()
+            local statuses
+            before_each(function()
+                require("api.urlapi"):getLibgenUrls()
+                statuses = {}
+                require("util.httputil").setTrapWidget({
+                    setStatus = function(_, status)
+                        table.insert(statuses, status)
+                    end,
+                })
+            end)
+
+            local function site(mirror)
+                return (mirror:gsub("^https://", ""))
+            end
+
+            it("and that the one before didn't answer", function()
+                results(mirrors[2], { fixtures.DUNE })
+                LlgiSearch:search("dune", 1)
+
+                assert.are.same({
+                    string.format("Trying %s (mirror 1 of %d)...", site(mirrors[1]), #mirrors),
+                    string.format(
+                        "%s didn't answer.\nTrying %s (mirror 2 of %d)...",
+                        site(mirrors[1]),
+                        site(mirrors[2]),
+                        #mirrors
+                    ),
+                }, statuses)
+            end)
+
+            it("and what was wrong with what the one before sent", function()
+                web.pages[searchUrl(mirrors[1])] = "<html><body>Loading...</body></html>"
+                results(mirrors[2], { fixtures.DUNE })
+                LlgiSearch:search("dune", 1)
+
+                assert.are.equal(
+                    string.format(
+                        "%s sent a page that isn't Library Genesis' results.\nTrying %s (mirror 2 of %d)...",
+                        site(mirrors[1]),
+                        site(mirrors[2]),
+                        #mirrors
+                    ),
+                    statuses[2]
+                )
+            end)
+
+            it("when looking up a book's download link", function()
+                web.pages[mirrors[1] .. "/ads.php?md5=" .. fixtures.DUNE.md5] = function()
+                    return "<html>Service Unavailable</html>", nil, 503
+                end
+                web.pages[mirrors[2] .. "/ads.php?md5=" .. fixtures.DUNE.md5] = fixtures.libgenAds(fixtures.DUNE.md5)
+                LlgiSearch.findDownloadLink({ id = fixtures.DUNE.md5 })
+
+                assert.are.equal(
+                    string.format(
+                        "%s answered with an error (HTTP 503).\nTrying %s (mirror 2 of %d)...",
+                        site(mirrors[1]),
+                        site(mirrors[2]),
+                        #mirrors
+                    ),
+                    statuses[2]
+                )
+            end)
+        end)
+
         it("scrapes the mirrors again when every mirror fails, searching those that have moved", function()
             -- every mirror is down, as Library Genesis has moved to another, which Wikipedia lists once it's scraped
             -- again

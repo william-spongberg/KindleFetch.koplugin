@@ -170,6 +170,11 @@ local function widgetClass()
         self.text = text
     end
 
+    -- laying a widget out again once what it says has changed, as KOReader's do
+    function Widget:init() end
+    function Widget:free() end
+    function Widget:reinit() end
+
     -- roughly the size text would take up, for widgets laid out by their size
     function Widget:getSize()
         return {

@@ -251,6 +251,32 @@ local function isBusy(html)
         or html:find("max_user_connections", 1, true) ~= nil
 end
 
+-- say on what's waiting (see HttpUtil.sayStatus) which mirror is being tried, the index'th of count, after what
+-- happened with the one before (see mirrorFailure), where one was tried, so that a search or download that takes a
+-- while to find a mirror that works says what it's doing, rather than looking stuck
+local function sayTrying(url, index, count, before)
+    local trying = T(_("Trying %1 (mirror %2 of %3)..."), LogUtil.site(url), index, count)
+    HttpUtil.sayStatus(before and before .. "\n" .. trying or trying)
+end
+
+-- what happened with a mirror that didn't work, in a sentence of its own, to say while the next is tried (see
+-- sayTrying). unexpected says that a page that was none of what's looked for was what it sent
+local function mirrorFailure(url, html, err, status, unexpected)
+    local site = LogUtil.site(url)
+    if html and isBlocked(html) then
+        return T(_("%1 is blocking automated requests right now."), site)
+    elseif html and isBusy(html) then
+        return T(_("%1 says Library Genesis is too busy."), site)
+    elseif status and status >= 400 then
+        return T(_("%1 answered with an error (HTTP %2)."), site, status)
+    elseif html then
+        return T(unexpected, site)
+    elseif err == HttpUtil.UNRESOLVED then
+        return T(_("%1 couldn't be found."), site)
+    end
+    return T(_("%1 didn't answer."), site)
+end
+
 -- why no mirror answered, when none of the names of those tried could be looked up, though the mirrors were just
 -- looked up on Wikipedia, so the device is online: most likely the network is blocking them, as many internet
 -- providers do, rather than every one being down (#55). nil when that's less clear, to say what went wrong with the
@@ -282,6 +308,8 @@ local function fetchResults(params)
     local blocked = false
     -- mirrors that didn't answer at all, which may be down, or the device may be offline
     local unanswered = {}
+    -- what happened with the mirror tried last (see sayTrying)
+    local before
     -- the mirrors known, then, once they've all failed, those looked up again, in case they've moved
     for __, refresh in ipairs({ false, true }) do
         local base_urls, urls_err = UrlApi:getLibgenUrls(refresh)
@@ -293,69 +321,75 @@ local function fetchResults(params)
         end
 
         local answered = false
+        local to_try = {}
         for __, url in ipairs(base_urls) do
             if not tried[url] then
-                tried[url] = true
-                tried_count = tried_count + 1
-                local html, err, status = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
-                -- the search was called off, which says nothing about the mirrors
-                if err == HttpUtil.CANCELLED then
-                    return nil, err
-                end
-                answered = answered or html ~= nil or status ~= nil
+                table.insert(to_try, url)
+            end
+        end
+        for index, url in ipairs(to_try) do
+            tried[url] = true
+            tried_count = tried_count + 1
+            sayTrying(url, index, #to_try, before)
+            local html, err, status = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
+            -- the search was called off, which says nothing about the mirrors
+            if err == HttpUtil.CANCELLED then
+                return nil, err
+            end
+            answered = answered or html ~= nil or status ~= nil
 
-                if html and isResultsPage(html) then
-                    for __, unanswered_url in ipairs(unanswered) do
-                        UrlApi:restLibgenUrl(unanswered_url)
-                    end
-                    UrlApi:preferLibgenUrl(url)
-                    return html, nil, url
+            if html and isResultsPage(html) then
+                for __, unanswered_url in ipairs(unanswered) do
+                    UrlApi:restLibgenUrl(unanswered_url)
                 end
+                UrlApi:preferLibgenUrl(url)
+                return html, nil, url
+            end
+            before = mirrorFailure(url, html, err, status, _("%1 sent a page that isn't Library Genesis' results."))
 
-                if html and isBlocked(html) then
+            if html and isBlocked(html) then
+                LogUtil.warn(
+                    "searching",
+                    LogUtil.site(url),
+                    "was blocked by its DDoS protection (HTTP",
+                    status,
+                    #html,
+                    "bytes)"
+                )
+                blocked = true
+            elseif html and isBusy(html) then
+                LogUtil.warn(
+                    "searching",
+                    LogUtil.site(url),
+                    "found Library Genesis' database too busy (HTTP",
+                    tostring(status) .. ")"
+                )
+                busy = true
+            elseif html or status then
+                -- it answered, but not with results: e.g. an error page, or a page Library Genesis has changed
+                -- the layout of
+                if html then
                     LogUtil.warn(
-                        "searching",
-                        LogUtil.site(url),
-                        "was blocked by its DDoS protection (HTTP",
+                        "unexpected search page from",
+                        LogUtil.site(url) .. ": HTTP",
                         status,
                         #html,
-                        "bytes)"
+                        "bytes:",
+                        LogUtil.excerpt(html)
                     )
-                    blocked = true
-                elseif html and isBusy(html) then
-                    LogUtil.warn(
-                        "searching",
-                        LogUtil.site(url),
-                        "found Library Genesis' database too busy (HTTP",
-                        tostring(status) .. ")"
-                    )
-                    busy = true
-                elseif html or status then
-                    -- it answered, but not with results: e.g. an error page, or a page Library Genesis has changed
-                    -- the layout of
-                    if html then
-                        LogUtil.warn(
-                            "unexpected search page from",
-                            LogUtil.site(url) .. ": HTTP",
-                            status,
-                            #html,
-                            "bytes:",
-                            LogUtil.excerpt(html)
-                        )
-                    end
-                    -- with the status it answered with, as for the other sites
-                    last_err = status
-                            and status >= 400
-                            and T(_("Library Genesis answered with an error (HTTP %1), try again later"), status)
-                        or err
-                        or _("unexpected response from Library Genesis")
-                    UrlApi:deleteLibgenUrl(url)
-                else
-                    table.insert(unanswered, url)
-                    last_err = err
-                    if err == HttpUtil.UNRESOLVED then
-                        unresolved = unresolved + 1
-                    end
+                end
+                -- with the status it answered with, as for the other sites
+                last_err = status
+                        and status >= 400
+                        and T(_("Library Genesis answered with an error (HTTP %1), try again later"), status)
+                    or err
+                    or _("unexpected response from Library Genesis")
+                UrlApi:deleteLibgenUrl(url)
+            else
+                table.insert(unanswered, url)
+                last_err = err
+                if err == HttpUtil.UNRESOLVED then
+                    unresolved = unresolved + 1
                 end
             end
         end
@@ -495,7 +529,10 @@ function LlgiSearch.findDownloadLink(book, retrying)
     local mirror_failed = false
     local busy = false
     local blocked = false
-    for __, url in ipairs(base_urls) do
+    -- what happened with the mirror tried last (see sayTrying)
+    local before
+    for index, url in ipairs(base_urls) do
+        sayTrying(url, index, #base_urls, before)
         -- load ads page (to get key for download page)
         -- (the book's id is its md5)
         local ads_page = string.format("%s/ads.php?md5=%s", url, book.id)
@@ -505,6 +542,7 @@ function LlgiSearch.findDownloadLink(book, retrying)
             return nil, err
         end
         answered = answered or html ~= nil or status ~= nil
+        before = mirrorFailure(url, html, err, status, _("%1 had no download link for the book."))
 
         -- find download url with key linked in ads page. what answers is told apart as when searching: an error page
         -- or DDoS protection is a mirror failing, rather than one that doesn't have the book, which was all it was

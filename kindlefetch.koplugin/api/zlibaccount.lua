@@ -59,7 +59,11 @@ function ZlibAccount:request(path, form, refresh)
     local unanswered = {}
     local unresolved = 0
     local answered = false
-    for __, url in ipairs(urls) do
+    -- what happened with the address tried last, said while the next is tried, so that it doesn't look stuck
+    local before
+    for index, url in ipairs(urls) do
+        local trying = T(_("Trying %1 (address %2 of %3)..."), LogUtil.site(url), index, #urls)
+        HttpUtil.sayStatus(before and before .. "\n" .. trying or trying)
         local body, err, status = HttpUtil.getBody(url .. path, {
             form = form,
             cookies = cookies or "",
@@ -101,12 +105,19 @@ function ZlibAccount:request(path, form, refresh)
                     and status >= 400
                     and T(_("Z-Library answered with an error (HTTP %1), try again later"), status)
                 or _("unexpected response from Z-Library")
+            before = status
+                    and status >= 400
+                    and T(_("%1 answered with an error (HTTP %2)."), LogUtil.site(url), status)
+                or T(_("%1 answered with something other than Z-Library's API."), LogUtil.site(url))
             UrlApi:deleteZlibUrl(url)
         else
             table.insert(unanswered, url)
             last_err = T(_("Z-Library didn't answer (%1)"), err)
             if err == HttpUtil.UNRESOLVED then
                 unresolved = unresolved + 1
+                before = T(_("%1 couldn't be found."), LogUtil.site(url))
+            else
+                before = T(_("%1 didn't answer."), LogUtil.site(url))
             end
         end
     end

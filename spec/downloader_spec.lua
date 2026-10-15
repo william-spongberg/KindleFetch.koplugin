@@ -667,8 +667,8 @@ describe("Downloader", function()
             end
 
             download()
-            -- once the mirrors had been looked up
-            assert.are.equal("Finding a download link...", while_finding_the_link)
+            -- once the mirrors had been looked up, which one is being asked
+            assert.matches("^Trying libgen%.%S+ %(mirror 1 of %d+%)%.%.%.$", while_finding_the_link)
             assert.are.equal("Waiting for Library Genesis...", progress().status_widget.text)
             helper.tick()
             assert.are.equal("Waiting for Library Genesis...", progress().status_widget.text)
