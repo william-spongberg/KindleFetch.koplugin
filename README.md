@@ -60,19 +60,19 @@ Project Gutenberg has over 75,000 free ebooks, mostly older books whose US copyr
 
 2. Browse the results and tap a book to download. The top of the list says what was searched for and how many books have been found, and placeholders show while the covers download. The menu at the top left of the list shows only some of the books found, without searching again: tap Sites, Languages, File types, Book types, Years, Sizes or Downloaded (each offered where the books found don't all have the same) and untick what to hide, each listed with how many of the books have it, or tap Look through the books found to show only those with some text in their title, authors or file type (as does tapping the page number, typing the text and tapping Search). Show all brings the rest back, Load more only loads from the sites shown, and Search again changes the languages, file types or book types in the settings and searches again.
 
-<img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" /> <img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" /> <img width="350" alt="Searching Internet Archive: opening Kindle Fetch, typing a search, the covers arriving, and loading more books" src="docs/gifs/searching.gif" />
+<img width="350" alt="Search results while covers download" src="docs/screenshots/05-search-results-loading-covers.png" /> <img width="350" alt="Search results with covers" src="docs/screenshots/06-search-results.png" /> <img width="350" alt="The menu at the top left of the results, which shows only some of the books found" src="docs/screenshots/07-search-results-menu.png" /> <img width="350" alt="Searching Internet Archive and Z-Library at once: opening Kindle Fetch, ticking Z-Library in Sites, typing a search, each site's books and covers arriving, and loading more books" src="docs/gifs/searching.gif" />
 
 3. In the download prompt, optionally tap the book cover to see it full size, or tap the folder it will be saved in (above the name it will be saved as) to choose another, then tap Download. If a book of that name is already there, choose whether to overwrite it or read the one you have.
 
-<img width="350" alt="Download prompt" src="docs/screenshots/07-download-prompt.png" /> <img width="350" alt="Fullscreen cover" src="docs/screenshots/08-download-cover.png" /> <img width="350" alt="Being asked before downloading over a book that's already there" src="docs/screenshots/09-download-overwrite.png" />
+<img width="350" alt="Download prompt" src="docs/screenshots/08-download-prompt.png" /> <img width="350" alt="Fullscreen cover" src="docs/screenshots/09-download-cover.png" /> <img width="350" alt="Being asked before downloading over a book that's already there" src="docs/screenshots/10-download-overwrite.png" />
 
 4. Monitor the download's progress; tap Hide to keep it downloading in the background (to see its progress again, choose **Search → Kindle Fetch → Downloads**, or the book again) or Cancel to stop it.
 
-<img width="350" alt="Download progress" src="docs/screenshots/10-download-progress.png" /> <img width="350" alt="Downloading a book: its full-size cover, the download's progress, hiding it and choosing the book again to see it, then reading the book" src="docs/gifs/downloading.gif" />
+<img width="350" alt="Download progress" src="docs/screenshots/11-download-progress.png" /> <img width="350" alt="Downloading a book: its full-size cover, the download's progress, hiding it and choosing the book again to see it, then reading the book" src="docs/gifs/downloading.gif" />
 
 5. Once the book has downloaded, tap Read now to open it, or Show folder, Collections… or Book information beneath.
 
-<img width="350" alt="Read now prompt" src="docs/screenshots/11-download-finished.png" /> <img width="350" alt="Reading the downloaded book" src="docs/screenshots/12-reading.png" />
+<img width="350" alt="Read now prompt" src="docs/screenshots/12-download-finished.png" /> <img width="350" alt="Reading the downloaded book" src="docs/screenshots/13-reading.png" />
 
 Downloaded books are saved to the download folder in the settings, unless you choose another in the download prompt.
 
@@ -82,17 +82,17 @@ Downloaded books are saved to the download folder in the settings, unless you ch
 
 - **Show Book Covers**: Enable or disable cover image display in search results (default: enabled)
 
-<img width="350" alt="Settings" src="docs/screenshots/13-settings.png" /> <img width="350" alt="Search results without covers" src="docs/screenshots/14-search-results-without-covers.png" /> <img width="350" alt="Changing the settings: ticking another language, and keeping searches for longer" src="docs/gifs/settings.gif" />
+<img width="350" alt="Settings" src="docs/screenshots/14-settings.png" /> <img width="350" alt="Search results without covers" src="docs/screenshots/15-search-results-without-covers.png" /> <img width="350" alt="Changing the settings: ticking another language, and keeping searches for longer" src="docs/gifs/settings.gif" />
 
 - **Download Folder**: Set the directory where books are saved (defaults to home directory or `/mnt/us/documents`); the settings show the end of a long one, which says the most about it
 
-<img width="350" alt="Choosing the download folder" src="docs/screenshots/15-settings-download-folder.png" />
+<img width="350" alt="Choosing the download folder" src="docs/screenshots/16-settings-download-folder.png" />
 
 - **Z-Library Account**: Log in to the Z-Library account to search it with, or out of the one logged into. Kindle Fetch keeps the key Z-Library logs it in with, rather than your password
 
 - **Preferred Languages**: Choose the languages of the books shown in search results (default: English)
 
-<img width="350" alt="Preferred languages" src="docs/screenshots/16-settings-languages.png" />
+<img width="350" alt="Preferred languages" src="docs/screenshots/17-settings-languages.png" />
 
 - **Preferred File Types**: Select desired formats across five categories, from those KOReader can open (default: all of them, which the settings show as All):
   - Ebooks: EPUB, MOBI, AZW, FB2, PRC
@@ -101,15 +101,15 @@ Downloaded books are saved to the download folder in the settings, unless you ch
   - Images: JPG, TIF, PDB
   - Web: CHM, HTM, HTML, HTMLZ
 
-<img width="350" alt="Preferred file types" src="docs/screenshots/17-settings-file-types.png" />
+<img width="350" alt="Preferred file types" src="docs/screenshots/18-settings-file-types.png" />
 
 - **Preferred Book Types**: Filter Library Genesis' results by fiction, non-fiction, comics, magazines, scientific articles, or standards (default: all of them, which the settings show as All); the other sites don't sort their books into these
 
-<img width="350" alt="Preferred book types" src="docs/screenshots/18-settings-book-types.png" />
+<img width="350" alt="Preferred book types" src="docs/screenshots/19-settings-book-types.png" />
 
 When a search finds books, but none in the languages and file types chosen, Kindle Fetch says how many the site listed, and offers to open the settings or to keep searching through the rest. When the site has none of the file types chosen at all (Internet Archive only has EPUB, MOBI, PDF, DJVU, TXT, CBZ and CBR), it says so, and offers the settings or the other sites.
 
-<img width="350" alt="Being told that Internet Archive has none of the file types chosen" src="docs/screenshots/19-search-none-chosen.png" />
+<img width="350" alt="Being told that Internet Archive has none of the file types chosen" src="docs/screenshots/20-search-none-chosen.png" />
 
 - **Check for Updates Automatically**: Check for plugin and curl updates at most once a day while connected (default: enabled)
 
@@ -117,7 +117,7 @@ When a search finds books, but none in the languages and file types chosen, Kind
 - **Encrypted DNS**: Look the sites up with Cloudflare's DNS over HTTPS (at 1.1.1.1), rather than the network's own DNS, which can be what's blocking them (needs curl 7.62 or later, so not where KOReader's own HTTP fetches in its place; default: off). Kindle Fetch offers to turn it on when a network can't find any of Library Genesis' or Z-Library's sites
 - **HTTP Proxy**: KOReader's HTTP proxy, the same setting as in KOReader's network settings, which Kindle Fetch goes through for everything (searches, covers and books, with curl too) as KOReader does: turn it on with its address, e.g. `http://proxy.example:8080`, or off (default: off)
 
-<img width="350" alt="How long searches are kept" src="docs/screenshots/20-settings-cache.png" />
+<img width="350" alt="How long searches are kept" src="docs/screenshots/21-settings-cache.png" />
 
 - **Clear Cache**: Forget the searches (and the recent ones the search box offers), mirrors and book covers that have been saved, e.g. if results look out of date
 - **Go back to v…**: After an update, while the version before it is kept, go back to that version, if the new one doesn't work on your device
@@ -163,7 +163,7 @@ To put the old curl back, run `mntroot rw`, then `cp /usr/bin/curl.system.bak /u
 
 Kindle Fetch → Diagnostics shows what's needed to work out what went wrong: the versions of Kindle Fetch, KOReader and curl, the device, the settings, the mirrors, and what Kindle Fetch has logged since KOReader started. Tap Test connection to see which of the sites (Wikipedia, each of Library Genesis' mirrors, Internet Archive, Project Gutenberg and Z-Library) the device can reach, then Copy or Save (to `kindlefetch-diagnostics.txt` in KOReader's folder) to attach it to an [issue](https://github.com/william-spongberg/KindleFetch.koplugin/issues). It has nothing in it that would let anyone into your Z-Library account.
 
-<img width="350" alt="Kindle Fetch's diagnostics" src="docs/screenshots/21-diagnostics.png" />
+<img width="350" alt="Kindle Fetch's diagnostics" src="docs/screenshots/22-diagnostics.png" />
 
 KOReader's `crash.log`, in its `koreader` folder, says what Kindle Fetch was doing when something went wrong too.
 
