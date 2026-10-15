@@ -426,6 +426,29 @@ describe("KindleFetch", function()
         end)
     end)
 
+    -- which KOReader left it out of its menu for, along with checking for updates
+    it("shows what's left of its menu when it can't start", function()
+        settings.download_dir = nil
+        require("settings.settings").load = function()
+            error("attempt to index a nil value")
+        end
+        local registered = {}
+        local plugin = KindleFetch:new {
+            ui = {
+                menu = {
+                    registerToMainMenu = function(_, widget)
+                        table.insert(registered, widget)
+                    end,
+                },
+            },
+        }
+        assert.are.same({ plugin }, registered)
+        local menu_items = {}
+        plugin:addToMainMenu(menu_items)
+        assert.are.equal("Kindle Fetch couldn't start", menu_items.kindlefetch.sub_item_table[1].text)
+        assert.is_truthy(helper.logged("err", "^could not start Kindle Fetch:.*attempt to index a nil value"))
+    end)
+
     describe("init", function()
         it("registers a dispatcher action", function()
             openUI()
@@ -476,6 +499,7 @@ describe("KindleFetch", function()
                     error("unexpected")
                 end,
             })
+            package.loaded["kindlefetch"] = nil
             KindleFetch = dofile("kindlefetch.koplugin/main.lua")
             openUI()
             helper.tick()
