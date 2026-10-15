@@ -3,7 +3,7 @@ local helper = require("helper")
 describe("KindleFetch", function()
     local KindleFetch, checks, settings, searches, search_results, downloads, menus, settings_shown, cleared, plugin_dir
     -- what was searched for on Internet Archive and Z-Library, rather than Library Genesis
-    local archive_searches, zlib_searches
+    local archive_searches, zlib_searches, gutenberg_searches
     -- what Internet Archive and Z-Library find, by page, where it isn't what Library Genesis does (search_results)
     local site_results
     -- whether Z-Library is logged into, and what to do once the login dialog shown since has logged in
@@ -166,7 +166,7 @@ describe("KindleFetch", function()
             search_sources = { "libgen" },
         }
         searches, search_results, downloads, menus, settings_shown = {}, {}, {}, {}, 0
-        archive_searches, zlib_searches, site_results = {}, {}, {}
+        archive_searches, zlib_searches, gutenberg_searches, site_results = {}, {}, {}, {}
         zlib_logged_in, zlib_logins = true, {}
         saved = {}
 
@@ -317,6 +317,21 @@ describe("KindleFetch", function()
             search = function(_, query, page, scope)
                 table.insert(zlib_searches, { query, page, scope })
                 local result = (site_results.zlib or search_results)[page] or { {} }
+                if type(result) == "function" then
+                    return result()
+                end
+                return result[1], result[2], result[3], result[4]
+            end,
+            isCached = function()
+                return false
+            end,
+        })
+        -- which has neither book types nor ways to narrow a search down, like Z-Library, but needs no account
+        helper.stub("api.gutenbergsearch", {
+            NAME = "Project Gutenberg",
+            search = function(_, query, page, scope)
+                table.insert(gutenberg_searches, { query, page, scope })
+                local result = (site_results.gutenberg or search_results)[page] or { {} }
                 if type(result) == "function" then
                     return result()
                 end
@@ -1291,12 +1306,12 @@ describe("KindleFetch", function()
                 can_use_encrypted_dns = false
                 search(openUI(), "dune")
                 -- just the other sites
-                assert.are.equal("Search Internet Archive", helper.lastShown().other_buttons[1][1].text)
+                assert.are.equal("Search Z-Library", helper.lastShown().other_buttons[1][1].text)
 
                 can_use_encrypted_dns = true
                 settings.encrypted_dns = true
                 search(openUI(), "dune")
-                assert.are.equal("Search Internet Archive", helper.lastShown().other_buttons[1][1].text)
+                assert.are.equal("Search Z-Library", helper.lastShown().other_buttons[1][1].text)
             end)
 
             it("logs in again, then searches again, once Z-Library has logged Kindle Fetch out", function()
@@ -1325,9 +1340,12 @@ describe("KindleFetch", function()
                 search(plugin, "dune")
                 local first_box = plugin.search_box
                 local explanation = helper.lastShown()
-                assert.are.same({ "Search Internet Archive", "Search Z-Library" }, texts(explanation.other_buttons[1]))
+                assert.are.same(
+                    { "Search Z-Library", "Search Internet Archive", "Search Project Gutenberg" },
+                    texts(explanation.other_buttons[1])
+                )
 
-                explanation.other_buttons[1][1].callback()
+                explanation.other_buttons[1][2].callback()
                 -- once the message has closed
                 assert.are.same({}, archive_searches)
                 helper.tick()
@@ -1342,7 +1360,10 @@ describe("KindleFetch", function()
             it("only offers Z-Library once logged in", function()
                 zlib_logged_in = false
                 search(openUI(), "dune")
-                assert.are.same({ "Search Internet Archive" }, texts(helper.lastShown().other_buttons[1]))
+                assert.are.same(
+                    { "Search Internet Archive", "Search Project Gutenberg" },
+                    texts(helper.lastShown().other_buttons[1])
+                )
             end)
 
             it("offers them when a search fails", function()
@@ -1352,7 +1373,10 @@ describe("KindleFetch", function()
                 local failure = helper.lastShown()
                 assert.are.equal("Search failed: all Library Genesis mirrors failed", failure.text)
                 assert.are.equal("notice-warning", failure.icon)
-                assert.are.same({ "Search Internet Archive", "Search Z-Library" }, texts(failure.other_buttons[1]))
+                assert.are.same(
+                    { "Search Z-Library", "Search Internet Archive", "Search Project Gutenberg" },
+                    texts(failure.other_buttons[1])
+                )
             end)
 
             -- which they'd fail for too
@@ -1372,7 +1396,10 @@ describe("KindleFetch", function()
 
                 local other_buttons = helper.lastShown().other_buttons
                 assert.are.same({ "Keep searching" }, texts(other_buttons[1]))
-                assert.are.same({ "Search Library Genesis", "Search Z-Library" }, texts(other_buttons[2]))
+                assert.are.same(
+                    { "Search Z-Library", "Search Library Genesis", "Search Project Gutenberg" },
+                    texts(other_buttons[2])
+                )
             end)
         end)
 
@@ -1408,7 +1435,7 @@ describe("KindleFetch", function()
                 assert.are.equal("Close", explanation.cancel_text)
                 -- there are no more results to look through, just the other sites
                 assert.are.equal(1, #explanation.other_buttons)
-                assert.are.equal("Search Internet Archive", explanation.other_buttons[1][1].text)
+                assert.are.equal("Search Z-Library", explanation.other_buttons[1][1].text)
                 assert.are.equal(0, #menus)
 
                 explanation.ok_callback()
@@ -1552,7 +1579,7 @@ describe("KindleFetch", function()
                 "Search failed:\nLibrary Genesis: request timed out\nInternet Archive: no response",
                 failure.text
             )
-            assert.are.same({ "Search Z-Library" }, texts(failure.other_buttons[1]))
+            assert.are.same({ "Search Z-Library", "Search Project Gutenberg" }, texts(failure.other_buttons[1]))
             assert.are.equal(0, #menus)
         end)
 
@@ -1560,7 +1587,7 @@ describe("KindleFetch", function()
             searchSites("x")
             local explanation = helper.lastShown()
             assert.are.equal("Library Genesis and Internet Archive found no books for “x”.", explanation.text)
-            assert.are.same({ "Search Z-Library" }, texts(explanation.other_buttons[1]))
+            assert.are.same({ "Search Z-Library", "Search Project Gutenberg" }, texts(explanation.other_buttons[1]))
         end)
 
         it(
@@ -1598,7 +1625,7 @@ describe("KindleFetch", function()
 
         -- whose books would have nowhere to go
         it("calls off the sites still being searched once the books found are closed", function()
-            settings.search_sources = { "libgen", "archive", "zlib" }
+            settings.search_sources = { "libgen", "archive", "gutenberg" }
             search_results[1] = { { book("Dune") } }
             local called_off
             site_results.archive = {
@@ -1613,7 +1640,7 @@ describe("KindleFetch", function()
             assert.is_true(called_off)
             assert.is_true(helper.wasClosed(menus[1]))
             -- nor started, where it hadn't been
-            assert.are.same({}, zlib_searches)
+            assert.are.same({}, gutenberg_searches)
             assert.is_nil(helper.lastError())
             assert.are.equal(1, #menus)
         end)
@@ -1644,17 +1671,25 @@ describe("KindleFetch", function()
             assert.are.equal(1, #archive_searches)
         end)
 
-        -- as it can only be searched with an account
-        it("logs in to Z-Library before searching it, where it's ticked", function()
-            settings.search_sources = { "libgen", "zlib" }
+        -- as it can only be searched with an account, which every search would ask for
+        it("leaves Z-Library out while it isn't logged into, rather than asking to log in", function()
+            settings.search_sources = { "zlib", "libgen" }
             zlib_logged_in = false
             searchSites("x")
-            assert.are.same({}, searches)
+            assert.are.same({ { "x", 1 } }, searches)
+            assert.are.same({}, zlib_searches)
+            assert.are.same({}, zlib_logins)
+        end)
+
+        it("logs in to Z-Library first, where it's the only site ticked", function()
+            settings.search_sources = { "zlib" }
+            zlib_logged_in = false
+            searchSites("x")
+            assert.are.same({}, zlib_searches)
             assert.are.equal(1, #zlib_logins)
 
             zlib_logged_in = true
             andSearch(zlib_logins[1])
-            assert.are.equal(1, #searches)
             assert.are.equal(1, #zlib_searches)
         end)
     end)
@@ -1679,17 +1714,23 @@ describe("KindleFetch", function()
             plugin:setupUI()
             local menu = sitesMenu(plugin)
             assert.are.equal("Search on", menu.title)
-            assert.are.same({ "✓ Library Genesis", "Internet Archive", "Z-Library" }, rowTexts(menu))
+            assert.are.same(
+                { "Z-Library", "✓ Library Genesis", "Internet Archive", "Project Gutenberg" },
+                rowTexts(menu)
+            )
 
-            menu.buttons[2][1].callback()
-            assert.are.same({ "✓ Library Genesis", "✓ Internet Archive", "Z-Library" }, rowTexts(menu))
+            menu.buttons[3][1].callback()
+            assert.are.same(
+                { "Z-Library", "✓ Library Genesis", "✓ Internet Archive", "Project Gutenberg" },
+                rowTexts(menu)
+            )
             assert.are.equal(
                 "Sites: Library Genesis and Internet Archive",
                 buttonWithId(plugin.search_box, "sites").text
             )
             assert.are.same({ "libgen", "archive" }, settings.search_sources)
 
-            menu.buttons[1][1].callback()
+            menu.buttons[2][1].callback()
             assert.are.same({ "archive" }, settings.search_sources)
             plugin.search_box.input_text = "emma"
             andSearch(button(plugin.search_box, "Search").callback)
@@ -1700,14 +1741,14 @@ describe("KindleFetch", function()
         it("keeps at least one ticked", function()
             local plugin = openUI()
             plugin:setupUI()
-            sitesMenu(plugin).buttons[1][1].callback()
+            sitesMenu(plugin).buttons[2][1].callback()
 
             assert.are.equal("Choose at least one site to search", helper.lastNotification())
             assert.are.same({ "libgen" }, settings.search_sources)
         end)
 
         it("says when they're all ticked", function()
-            settings.search_sources = { "zlib", "libgen", "archive" }
+            settings.search_sources = { "zlib", "gutenberg", "libgen", "archive" }
             local plugin = openUI()
             plugin:setupUI()
             assert.are.equal("Sites: All", buttonWithId(plugin.search_box, "sites").text)
@@ -1719,15 +1760,29 @@ describe("KindleFetch", function()
             local plugin = openUI()
             plugin:setupUI()
             local menu = sitesMenu(plugin)
-            assert.are.equal("Z-Library (log in)", menu.buttons[3][1].text)
+            assert.are.equal("Z-Library (log in)", menu.buttons[1][1].text)
 
-            menu.buttons[3][1].callback()
+            menu.buttons[1][1].callback()
             assert.is_true(helper.wasClosed(menu))
             assert.are.same({ "libgen" }, settings.search_sources)
             zlib_logged_in = true
             zlib_logins[1]()
-            assert.are.same({ "libgen", "zlib" }, settings.search_sources)
-            assert.are.equal("Sites: Library Genesis and Z-Library", buttonWithId(plugin.search_box, "sites").text)
+            assert.are.same({ "zlib", "libgen" }, settings.search_sources)
+            assert.are.equal("Sites: Z-Library and Library Genesis", buttonWithId(plugin.search_box, "sites").text)
+        end)
+
+        -- which it is to begin with, as every site is
+        it("shows Z-Library unticked while it isn't logged into, though it's ticked to be searched", function()
+            settings.search_sources = { "zlib", "libgen", "archive", "gutenberg" }
+            zlib_logged_in = false
+            local plugin = openUI()
+            plugin:setupUI()
+            assert.are.equal("Sites: All but Z-Library", buttonWithId(plugin.search_box, "sites").text)
+            assert.are.equal("Z-Library (log in)", sitesMenu(plugin).buttons[1][1].text)
+
+            zlib_logged_in = true
+            plugin:setupUI()
+            assert.are.equal("Sites: All", buttonWithId(plugin.search_box, "sites").text)
         end)
     end)
 
@@ -1762,7 +1817,8 @@ describe("KindleFetch", function()
             local plugin = openUI()
             andSearch(plugin.setupUI, plugin, "herbert", "author", { "libgen" }, true)
             local explanation = helper.lastShown()
-            explanation.other_buttons[1][1].callback()
+            -- Internet Archive, after Z-Library
+            explanation.other_buttons[1][2].callback()
             helper.tick()
             helper.tick()
             assert.are.same({ { "herbert", 1, "author" } }, archive_searches)

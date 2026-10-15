@@ -73,6 +73,13 @@ describe("KindleFetchSettings", function()
         assert.is_truthy(helper.logged("warn", "^could not save show_book_covers"))
     end)
 
+    -- Z-Library once logged into (see KindleFetch:sitesToSearch)
+    it("ticks every site to search to begin with", function()
+        assert.are.same({ "zlib", "libgen", "archive", "gutenberg" }, Settings:getSearchSources())
+        assert.is_true(Settings:setSearchSources({ "archive" }))
+        assert.are.same({ "archive" }, Settings:getSearchSources())
+    end)
+
     describe("getDownloadDir", function()
         it("uses the saved download folder", function()
             helper.state.fs["/mnt/us/books"] = "directory"

@@ -153,7 +153,8 @@ describe("Diagnostics", function()
 
             assert.are.equal("https://en.wikipedia.org/wiki/Library_Genesis", asked[1])
             assert.are.equal("https://libgen.vg/", asked[2])
-            assert.matches("^https://archive.org/advancedsearch.php", asked[#asked - 1])
+            assert.matches("^https://archive.org/advancedsearch.php", asked[#asked - 2])
+            assert.are.equal("https://www.gutenberg.org/ebooks/1342.opds", asked[#asked - 1])
             assert.are.equal("https://z-lib.sk/eapi/info/languages", asked[#asked])
 
             local tested = viewer().text:match("\nConnection test:\n(.-)\n\n")
@@ -161,6 +162,7 @@ describe("Diagnostics", function()
             assert.matches("\n  libgen.vg answered %(HTTP 502%)\n", tested)
             assert.matches("\n  libgen.li answered %(HTTP 200%)\n", tested)
             assert.matches("\n  archive.org didn't answer: could not resolve host\n", tested, 1, true)
+            assert.matches("\n  www.gutenberg.org didn't answer: could not resolve host\n", tested, 1, true)
             assert.is_truthy(helper.logged("info", "^tested the connection: en.wikipedia.org answered"))
             -- with the message saying it was testing closed
             assert.is_nil(helper.state.trap_widget)
