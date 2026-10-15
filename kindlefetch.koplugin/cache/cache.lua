@@ -14,6 +14,9 @@ function KindleFetchCache:new(opts)
         end,
         -- optionally called with the key and value of an entry that has expired or been pushed out by newer ones
         onEvict = opts.onEvict,
+        -- whether entries are kept once they've expired, for when there's nothing newer (see peek), rather than
+        -- deleted
+        keep_expired = opts.keep_expired,
         cache = nil,
     }
 
@@ -118,7 +121,7 @@ function KindleFetchCache:save()
 
     -- drop expired entries, which would otherwise stay until they're looked up again
     local expiry = self:getExpiry()
-    if expiry then
+    if expiry and not self.keep_expired then
         local now = os.time()
         local expired = {}
         for key, entry in pairs(self.cache) do
@@ -161,13 +164,23 @@ function KindleFetchCache:get(...)
     if type(entry) ~= "table" or (expiry and (not entry_age or entry_age > expiry)) then
         LogUtil.debug("cache expired for key:", key, "age:", entry_age, "seconds")
 
-        self:evict(key)
-        self:save()
+        if type(entry) ~= "table" or not self.keep_expired then
+            self:evict(key)
+            self:save()
+        end
         return nil
     end
 
     LogUtil.debug("cache hit for key:", key, "returned", entry.value)
     return entry.value
+end
+
+-- what's stored for the key, however long ago, where entries are kept once they've expired (see keep_expired), e.g.
+-- the mirrors looked up before, for when they can't be looked up again
+function KindleFetchCache:peek(...)
+    self:load()
+    local entry = self.cache[self.makeKey(...)]
+    return type(entry) == "table" and entry.value or nil
 end
 
 -- store an entry without saving the cache, so that several can be stored and then saved together
@@ -252,6 +265,29 @@ function KindleFetchCache:moveValueToFront(value, ...)
     if #reordered > #entry.value then
         return
     end
+    entry.value = reordered
+
+    self:save()
+end
+
+-- put value last in the list cached under the key, as moveValueToFront puts it first
+function KindleFetchCache:moveValueToBack(value, ...)
+    self:load()
+    local entry = self.cache[self.makeKey(...)]
+    if type(entry) ~= "table" or type(entry.value) ~= "table" or entry.value[#entry.value] == value then
+        return
+    end
+
+    local reordered = {}
+    for _, v in ipairs(entry.value) do
+        if v ~= value then
+            table.insert(reordered, v)
+        end
+    end
+    if #reordered == #entry.value then
+        return
+    end
+    table.insert(reordered, value)
     entry.value = reordered
 
     self:save()

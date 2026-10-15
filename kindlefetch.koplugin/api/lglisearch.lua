@@ -283,7 +283,7 @@ local function fetchResults(params, refresh)
 
         if html and isResultsPage(html) then
             for __, unanswered_url in ipairs(unanswered) do
-                UrlApi:deleteLibgenUrl(unanswered_url)
+                UrlApi:restLibgenUrl(unanswered_url)
             end
             UrlApi:preferLibgenUrl(url)
             return html, nil, url
@@ -337,10 +337,10 @@ local function fetchResults(params, refresh)
     end
 
     -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
-    -- are down. otherwise the device may be offline, so keep them
+    -- may be down. otherwise the device may be offline, so leave them as they are
     if answered or refresh then
         for __, url in ipairs(unanswered) do
-            UrlApi:deleteLibgenUrl(url)
+            UrlApi:restLibgenUrl(url)
         end
     end
 
@@ -566,10 +566,10 @@ function LlgiSearch.findDownloadLink(book, retrying)
     end
 
     -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
-    -- are down. otherwise the device may be offline, so keep them
+    -- may be down. otherwise the device may be offline, so leave them as they are
     if answered or retrying then
         for __, url in ipairs(unanswered) do
-            UrlApi:deleteLibgenUrl(url)
+            UrlApi:restLibgenUrl(url)
         end
     end
 

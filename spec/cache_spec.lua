@@ -65,6 +65,29 @@ describe("KindleFetchCache", function()
         assert.is_nil(cacheFile().key)
     end)
 
+    -- e.g. the mirrors looked up before, for when they can't be looked up again
+    describe("keeping entries once they've expired", function()
+        it("keeps them, for peek, rather than get, to return", function()
+            local cache = newCache { expiry = 60, keep_expired = true }
+            cache:set("value", "key")
+            cache:set("other", "other key")
+            helper.state.time = 1000061
+
+            assert.is_nil(cache:get("key"))
+            -- however often the cache is saved
+            cache:save()
+            assert.are.equal("value", cache:peek("key"))
+            assert.are.equal("value", cacheFile().key.value)
+            assert.is_nil(cache:peek("missing"))
+        end)
+
+        it("peeks at entries that haven't expired too", function()
+            local cache = newCache { expiry = 60 }
+            cache:set("value", "key")
+            assert.are.equal("value", cache:peek("key"))
+        end)
+    end)
+
     it("can work out the expiry when checking an entry", function()
         local expiry = 60
         local cache = newCache {
@@ -330,6 +353,34 @@ describe("KindleFetchCache", function()
             cache:moveValueToFront("https://a.example", "missing")
             assert.are.same({ "https://a.example", "https://b.example" }, cache:get("mirrors"))
             -- without writing the cache out
+            assert.is_nil(cacheFile())
+        end)
+    end)
+
+    -- so a mirror that didn't answer is tried after the others
+    describe("moveValueToBack", function()
+        it("puts one value last in a cached list, keeping when it was cached", function()
+            local cache = newCache { expiry = 60 }
+            cache:set({ "https://a.example", "https://b.example", "https://c.example" }, "mirrors")
+            helper.state.time = 1000030
+            local mirrors = cache:get("mirrors")
+
+            cache:moveValueToBack("https://a.example", "mirrors")
+            assert.are.same({ "https://b.example", "https://c.example", "https://a.example" }, cache:get("mirrors"))
+            assert.are.equal(1000000, cacheFile().mirrors.timestamp)
+            -- leaving lists already returned as they were
+            assert.are.same({ "https://a.example", "https://b.example", "https://c.example" }, mirrors)
+        end)
+
+        it("leaves the list alone when the value is already last, or isn't in it", function()
+            local cache = newCache()
+            cache:set({ "https://a.example", "https://b.example" }, "mirrors")
+            helper.state.settings_files[data_dir .. "/settings/test_cache.lua"] = nil
+
+            cache:moveValueToBack("https://b.example", "mirrors")
+            cache:moveValueToBack("https://z.example", "mirrors")
+            cache:moveValueToBack("https://a.example", "missing")
+            assert.are.same({ "https://a.example", "https://b.example" }, cache:get("mirrors"))
             assert.is_nil(cacheFile())
         end)
     end)

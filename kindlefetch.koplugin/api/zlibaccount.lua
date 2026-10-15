@@ -77,7 +77,7 @@ function ZlibAccount:request(path, form, refresh)
         end
         if ok and type(data) == "table" then
             for __, unanswered_url in ipairs(unanswered) do
-                UrlApi:deleteZlibUrl(unanswered_url)
+                UrlApi:restZlibUrl(unanswered_url)
             end
             UrlApi:preferZlibUrl(url)
             return readAnswer(self, data, path, account)
@@ -112,10 +112,10 @@ function ZlibAccount:request(path, form, refresh)
     end
 
     -- the internet is working if another address answered, or the addresses were just looked up, so the ones that
-    -- didn't are down. otherwise the device may be offline, so keep them
+    -- didn't may be down. otherwise the device may be offline, so leave them as they are
     if answered or refresh then
         for __, url in ipairs(unanswered) do
-            UrlApi:deleteZlibUrl(url)
+            UrlApi:restZlibUrl(url)
         end
     end
 

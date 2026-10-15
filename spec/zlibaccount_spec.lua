@@ -184,8 +184,8 @@ describe("ZlibAccount", function()
             local data = ZlibAccount:request("/eapi/user/profile")
             assert.are.equal(1, data.user.downloads_today)
             assert.are.same({ OTHER_SITE .. "/eapi/user/profile", PROFILE_URL }, web.fetched)
-            -- as the internet is working, it's down
-            assert.are.same({ SITE }, addresses())
+            -- as the internet is working, it may be down, so it's asked after the other
+            assert.are.same({ SITE, OTHER_SITE }, addresses())
         end)
 
         it("drops an address that answers with something other than Z-Library's API", function()
