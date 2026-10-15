@@ -21,9 +21,11 @@ HttpUtil.UNRESOLVED = CurlUtil.getErrorMeaning(6)
 -- large and Library Genesis sends them slowly, so the second is generous
 local ANSWER_TIMEOUT = 10
 local PAGE_TIMEOUT = 60
--- how long a file can take to download with KOReader's own HTTP, in seconds: much longer than a page, as a file can
--- be several megabytes, and an e-reader's Wi-Fi slow
+-- how long a file can take to download, in seconds: much longer than a page, as a file can be several megabytes, and
+-- an e-reader's Wi-Fi slow
 local FILE_TIMEOUT = 300
+-- and with curl, how long it can go without any of it arriving before it's given up on
+local FILE_STALL_TIME = 30
 
 -- what KOReader's own HTTP says when a site's name couldn't be looked up, in lower case
 local UNRESOLVED_ERRORS = {
@@ -293,13 +295,14 @@ end
 
 -- download a file to path, with curl where it can fetch (see CurlUtil.canFetch), otherwise with KOReader's own HTTP,
 -- as a Kindle's own curl is too old to connect to many sites, such as GitHub. either way, KOReader is held up until
--- it has downloaded. returns true, or nil and what went wrong
+-- it has downloaded, so only for so long (a stalled download froze KOReader, until the device was restarted, in the
+-- middle of updating). returns true, or nil and what went wrong
 function HttpUtil.downloadFile(url, path)
     LogUtil.debug("downloading", url, "to", path)
     if not CurlUtil.canFetch() then
         return downloadWithKOReader(url, path)
     end
-    local ok, err = CurlUtil.download(url, path, false)
+    local ok, err = CurlUtil.download(url, path, false, FILE_TIMEOUT, { stall_time = FILE_STALL_TIME })
     if not ok then
         return nil, err
     end
