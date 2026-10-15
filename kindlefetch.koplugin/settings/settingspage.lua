@@ -16,6 +16,13 @@ local N_ = _.ngettext
 
 local SettingsPage = {}
 
+-- say when a setting couldn't be saved (see KindleFetchSettings:setSetting), which would go back to what it was
+local function saved(ok, err)
+    if not ok then
+        NotifyUtil.error(err)
+    end
+end
+
 local function formatDays(days)
     return T(N_("1 day", "%1 days", days), days)
 end
@@ -184,7 +191,7 @@ function SettingsPage:settingsItems()
             text = T(_("Keep Searches For: %1"), formatDays(search_cache_days)),
             callback = function()
                 this:changeCacheExpiry(_("Keep Searches For"), search_cache_days, function(days)
-                    KindleFetchSettings:setSearchCacheExpiryDays(days)
+                    saved(KindleFetchSettings:setSearchCacheExpiryDays(days))
                 end)
             end,
         },
@@ -192,7 +199,7 @@ function SettingsPage:settingsItems()
             text = T(_("Keep Mirrors For: %1"), formatDays(mirror_cache_days)),
             callback = function()
                 this:changeCacheExpiry(_("Keep Mirrors For"), mirror_cache_days, function(days)
-                    KindleFetchSettings:setMirrorCacheExpiryDays(days)
+                    saved(KindleFetchSettings:setMirrorCacheExpiryDays(days))
                 end)
             end,
         },
@@ -218,7 +225,7 @@ function SettingsPage:refresh()
 end
 
 function SettingsPage:changeBookCoverVisibility()
-    KindleFetchSettings:setShowBookCovers(not KindleFetchSettings:getShowBookCovers())
+    saved(KindleFetchSettings:setShowBookCovers(not KindleFetchSettings:getShowBookCovers()))
     self:refresh()
 end
 
@@ -243,7 +250,7 @@ function SettingsPage:changeCacheExpiry(title, current_days, save)
 end
 
 function SettingsPage:changeCheckForUpdates()
-    KindleFetchSettings:setCheckForUpdates(not KindleFetchSettings:getCheckForUpdates())
+    saved(KindleFetchSettings:setCheckForUpdates(not KindleFetchSettings:getCheckForUpdates()))
     self:refresh()
 end
 
@@ -342,7 +349,7 @@ function SettingsPage:changeLanguages()
         KindleFetchSettings:getAvailableLanguages(),
         KindleFetchSettings:getPreferredLanguages(),
         function(languages)
-            KindleFetchSettings:setPreferredLanguages(languages)
+            saved(KindleFetchSettings:setPreferredLanguages(languages))
         end,
         _("Select at least one language")
     )
@@ -356,7 +363,7 @@ function SettingsPage:changeFileTypes()
         choices,
         KindleFetchSettings:getPreferredFileTypes(),
         function(file_types)
-            KindleFetchSettings:setPreferredFileTypes(file_types)
+            saved(KindleFetchSettings:setPreferredFileTypes(file_types))
         end,
         _("Select at least one file type")
     )
@@ -368,7 +375,7 @@ function SettingsPage:changeBookTypes()
         KindleFetchSettings:getAvailableBookTypes(),
         KindleFetchSettings:getPreferredBookTypes(),
         function(book_types)
-            KindleFetchSettings:setPreferredBookTypes(book_types)
+            saved(KindleFetchSettings:setPreferredBookTypes(book_types))
         end,
         _("Select at least one book type")
     )

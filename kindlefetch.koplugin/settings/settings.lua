@@ -488,11 +488,15 @@ local OLD_BOOK_TYPES = {
     standards_document = "standards",
 }
 
+local function settingsPath()
+    return DataStorage:getSettingsDir() .. "/kindlefetch_settings.lua"
+end
+
 -- opened once and kept, as reading the file from storage for every setting is slow on an e-reader
 local cached_file
 local function getSettingsFile()
     if not cached_file then
-        cached_file = LuaSettings:open(DataStorage:getSettingsDir() .. "/kindlefetch_settings.lua")
+        cached_file = LuaSettings:open(settingsPath())
     end
     return cached_file
 end
@@ -587,10 +591,25 @@ function KindleFetchSettings:getSetting(name)
 
     return value
 end
+-- write the settings, with name set to data, returning true, or nil and why not. LuaSettings doesn't say when it
+-- couldn't write them (e.g. once the storage is full, or read-only), and they're read as they were before next time,
+-- so they're read back to tell
+local function flush(settings_file, name, data)
+    settings_file:flush()
+    if not sameSetting(LuaSettings:open(settingsPath()):readSetting(name), data) then
+        LogUtil.warn("could not save", name, "in", settingsPath())
+        return nil, _("Kindle Fetch's settings couldn't be saved")
+    end
+    return true
+end
+
 function KindleFetchSettings:setSetting(name, data)
     local settings_file = getSettingsFile()
     settings_file:saveSetting(name, data)
-    settings_file:flush()
+    local ok, err = flush(settings_file, name, data)
+    if not ok then
+        return nil, err
+    end
 
     if type(data) ~= "table" then
         LogUtil.debug("updated", name, "to", data)
@@ -710,7 +729,10 @@ function KindleFetchSettings:setZlibAccount(account)
     else
         settings_file:delSetting("zlib_account")
     end
-    settings_file:flush()
+    local ok, err = flush(settings_file, "zlib_account", account and settings_file:readSetting("zlib_account"))
+    if not ok then
+        return nil, err
+    end
     return true
 end
 
@@ -751,7 +773,10 @@ function KindleFetchSettings:setDownloadDir(path)
 
     local settings_file = getSettingsFile()
     settings_file:saveSetting("download_dir", path)
-    settings_file:flush()
+    local saved, save_err = flush(settings_file, "download_dir", path)
+    if not saved then
+        return nil, save_err
+    end
     LogUtil.debug("download directory set to", path)
     return true
 end

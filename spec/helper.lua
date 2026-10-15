@@ -336,8 +336,11 @@ local function createStubs(state)
             function file:delSetting(key)
                 self.data[key] = nil
             end
+            -- (unless the storage can't be written, which LuaSettings doesn't say)
             function file:flush()
-                state.settings_files[path] = deepCopy(self.data)
+                if not state.settings_unwritable then
+                    state.settings_files[path] = deepCopy(self.data)
+                end
             end
             return file
         end,

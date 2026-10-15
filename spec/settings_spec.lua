@@ -63,6 +63,16 @@ describe("KindleFetchSettings", function()
         )
     end)
 
+    -- which LuaSettings doesn't say, so a setting that hadn't been saved was said to have been
+    it("says when a setting couldn't be saved, as when the storage is full", function()
+        assert.is_true(Settings:setShowBookCovers(false))
+        helper.state.settings_unwritable = true
+        local ok, err = Settings:setShowBookCovers(true)
+        assert.is_nil(ok)
+        assert.are.equal("Kindle Fetch's settings couldn't be saved", err)
+        assert.is_truthy(helper.logged("warn", "^could not save show_book_covers"))
+    end)
+
     describe("getDownloadDir", function()
         it("uses the saved download folder", function()
             helper.state.fs["/mnt/us/books"] = "directory"
@@ -228,6 +238,14 @@ describe("KindleFetchSettings", function()
                     assert.is_nil(tostring(log[i]):find("secretkey", 1, true))
                 end
             end
+        end)
+
+        it("isn't said to have been forgotten when the settings couldn't be saved", function()
+            Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "abc" })
+            helper.state.settings_unwritable = true
+            local ok, err = Settings:setZlibAccount(nil)
+            assert.is_nil(ok)
+            assert.are.equal("Kindle Fetch's settings couldn't be saved", err)
         end)
 
         it("can be forgotten", function()
@@ -431,6 +449,7 @@ describe("KindleFetchSettings", function()
         end)
     end)
 
+    -- and again only to check that each change was saved
     it("reads the settings file from storage once", function()
         local count = countFileAccess()
 
@@ -440,7 +459,7 @@ describe("KindleFetchSettings", function()
         Settings:setShowBookCovers(false)
         Settings:getShowBookCovers()
 
-        assert.are.equal(1, count.opens)
+        assert.are.equal(2, count.opens)
         assert.are.equal(1, count.flushes)
     end)
 end)

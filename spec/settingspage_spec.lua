@@ -206,6 +206,14 @@ describe("SettingsPage", function()
         end)
     end)
 
+    -- which would go back to what it was
+    it("says when a change couldn't be saved", function()
+        SettingsPage:showSettings()
+        helper.state.settings_unwritable = true
+        tap("Show Book Covers")
+        assert.are.equal("Kindle Fetch's settings couldn't be saved", helper.lastError())
+    end)
+
     describe("download folder", function()
         it("can be changed", function()
             local books = helper.tmpdir("books")
