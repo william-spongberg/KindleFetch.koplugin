@@ -316,7 +316,7 @@ describe("Downloader", function()
             it("doesn't hold KOReader up, letting the progress's Cancel call it off", function()
                 local waits = {}
                 HttpUtil.getBody = function(url)
-                    table.insert(waits, { wrapped = Trapper:isWrapped(), trap_widget = HttpUtil.trap_widget })
+                    table.insert(waits, { wrapped = Trapper:isWrapped(), trap_widget = HttpUtil.getTrapWidget() })
                     return getBody(url)
                 end
 
@@ -327,7 +327,7 @@ describe("Downloader", function()
                     assert.is_true(wait.wrapped)
                     assert.are.equal(progress(), wait.trap_widget)
                 end
-                assert.is_nil(HttpUtil.trap_widget)
+                assert.is_nil(HttpUtil.getTrapWidget())
                 assert.are.equal(1, #spawned)
             end)
 
@@ -344,7 +344,7 @@ describe("Downloader", function()
                 assert.are.same({ { ok = false, err = "request cancelled" } }, results)
                 assert.are.equal(0, #spawned)
                 assert.are.same({}, Downloader:getActiveDownloads())
-                assert.is_nil(HttpUtil.trap_widget)
+                assert.is_nil(HttpUtil.getTrapWidget())
                 -- none are dropped, or looked up again
                 HttpUtil.getBody = getBody
                 assert.are.same(mirrors, UrlApi:getLibgenUrls())
@@ -362,7 +362,7 @@ describe("Downloader", function()
                 assert.are.same({ { ok = false, err = "something went wrong, see crash.log" } }, results)
                 assert.is_true(helper.wasClosed(widget.container))
                 assert.are.same({}, Downloader:getActiveDownloads())
-                assert.is_nil(HttpUtil.trap_widget)
+                assert.is_nil(HttpUtil.getTrapWidget())
                 assert.is_truthy(helper.logged("err", "^looking up the download link went wrong:.*unexpected"))
             end)
         end)

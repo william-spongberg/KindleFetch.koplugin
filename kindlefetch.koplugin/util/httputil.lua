@@ -10,11 +10,8 @@ local Errors = require("util.errors")
 
 local HttpUtil = {}
 
--- the error when a request was called off, by a tap on trap_widget
+-- the error when a request was called off, by a tap on the trap widget (see setTrapWidget)
 HttpUtil.CANCELLED = Errors.CANCELLED
--- a widget on screen that calls off the request being waited for when tapped, such as a message saying what's
--- being waited for. set by whoever started the requests from inside Trapper:wrap, and cleared by them after
-HttpUtil.trap_widget = nil
 -- the error when a site's name couldn't be looked up, as when the network blocks the site: curl's, which what
 -- KOReader's own HTTP says for it is turned into (see explainFailure)
 HttpUtil.UNRESOLVED = CurlUtil.getErrorMeaning(6)
@@ -46,9 +43,26 @@ local function explainFailure(err)
     return err
 end
 
--- whether requests made from inside Trapper:wrap can be called off (see trap_widget), which those made with curl can
+-- whether requests made from inside Trapper:wrap can be called off (see setTrapWidget), which those made with curl can
 function HttpUtil.canCancel()
     return CurlUtil.canFetch()
+end
+
+-- the widget on screen that calls off the requests being waited for when tapped, such as a message saying what's
+-- being waited for, for each of the coroutines Trapper runs searches, downloads and logins in, as several can be
+-- waiting at once: one search's Cancel called off another's download (keyed by the coroutine, or MAIN outside one)
+local trap_widgets = setmetatable({}, { __mode = "k" })
+local MAIN = {}
+
+-- set the widget that calls off the requests made from here on in the coroutine this is called from, or nil once
+-- they're over. set by whoever made them from inside Trapper:wrap
+function HttpUtil.setTrapWidget(widget)
+    trap_widgets[coroutine.running() or MAIN] = widget
+end
+
+-- the widget that calls off the requests made in the coroutine this is called from (see setTrapWidget)
+function HttpUtil.getTrapWidget()
+    return trap_widgets[coroutine.running() or MAIN]
 end
 
 -- the fields of a form, as a list of each one's name and value, as they're sent
@@ -87,7 +101,7 @@ local function requestBodyWithCurl(request_url, use_proxy, opts)
 
     local completed, output
     if Trapper:isWrapped() then
-        completed, output = Trapper:dismissablePopen(cmd, HttpUtil.trap_widget)
+        completed, output = Trapper:dismissablePopen(cmd, HttpUtil.getTrapWidget())
     else
         local pipe = io.popen(cmd, "r")
         if pipe then

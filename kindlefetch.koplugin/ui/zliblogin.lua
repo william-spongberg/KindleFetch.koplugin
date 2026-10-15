@@ -36,10 +36,10 @@ function ZlibLogin.login(email, password, on_logged_in)
             UIManager:show(message)
             UIManager:forceRePaint()
 
-            HttpUtil.trap_widget = message
+            HttpUtil.setTrapWidget(message)
             local ok, logged_in, err =
                 Guard.pcall("logging in to Z-Library", ZlibAccount.login, ZlibAccount, email, password)
-            HttpUtil.trap_widget = nil
+            HttpUtil.setTrapWidget(nil)
             closeMessage()
             if not ok then
                 logged_in, err = false, Errors.UNEXPECTED
@@ -58,7 +58,7 @@ function ZlibLogin.login(email, password, on_logged_in)
                 on_logged_in()
             end
         end, function(err)
-            HttpUtil.trap_widget = nil
+            HttpUtil.setTrapWidget(nil)
             closeMessage()
             Guard.say(err)
         end))

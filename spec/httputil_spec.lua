@@ -362,7 +362,7 @@ describe("HttpUtil", function()
             before_each(function()
                 helper.stubs.trapper.wrapped = true
                 message = { text = "Searching..." }
-                HttpUtil.trap_widget = message
+                HttpUtil.setTrapWidget(message)
                 curlAnswers(function()
                     return "<html>results</html>", 200
                 end)
@@ -373,6 +373,34 @@ describe("HttpUtil", function()
                 assert.are.equal(1, #helper.state.trapped)
                 assert.are.equal(message, helper.state.trapped[1].trap_widget)
                 assert.are.equal(fetches[1], helper.state.trapped[1].cmd)
+            end)
+
+            -- each search, download and login waits in a coroutine of its own: hiding one download while it looked up
+            -- its link, then starting another, had the second's Cancel call off the first, and once the first was
+            -- over, a tap anywhere call off the second
+            it("calls off each coroutine's requests with its own widget", function()
+                local first_message, second_message = { text = "Finding a download link..." }, { text = "Searching..." }
+                local first = coroutine.create(function()
+                    HttpUtil.setTrapWidget(first_message)
+                    coroutine.yield()
+                    HttpUtil.getBody("https://libgen.example/ads.php")
+                    HttpUtil.setTrapWidget(nil)
+                end)
+                local second = coroutine.create(function()
+                    HttpUtil.setTrapWidget(second_message)
+                    coroutine.yield()
+                    HttpUtil.getBody("https://libgen.example/index.php")
+                    HttpUtil.setTrapWidget(nil)
+                end)
+
+                assert.is_true(coroutine.resume(first))
+                assert.is_true(coroutine.resume(second))
+                assert.is_true(coroutine.resume(first))
+                assert.is_true(coroutine.resume(second))
+                assert.are.equal(first_message, helper.state.trapped[1].trap_widget)
+                assert.are.equal(second_message, helper.state.trapped[2].trap_widget)
+                -- and what's waited for outside them still has the one given there
+                assert.are.equal(message, HttpUtil.getTrapWidget())
             end)
 
             it("says so when it's called off, without trying again through PROXY_URL", function()

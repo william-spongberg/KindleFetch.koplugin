@@ -515,10 +515,10 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
             UIManager:forceRePaint()
         end
 
-        HttpUtil.trap_widget = message
+        HttpUtil.setTrapWidget(message)
         local ok, books, err, next_page, results_read =
             Guard.pcall(string.format("search for %q", query), self.search, self, query, page)
-        HttpUtil.trap_widget = nil
+        HttpUtil.setTrapWidget(nil)
         closeMessage()
         if not ok then
             books, err, next_page = nil, Errors.UNEXPECTED, nil
@@ -530,7 +530,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
         end
         on_done(books, err, next_page, results_read)
     end, function(err)
-        HttpUtil.trap_widget = nil
+        HttpUtil.setTrapWidget(nil)
         closeMessage()
         -- which says it failed, as it does for any other error
         on_done(nil, err)

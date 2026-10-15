@@ -166,10 +166,17 @@ describe("KindleFetch", function()
             end,
         })
         can_cancel, trap_widgets = true, {}
+        local trap_widget
         helper.stub("util.httputil", {
             CANCELLED = "request cancelled",
             canCancel = function()
                 return can_cancel
+            end,
+            setTrapWidget = function(widget)
+                trap_widget = widget
+            end,
+            getTrapWidget = function()
+                return trap_widget
             end,
         })
         helper.stub("api.lglisearch", {
@@ -177,7 +184,7 @@ describe("KindleFetch", function()
             HAS_BOOK_TYPES = true,
             search = function(_, query, page)
                 table.insert(searches, { query, page })
-                table.insert(trap_widgets, require("util.httputil").trap_widget or false)
+                table.insert(trap_widgets, require("util.httputil").getTrapWidget() or false)
                 -- books, error, the page to carry on from and how many results were read (or a function to run in
                 -- place of the search)
                 local result = search_results[page] or { {} }
@@ -860,7 +867,7 @@ describe("KindleFetch", function()
                 assert.are.equal(0, #helper.state.notifications)
                 -- it's what calls the search off
                 assert.are.same({ message() }, trap_widgets)
-                assert.is_nil(require("util.httputil").trap_widget)
+                assert.is_nil(require("util.httputil").getTrapWidget())
             end)
 
             it("is called off with the message's Cancel button", function()
@@ -937,7 +944,7 @@ describe("KindleFetch", function()
                 search(openUI(), "dune")
 
                 assert.is_true(helper.wasClosed(message()))
-                assert.is_nil(require("util.httputil").trap_widget)
+                assert.is_nil(require("util.httputil").getTrapWidget())
                 assert.are.equal("Search failed: something went wrong, see crash.log", helper.lastError())
                 assert.matches("attempt to index a nil value", helper.logged("err", '^search for "dune" went wrong'))
             end)

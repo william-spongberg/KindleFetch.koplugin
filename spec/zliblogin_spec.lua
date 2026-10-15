@@ -40,7 +40,7 @@ describe("ZlibLogin", function()
             end,
             login = function(_, email, password)
                 table.insert(logins, { email, password })
-                table.insert(logins, require("util.httputil").trap_widget or false)
+                table.insert(logins, require("util.httputil").getTrapWidget() or false)
                 if type(login_result) == "function" then
                     return login_result()
                 end
@@ -48,10 +48,17 @@ describe("ZlibLogin", function()
             end,
         }
         helper.stub("api.zlibaccount", ZlibAccount)
+        local trap_widget
         helper.stub("util.httputil", {
             CANCELLED = "request cancelled",
             canCancel = function()
                 return true
+            end,
+            setTrapWidget = function(widget)
+                trap_widget = widget
+            end,
+            getTrapWidget = function()
+                return trap_widget
             end,
         })
         ZlibLogin = require("ui.zliblogin")
