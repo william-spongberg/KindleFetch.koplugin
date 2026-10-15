@@ -532,8 +532,8 @@ local function pickFile(files, file_type)
     end
 end
 
--- the book's download link, from the list of the files in its folder on Internet Archive. otherwise nil, and why
--- not (HttpUtil.CANCELLED when called off)
+-- the book's download link, from the list of the files in its folder on Internet Archive, then nil, nil and what it
+-- lists the file as (see Sources). otherwise nil, and why not (HttpUtil.CANCELLED when called off)
 function IaSearch.findDownloadLink(book)
     local body, err, status = HttpUtil.getBody(string.format("%s/metadata/%s/files", SITE, book.identifier))
     if err == HttpUtil.CANCELLED then
@@ -573,7 +573,10 @@ function IaSearch.findDownloadLink(book)
             tostring(file.size or "unknown")
         )
     )
-    return string.format("%s/download/%s/%s", SITE, book.identifier, encodePath(file.name))
+    return string.format("%s/download/%s/%s", SITE, book.identifier, encodePath(file.name)),
+        nil,
+        nil,
+        { md5 = file.md5, bytes = file.size }
 end
 
 return IaSearch

@@ -6,6 +6,7 @@ local Event = require("ui/event")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
 local HttpDownload = require("util.httpdownload")
+local FileCheck = require("util.filecheck")
 local LogUtil = require("util.logutil")
 local Guard = require("util.guard")
 
@@ -77,6 +78,23 @@ local function removeOrphans()
     if #orphans > 0 then
         LogUtil.info("removed", #orphans, "covers that were no longer in the cache")
     end
+end
+
+-- whether the cover that has downloaded to path is an image, rather than e.g. a web page a site sent in its place,
+-- which would be kept for good, as covers are, removing it if it isn't
+local function isImage(id, path)
+    local head = FileCheck.head(path) or ""
+    if FileCheck.isImage(head) then
+        return true
+    end
+    LogUtil.warn(
+        "left out the cover of",
+        id,
+        "as it isn't an image:",
+        FileCheck.pageTitle(head) or (head:sub(1, 40):gsub("[^%w%p ]", "?"))
+    )
+    FileUtil.removeFile(path)
+    return false
 end
 
 function CoverCache:getPath(id)
@@ -161,7 +179,7 @@ function CoverCache:download(id, url)
         LogUtil.info("retrying the cover download of", id, "through the proxy")
         success = CurlUtil.download(url, path, true, COVER_MAX_TIME)
     end
-    if success then
+    if success and isImage(id, path) then
         persistent_cache:set(path, id)
         return path
     end
@@ -295,17 +313,20 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
         id_of[path] = ids[i]
     end
 
-    -- the covers that have arrived, as they're added to the cache (in memory, until they've all finished)
+    -- the covers that have arrived, as they're added to the cache (in memory, until they've all finished), and those
+    -- that weren't images (false)
     local kept = {}
     local count = 0
     local function keep(paths)
         local added = 0
         for _, path in ipairs(paths) do
-            if id_of[path] and not kept[path] then
-                kept[path] = true
-                downloading[id_of[path]] = nil
-                persistent_cache:put(path, id_of[path])
-                added = added + 1
+            if id_of[path] and kept[path] == nil then
+                kept[path] = isImage(id_of[path], path)
+                if kept[path] then
+                    downloading[id_of[path]] = nil
+                    persistent_cache:put(path, id_of[path])
+                    added = added + 1
+                end
             end
         end
         count = count + added

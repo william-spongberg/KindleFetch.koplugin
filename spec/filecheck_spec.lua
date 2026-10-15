@@ -1,0 +1,146 @@
+local helper = require("helper")
+local fixtures = require("fixtures")
+
+describe("FileCheck", function()
+    local FileCheck, dir
+
+    before_each(function()
+        helper.reset()
+        dir = helper.tmpdir("filecheck")
+        FileCheck = require("util.filecheck")
+    end)
+
+    after_each(function()
+        helper.cleanup()
+    end)
+
+    local function file(name, content)
+        local path = dir .. "/" .. name
+        helper.writeFile(path, content)
+        return path
+    end
+
+    describe("isWebPage", function()
+        it("tells web pages, as sites send in place of what was asked for", function()
+            assert.is_true(FileCheck.isWebPage("<!DOCTYPE html>\n<html><title>Please wait</title>"))
+            assert.is_true(FileCheck.isWebPage("<html>\n<body>Not found</body></html>"))
+            -- with the mark text can start with, and spaces before it
+            assert.is_true(FileCheck.isWebPage("\239\187\191\n  <!doctype HTML><html>"))
+            assert.is_true(FileCheck.isWebPage('<?xml version="1.0"?>\n<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0">'))
+        end)
+
+        it("tells answers to programs", function()
+            assert.is_true(FileCheck.isWebPage('{"error": "Too many requests"}'))
+            assert.is_true(FileCheck.isWebPage("{}"))
+            assert.is_true(FileCheck.isWebPage('[{"id": 1}]'))
+        end)
+
+        it("doesn't take books for web pages", function()
+            assert.is_false(FileCheck.isWebPage("PK\3\4mimetypeapplication/epub+zip"))
+            assert.is_false(FileCheck.isWebPage('<?xml version="1.0" encoding="utf-8"?>\n<FictionBook xmlns="">'))
+            assert.is_false(FileCheck.isWebPage("[Illustration]\n\nCHAPTER I."))
+            assert.is_false(FileCheck.isWebPage(""))
+        end)
+    end)
+
+    describe("isFileType", function()
+        it("tells the file types files start with signs of", function()
+            assert.is_true(FileCheck.isFileType(fixtures.bookFile("epub", 100), "epub"))
+            assert.is_false(FileCheck.isFileType(fixtures.bookFile("pdf", 100), "epub"))
+            assert.is_true(FileCheck.isFileType("AT&TFORM\0\0", "djvu"))
+            assert.is_true(FileCheck.isFileType("{\\rtf1\\ansi", "rtf"))
+            assert.is_true(FileCheck.isFileType("\255\216\255\224", "jpg"))
+        end)
+
+        -- which some have other bytes before
+        it("finds a PDF's header after other bytes", function()
+            assert.is_true(FileCheck.isFileType(string.rep("\0", 100) .. "%PDF-1.4\n", "pdf"))
+            assert.is_false(FileCheck.isFileType("PK\3\4", "pdf"))
+        end)
+
+        it("tells Mobipocket and PalmDOC books by what they say they are after their names", function()
+            local mobi = fixtures.bookFile("mobi", 100)
+            assert.is_true(FileCheck.isFileType(mobi, "mobi"))
+            assert.is_true(FileCheck.isFileType(mobi, "azw"))
+            assert.is_true(FileCheck.isFileType(mobi, "azw3"))
+            assert.is_true(FileCheck.isFileType(string.rep("\0", 60) .. "TEXtREAd", "prc"))
+            assert.is_false(FileCheck.isFileType(fixtures.bookFile("epub", 100), "mobi"))
+        end)
+
+        it("allows for the ways FB2 books and comics come", function()
+            assert.is_true(FileCheck.isFileType('\239\187\191<?xml version="1.0"?><FictionBook>', "fb2"))
+            assert.is_true(FileCheck.isFileType("PK\3\4", "fb2"))
+            assert.is_true(FileCheck.isFileType("Rar!\26\7\0", "cbr"))
+            assert.is_true(FileCheck.isFileType("PK\3\4", "cbr"))
+        end)
+
+        it("can't tell for file types that can start any way", function()
+            assert.is_nil(FileCheck.isFileType("Chapter 1", "txt"))
+            assert.is_nil(FileCheck.isFileType("anything", "doc"))
+            assert.is_nil(FileCheck.isFileType("anything", "pdb"))
+        end)
+    end)
+
+    describe("isImage", function()
+        it("tells covers from what's sent in their place", function()
+            assert.is_true(FileCheck.isImage(fixtures.JPEG))
+            assert.is_true(FileCheck.isImage("\137PNG\r\n\26\n\0\0"))
+            assert.is_true(FileCheck.isImage("GIF89a"))
+            assert.is_true(FileCheck.isImage("RIFF\0\0\0\0WEBPVP8 "))
+            assert.is_false(FileCheck.isImage("<html><title>404</title>"))
+            assert.is_false(FileCheck.isImage(""))
+        end)
+    end)
+
+    describe("problem", function()
+        it("says when a web page arrived in place of a book, with its title", function()
+            local path = file("Dune.epub.part", "<html><head><title>\n  Please   wait \n</title></head></html>")
+            assert.are.same({ "web page", "Please wait" }, { FileCheck.problem(path, "epub") })
+        end)
+
+        it("says when a book isn't in its file type, with how it starts", function()
+            local path = file("Dune.epub.part", "%PDF-1.7\n")
+            assert.are.same({ "file type", "%PDF-1.7?" }, { FileCheck.problem(path, "epub") })
+        end)
+
+        it("finds nothing wrong with books, or web pages that were asked for", function()
+            assert.is_nil(FileCheck.problem(file("Dune.epub.part", fixtures.bookFile("epub", 2000)), "epub"))
+            assert.is_nil(FileCheck.problem(file("Dune.txt.part", "Chapter 1"), "txt"))
+            assert.is_nil(FileCheck.problem(file("Dune.html.part", "<!DOCTYPE html><html>"), "html"))
+            -- which isn't for it to say
+            assert.is_nil(FileCheck.problem(dir .. "/missing", "epub"))
+        end)
+    end)
+
+    describe("md5", function()
+        it("works the md5 out a piece at a time", function()
+            local content = fixtures.bookFile("epub", 2.5 * 1024 * 1024)
+            local path = file("Dune.epub", content)
+            local expected = require("ffi/sha2").md5(content)
+
+            local checksum = FileCheck.md5(path)
+            assert.is_nil(checksum:step())
+            assert.is_nil(checksum:step())
+            assert.is_nil(checksum:step())
+            assert.are.equal(expected, checksum:step())
+        end)
+
+        it("gives md5s in lower case", function()
+            local path = file("empty", "")
+            assert.are.equal("d41d8cd98f00b204e9800998ecf8427e", FileCheck.md5(path):step())
+        end)
+
+        it("says why a file can't be read", function()
+            local checksum, err = FileCheck.md5(dir .. "/missing")
+            assert.is_nil(checksum)
+            assert.matches("No such file", err)
+        end)
+
+        it("can be stopped partway", function()
+            local checksum = FileCheck.md5(file("Dune.epub", fixtures.bookFile("epub", 2 * 1024 * 1024)))
+            checksum:step()
+            checksum:close()
+            assert.are.equal("closed file", io.type(checksum.file))
+        end)
+    end)
+end)

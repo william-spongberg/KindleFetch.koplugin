@@ -11,6 +11,7 @@ local HttpUtil = require("util.httputil")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
 local HttpDownload = require("util.httpdownload")
+local FileCheck = require("util.filecheck")
 local Sources = require("api.sources")
 local CoverCache = require("cache.covercache")
 local Errors = require("util.errors")
@@ -36,6 +37,18 @@ local STALL_NOTICE_TIME = 10
 local SERVER_FAILURES = { [6] = true, [7] = true, [28] = true, [52] = true, [56] = true }
 -- how often a download that's waiting for Wi-Fi checks whether it's back, as KOReader doesn't say so on every device
 local RECONNECT_POLL_INTERVAL = 2
+
+-- what a site listed a book's file as (see findDownloadLink in Sources), to check what arrives against (see checkBook):
+-- its md5 (in lower case) and how many bytes it is, of those it gave that are what they should be
+local function expectedFile(listed)
+    listed = type(listed) == "table" and listed or {}
+    local md5 = type(listed.md5) == "string" and #listed.md5 == 32 and listed.md5:match("^%x+$")
+    local bytes = tonumber(listed.bytes)
+    return {
+        md5 = md5 and md5:lower() or nil,
+        bytes = bytes and bytes > 0 and bytes or nil,
+    }
+end
 
 local function hasProxy()
     local proxy_url = os.getenv("PROXY_URL")
@@ -127,7 +140,8 @@ end
 -- stop downloading the book while the device sleeps or Wi-Fi is off, rather than it failing for want of Wi-Fi as if
 -- the site had, keeping what has arrived to carry on from once it's back (see resumeTransfer)
 local function pauseTransfer(transfer, why)
-    if transfer.paused or not transfer.download_url or transfer.progress_widget.cancelled then
+    -- (nor once it has all arrived, and is being checked, see checkBook)
+    if transfer.paused or transfer.checksum or not transfer.download_url or transfer.progress_widget.cancelled then
         return
     end
     transfer.paused = true
@@ -172,10 +186,135 @@ local function resumeTransfer(transfer)
     return true
 end
 
+local pollDownload
+
+-- try a download again once it has failed, or what arrived wasn't the book (bad_book, see checkBook): from the
+-- beginning, where the site wouldn't carry on from where it stopped, or what arrived can't be carried on from; through
+-- the proxy as a backup (carrying on from there otherwise); or with another link, from a site whose links each go to
+-- one of its servers, when the one it went to failed. returns whether it's being tried again
+local function retry(transfer, exit_code, http_status, bad_book)
+    local why
+    if bad_book then
+        transfer.resume = false
+        transfer.total_size, transfer.last_size, transfer.quiet_polls = nil, nil, 0
+        FileUtil.removeFile(transfer.part_path)
+    elseif exit_code == 33 and transfer.resume then
+        why = "downloading the book again from the beginning, as the site can't carry on from where it stopped"
+        transfer.resume = false
+        FileUtil.removeFile(transfer.part_path)
+    end
+    if not why and not transfer.tried_proxy and hasProxy() then
+        why = "retrying the download through the proxy"
+        transfer.tried_proxy = true
+    end
+    if why then
+        LogUtil.info(why)
+        local started, spawn_err = startCurl(transfer)
+        if not started then
+            LogUtil.warn("could not start curl to try again:", spawn_err)
+            FileUtil.removeFile(transfer.part_path)
+            transfer.on_finish(false, spawn_err or _("download failed and could not be tried again"))
+            return true
+        end
+        Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
+            pollDownload(transfer)
+        end, transfer.abandon)
+        return true
+    end
+
+    if transfer.relink and (bad_book or http_status and http_status >= 500 or SERVER_FAILURES[exit_code]) then
+        LogUtil.info(
+            "asking for another download link, as the server the link went to",
+            bad_book and "didn't send the book" or "failed"
+        )
+        transfer.relink()
+        return true
+    end
+    return false
+end
+
+-- what arrived isn't the book (see checkBook), so try again (see retry), or fail with err
+local function rejectBook(transfer, err)
+    if not retry(transfer, nil, nil, true) then
+        transfer.on_finish(false, err)
+    end
+end
+
+-- work out the md5 of the book that has arrived, a piece at a time between whatever else KOReader is doing, as a large
+-- book takes a while, and check it's the file the site listed
+local function pollChecksum(transfer)
+    local book, checksum = transfer.book, transfer.checksum
+    if transfer.progress_widget.cancelled then
+        LogUtil.info(string.format("download of %q cancelled while checking it", book.title))
+        checksum:close()
+        transfer.checksum = nil
+        FileUtil.removeFile(transfer.part_path)
+        transfer.on_finish(false, Errors.CANCELLED)
+        return
+    end
+
+    local md5, err = checksum:step()
+    if md5 == nil then
+        Guard.nextTick("checking a downloaded book", function()
+            pollChecksum(transfer)
+        end, transfer.abandon)
+        return
+    end
+    transfer.checksum = nil
+    if not md5 then
+        -- which isn't for this to say, as it has arrived
+        LogUtil.warn(string.format("could not read %q to check it: %s", book.title, tostring(err)))
+        transfer.on_finish(true)
+    elseif md5 ~= transfer.expected.md5 then
+        LogUtil.warn(
+            string.format("%q has the md5 %s, rather than the %s listed", book.title, md5, transfer.expected.md5)
+        )
+        rejectBook(transfer, _("the file that downloaded doesn't match the one listed, and may be damaged"))
+    else
+        LogUtil.info("it has the md5 listed")
+        transfer.on_finish(true)
+    end
+end
+
+-- check the book that has arrived is the one the site listed, rather than e.g. a web page saying the site is busy: by
+-- how it starts, then by its md5, where the site lists one (see pollChecksum). once it is, it has downloaded
+local function checkBook(transfer)
+    local book = transfer.book
+    -- which has finished, so there's nothing for Cancel to stop meanwhile (where it was KOReader's own process that
+    -- downloaded it, collecting it)
+    HttpDownload.collect(transfer.pid)
+    transfer.pid = nil
+
+    local problem, start = FileCheck.problem(transfer.part_path, book.file_type)
+    if problem == "web page" then
+        LogUtil.warn(string.format("a web page arrived in place of %q: %s", book.title, start))
+        rejectBook(
+            transfer,
+            T(_("%1 sent a web page rather than the book, try again later"), Sources[book.source].NAME)
+        )
+        return
+    elseif problem then
+        LogUtil.warn(string.format("what arrived of %q isn't %s: %s", book.title, book.file_type, start))
+        rejectBook(transfer, T(_("the file that downloaded isn't the %1 it should be"), book.file_type:upper()))
+        return
+    end
+
+    local checksum = transfer.expected.md5 and FileCheck.md5(transfer.part_path)
+    if not checksum then
+        transfer.on_finish(true)
+        return
+    end
+    transfer.checksum = checksum
+    transfer.progress_widget:update(1, _("Checking the book..."))
+    Guard.nextTick("checking a downloaded book", function()
+        pollChecksum(transfer)
+    end, transfer.abandon)
+end
+
 -- check on curl downloading a book until it has finished, showing how far it has got. transfer is what's known
 -- about the download (see _startDownload), and its on_finish is called with whether the book downloaded, and what
 -- went wrong if it didn't
-local function pollDownload(transfer)
+function pollDownload(transfer)
     local book, part_path, progress_widget = transfer.book, transfer.part_path, transfer.progress_widget
     if progress_widget.cancelled then
         LogUtil.info(
@@ -266,18 +405,30 @@ local function pollDownload(transfer)
         local download = Downloader.active_downloads[book.id]
         local seconds = download and download.started and os.time() - download.started or 0
         if exit_code == 0 and final_size and final_size > 0 then
-            progress_widget:update(1, "100%")
-            LogUtil.info(
-                string.format(
-                    "downloaded %q: %d bytes%s in %ds",
-                    book.title,
-                    final_size,
-                    total_size and total_size ~= final_size and " (expected " .. total_size .. ")" or "",
-                    seconds
+            -- how big the site listed it as, or said it was when it last sent it (as what a retry is sent can differ
+            -- from the first), as curl doesn't always notice when the site stops sending it partway
+            total_size = CurlUtil.getDownloadSize(transfer.headers_file) or total_size
+            local expected_size = transfer.expected.bytes or total_size
+            if expected_size and final_size < expected_size then
+                LogUtil.warn(
+                    string.format("only %d of the %d bytes of %q arrived", final_size, expected_size, book.title)
                 )
-            )
-            transfer.on_finish(true)
-            return
+                -- as curl says when it does notice
+                exit_code = 18
+            else
+                progress_widget:update(1, "100%")
+                LogUtil.info(
+                    string.format(
+                        "downloaded %q: %d bytes%s in %ds",
+                        book.title,
+                        final_size,
+                        expected_size and expected_size ~= final_size and " (expected " .. expected_size .. ")" or "",
+                        seconds
+                    )
+                )
+                checkBook(transfer)
+                return
+            end
         end
 
         -- the error the site answered with, when that's why curl gave up
@@ -312,37 +463,7 @@ local function pollDownload(transfer)
             return
         end
 
-        -- try again, from the beginning if the site wouldn't carry on from where the download stopped, otherwise
-        -- through the proxy as a backup (carrying on from there)
-        local retry
-        if exit_code == 33 and transfer.resume then
-            retry = "downloading the book again from the beginning, as the site can't carry on from where it stopped"
-            transfer.resume = false
-            FileUtil.removeFile(part_path)
-        elseif not transfer.tried_proxy and hasProxy() then
-            retry = "retrying the download through the proxy"
-            transfer.tried_proxy = true
-        end
-        if retry then
-            LogUtil.info(retry)
-            local started, spawn_err = startCurl(transfer)
-            if not started then
-                LogUtil.warn("could not start curl to try again:", spawn_err)
-                FileUtil.removeFile(part_path)
-                transfer.on_finish(false, spawn_err or _("download failed and could not be tried again"))
-                return
-            end
-            Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
-                pollDownload(transfer)
-            end, transfer.abandon)
-            return
-        end
-
-        -- or ask for another link once, from a site whose links each go to one of its servers, when the one the link
-        -- went to failed
-        if transfer.relink and (http_status and http_status >= 500 or SERVER_FAILURES[exit_code]) then
-            LogUtil.info("asking for another download link, as the server the link went to failed")
-            transfer.relink()
+        if retry(transfer, exit_code, http_status) then
             return
         end
 
@@ -405,6 +526,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         part_path = filepath .. ".part",
         tried_proxy = false,
         resume = true,
+        expected = {},
     }
     local part_path = transfer.part_path
 
@@ -441,7 +563,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         UIManager:forceRePaint()
     end
     HttpUtil.setTrapWidget(progress_widget)
-    local looked_up, download_url, lookup_err, mirror_failed =
+    local looked_up, download_url, lookup_err, mirror_failed, listed =
         Guard.pcall("looking up the download link", source.findDownloadLink, book, retrying, failed_url)
     HttpUtil.setTrapWidget(nil)
     progress_widget.dismiss_callback = nil
@@ -449,7 +571,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         progress_widget:setCancellable(true)
     end
     if not looked_up then
-        download_url, lookup_err, mirror_failed = nil, Errors.UNEXPECTED, false
+        download_url, lookup_err, mirror_failed, listed = nil, Errors.UNEXPECTED, false, nil
     end
 
     if not download_url then
@@ -471,6 +593,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         return
     end
     transfer.download_url = download_url
+    transfer.expected = expectedFile(listed)
 
     -- note down the headers curl is sent, which say how big the book is
     local headers_file = CurlUtil.createHeadersFile()
@@ -482,6 +605,9 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         -- nothing left to stop
         if transfer.finished then
             return
+        end
+        if transfer.checksum then
+            transfer.checksum:close()
         end
         CurlUtil.killPid(transfer.pid)
         HttpDownload.collect(transfer.pid)

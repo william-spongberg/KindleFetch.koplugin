@@ -58,12 +58,28 @@ function fixtures.fakeWeb(helper)
     return web
 end
 
+-- what stands in for a cover, starting as a JPEG does (see FileCheck)
+fixtures.JPEG = "\255\216\255\224jpeg"
+
+-- how books of a few file types start (see FileCheck)
+local BOOK_STARTS = {
+    epub = "PK\3\4",
+    pdf = "%PDF-1.7\n",
+    mobi = string.rep("\0", 60) .. "BOOKMOBI",
+}
+
+-- what stands in for a book of the file type, starting as books in it do, as many bytes as given
+function fixtures.bookFile(file_type, bytes)
+    local start = BOOK_STARTS[file_type] or ""
+    return (start .. string.rep("x", bytes)):sub(1, bytes)
+end
+
 -- add a downloaded cover for the book with the id to the cover cache
 function fixtures.cacheCover(helper, id)
     local CurlUtil = require("util.curlutil")
     local download = CurlUtil.download
     CurlUtil.download = function(_, path)
-        helper.writeFile(path, "jpeg")
+        helper.writeFile(path, fixtures.JPEG)
         return true
     end
     require("cache.covercache"):download(id, "https://covers.example/" .. id .. ".jpg")

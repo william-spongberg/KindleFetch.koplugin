@@ -340,6 +340,23 @@ describe("CurlUtil", function()
         it("returns nil when the size is unknown", function()
             helper.writeFile(headers_file, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
             assert.is_nil(CurlUtil.getDownloadSize(headers_file))
+
+            -- rather than the size of the redirect to it
+            helper.writeFile(
+                headers_file,
+                "HTTP/1.1 302 Found\r\nLocation: https://cdn.example/book\r\nContent-Length: 162\r\n\r\n"
+                    .. "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+            )
+            assert.is_nil(CurlUtil.getDownloadSize(headers_file))
+        end)
+
+        -- which a proxy answers first, before the site's own answer
+        it("uses the size of the file, rather than the proxy's connection", function()
+            helper.writeFile(
+                headers_file,
+                "HTTP/1.1 200 Connection established\r\n\r\nHTTP/2 200\r\ncontent-length: 1048576\r\n\r\n"
+            )
+            assert.are.equal(1048576, CurlUtil.getDownloadSize(headers_file))
         end)
 
         -- which is why curl gave up, when it gives up because of the site's answer
