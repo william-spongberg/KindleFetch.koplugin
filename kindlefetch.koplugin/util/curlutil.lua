@@ -47,7 +47,9 @@ local CURL_ERRORS = {
 }
 
 local function ensureTmpDir()
-    lfs.mkdir(TMP_DIR)
+    if lfs.attributes(TMP_DIR, "mode") ~= "directory" and not lfs.mkdir(TMP_DIR) then
+        LogUtil.warn("could not create", TMP_DIR, "for curl's files")
+    end
 end
 
 -- os.time() is in seconds, and downloads can start within the same second (a book's cover and the book itself),
@@ -571,23 +573,38 @@ function CurlUtil.downloadMultiple(
     opts = opts or {}
     ensureTmpDir()
 
-    local config_file = tmpFile("curl_download_config", ".txt")
-    local f = io.open(config_file, "w")
-
     -- backslashes and quotes mean something inside the quotes of curl's config file
     local function quote(value)
         return (value:gsub("\\", "\\\\"):gsub('"', '\\"'))
     end
+    local lines = {}
     for i, download_url in ipairs(download_urls) do
         -- an address with a line break in it would add lines of its own to the config file, so leave it out
         if StringUtil.isSafeUrl(download_url) and not filepaths[i]:find("%c") then
-            f:write(string.format('url = "%s"\n', quote(download_url)))
-            f:write(string.format('output = "%s"\n', quote(filepaths[i])))
+            table.insert(lines, string.format('url = "%s"\n', quote(download_url)))
+            table.insert(lines, string.format('output = "%s"\n', quote(filepaths[i])))
         else
             LogUtil.warn("left out a download whose address can't be used:", download_url)
         end
     end
-    f:close()
+
+    -- which can't be written when the device's storage is full, or read-only
+    local config_file = tmpFile("curl_download_config", ".txt")
+    local f, open_err = io.open(config_file, "w")
+    local written, write_err = false, open_err
+    if f then
+        written, write_err = f:write(table.concat(lines))
+        local closed, close_err = f:close()
+        written, write_err = written and closed, write_err or close_err
+    end
+    if not written then
+        LogUtil.warn("could not write curl's list of files to download to", config_file .. ":", write_err)
+        FileUtil.removeFile(config_file)
+        if background then
+            return nil, nil, nil, "could not write the list of files for curl"
+        end
+        return 0
+    end
 
     local results_file = CurlUtil.getResultsFile(config_file)
     local cmd = string.format('curl -sL -f --config "%s"', config_file)

@@ -717,6 +717,19 @@ describe("CurlUtil", function()
             assert.matches('output = "' .. paths[2] .. '"', helper.readFile(first_config), 1, true)
         end)
 
+        -- e.g. once the device's storage is full, when KOReader exited on writing it
+        it("doesn't start curl when the list of files to download can't be written", function()
+            helper.writeFile(data_dir .. "/settings/tmp", "not a folder")
+
+            local pid, _, _, err = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
+            assert.is_nil(pid)
+            assert.are.equal("could not write the list of files for curl", err)
+            assert.are.equal(0, CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15))
+            assert.are.same({}, helper.state.popen_calls)
+            assert.is_truthy(helper.logged("warn", "^could not create .*/settings/tmp/ for curl's files"))
+            assert.is_truthy(helper.logged("warn", "^could not write curl's list of files to download"))
+        end)
+
         it("cleans up when the background download cannot start", function()
             helper.stubCommand("& echo $!", "")
 

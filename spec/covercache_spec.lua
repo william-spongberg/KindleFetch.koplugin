@@ -150,6 +150,20 @@ describe("CoverCache", function()
         end)
     end)
 
+    -- which KOReader exited on, with every cover on the page left waiting for
+    it("takes the placeholders away when the covers can't be downloaded, as the device's storage is full", function()
+        local results = {}
+        local covers = { book("a", "https://covers.example/a.jpg") }
+        helper.writeFile(data_dir .. "/settings/tmp", "not a folder")
+
+        assert.is_true(CoverCache:downloadMultiple(covers, 6, function(count)
+            table.insert(results, count)
+        end))
+        assert.are.same({ 0 }, results)
+        assert.is_false(CoverCache:isComing(covers[1]))
+        assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
+    end)
+
     describe("downloadMultiple", function()
         local runs, results
 
