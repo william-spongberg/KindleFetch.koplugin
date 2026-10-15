@@ -6,11 +6,12 @@ local Trapper = require("ui/trapper")
 local CurlUtil = require("util.curlutil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
+local Errors = require("util.errors")
 
 local HttpUtil = {}
 
 -- the error when a request was called off, by a tap on trap_widget
-HttpUtil.CANCELLED = "request cancelled"
+HttpUtil.CANCELLED = Errors.CANCELLED
 -- a widget on screen that calls off the request being waited for when tapped, such as a message saying what's
 -- being waited for. set by whoever started the requests from inside Trapper:wrap, and cleared by them after
 HttpUtil.trap_widget = nil

@@ -5,6 +5,7 @@ local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
 local UrlApi = require("api.urlapi")
+local Errors = require("util.errors")
 
 -- searches Library Genesis, and finds its books' download links (see Sources)
 local LlgiSearch = {
@@ -33,11 +34,10 @@ local TOPICS = {
     articles = "a",
     standards = "s",
 }
-local BLOCKED_ERROR = "Library Genesis is blocking automated searches right now, try again later"
-local BUSY_ERROR = "Library Genesis is too busy to send books right now, try again in a few minutes"
-local BUSY_SEARCH_ERROR = "Library Genesis is too busy to search right now, try again in a few minutes"
-local UNFOUND_ERROR = "none of Library Genesis' sites can be found on this network, which may be blocking them. Try "
-    .. "another Wi-Fi network or DNS server"
+local BLOCKED_ERROR = Errors.BLOCKED
+local BUSY_ERROR = Errors.BUSY
+local BUSY_SEARCH_ERROR = Errors.BUSY_SEARCH
+local UNFOUND_ERROR = Errors.UNFOUND
 
 local function stripTags(html)
     return StringUtil.trim(StringUtil.collapseWhitespace(html:gsub("<[^>]+>", " ")))

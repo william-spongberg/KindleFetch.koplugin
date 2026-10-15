@@ -10,6 +10,7 @@ local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
 local Sources = require("api.sources")
 local CoverCache = require("cache.covercache")
+local Errors = require("util.errors")
 local _ = require("gettext")
 
 -- downloads books from the site they were found on (see Sources), in the background
@@ -60,7 +61,7 @@ local function pollDownload(transfer)
         )
         CurlUtil.killPid(transfer.pid)
         FileUtil.removeFile(part_path)
-        transfer.on_finish(false, "cancelled")
+        transfer.on_finish(false, Errors.CANCELLED)
         return
     end
 
@@ -282,7 +283,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     progress_widget.dismiss_callback = nil
     if not looked_up then
         LogUtil.err("looking up the download link went wrong:", tostring(download_url))
-        download_url, lookup_err, mirror_failed = nil, "something went wrong, see crash.log", false
+        download_url, lookup_err, mirror_failed = nil, Errors.UNEXPECTED, false
     end
 
     if not download_url then
@@ -291,7 +292,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
 
         if lookup_err == HttpUtil.CANCELLED then
             LogUtil.info(string.format("download of %q cancelled while looking up its link", book.title))
-            callback(false, "cancelled")
+            callback(false, Errors.CANCELLED)
             return
         end
         LogUtil.warn("found no download link:", lookup_err)

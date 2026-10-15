@@ -2,12 +2,13 @@ local HttpUtil = require("util.httputil")
 local UrlCache = require("cache.urlcache")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
+local Errors = require("util.errors")
 local _ = require("gettext")
 
 local UrlApi = {}
 
 -- when neither the mirrors nor Wikipedia answer at all, as when the device isn't connected to the internet
-UrlApi.NO_CONNECTION_ERROR = "no internet connection"
+UrlApi.NO_CONNECTION_ERROR = Errors.NO_CONNECTION
 
 -- constants
 local LIBGEN_KEY = "libgen"

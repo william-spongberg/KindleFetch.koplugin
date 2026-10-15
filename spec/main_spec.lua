@@ -1414,7 +1414,7 @@ describe("KindleFetch", function()
 
         it("says a download was cancelled, rather than that it failed", function()
             selectBook("Dune")
-            downloads[1].callback(false, "cancelled")
+            downloads[1].callback(false, "request cancelled")
             assert.are.equal("Download cancelled", helper.lastNotification())
             assert.is_nil(helper.lastError())
         end)

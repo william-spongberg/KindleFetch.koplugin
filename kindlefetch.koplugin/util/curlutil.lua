@@ -3,6 +3,7 @@ local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local VersionUtil = require("util.versionutil")
+local Errors = require("util.errors")
 local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
 local Device = require("device")
@@ -188,8 +189,7 @@ end
 
 -- what a Kindle's own curl fails with when connecting to Library Genesis, which it's too old to
 local TLS_ERRORS = { [35] = true, [51] = true, [58] = true, [59] = true, [60] = true, [77] = true, [83] = true }
-CurlUtil.OUTDATED_ERROR = "this Kindle's curl is too old to download books. Update it from "
-    .. "Search → Kindle Fetch → Check for updates"
+CurlUtil.OUTDATED_ERROR = Errors.OUTDATED_CURL
 
 -- whether this is a Kindle whose curl is older than the oldest known to connect to Library Genesis
 function CurlUtil.isOutdated()

@@ -3,13 +3,13 @@ local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local KindleFetchSettings = require("settings.settings")
 local UrlApi = require("api.urlapi")
+local Errors = require("util.errors")
 
 -- the Z-Library account Kindle Fetch is logged into, as Z-Library only lets those logged in search for and
 -- download books, and asking it about the account, through the API its own app uses
 local ZlibAccount = {
-    -- when Z-Library no longer accepts the account's key, e.g. once it has been logged out of elsewhere, or there
-    -- isn't one, e.g. when a book found before logging out is downloaded
-    LOGGED_OUT_ERROR = "Z-Library has logged Kindle Fetch out, so log in again",
+    -- when Z-Library no longer accepts the account's key (see Errors)
+    LOGGED_OUT_ERROR = Errors.LOGGED_OUT,
 }
 
 function ZlibAccount:isLoggedIn()

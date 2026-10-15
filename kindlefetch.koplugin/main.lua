@@ -28,6 +28,7 @@ local CurlUpdater = require("updater.curlupdater")
 local PluginUpdater = require("updater.pluginupdater")
 local FileUtil = require("util.fileutil")
 local PathUtil = require("util.pathutil")
+local Errors = require("util.errors")
 local _ = require("gettext")
 
 -- a new plugin instance is created every time the file manager or a book is opened,
@@ -512,7 +513,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
         end
         if not ok then
             LogUtil.err(string.format("search for %q went wrong: %s", query, tostring(books)))
-            books, err, next_page = nil, "something went wrong, see crash.log", nil
+            books, err, next_page = nil, Errors.UNEXPECTED, nil
         end
 
         if err == HttpUtil.CANCELLED then
@@ -882,7 +883,7 @@ function KindleFetch:downloadBook(book)
                 }
                 UIManager:show(dialog)
             end)
-        elseif err == "cancelled" then
+        elseif err == Errors.CANCELLED then
             LogUtil.debug("download cancelled", book.title)
             NotifyUtil.info(_("Download cancelled"))
         else

@@ -8,6 +8,7 @@ local NotifyUtil = require("util.notifyutil")
 local StringUtil = require("util.stringutil")
 local WaitingMessage = require("ui.waitingmessage")
 local ZlibAccount = require("api.zlibaccount")
+local Errors = require("util.errors")
 local _ = require("gettext")
 
 local ZlibLogin = {}
@@ -33,7 +34,7 @@ function ZlibLogin.login(email, password, on_logged_in)
             end
             if not ok then
                 LogUtil.err("logging in to Z-Library went wrong:", tostring(logged_in))
-                logged_in, err = false, "something went wrong, see crash.log"
+                logged_in, err = false, Errors.UNEXPECTED
             end
 
             if err == HttpUtil.CANCELLED then
