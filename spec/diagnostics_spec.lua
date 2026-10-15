@@ -26,6 +26,9 @@ describe("Diagnostics", function()
             canFetch = function()
                 return can_fetch
             end,
+            canUseEncryptedDns = function()
+                return can_fetch
+            end,
         })
         answers, asked = {}, {}
         helper.stub("util.httputil", {
@@ -81,6 +84,7 @@ describe("Diagnostics", function()
             assert.matches("\nLibrary Genesis mirrors: https://libgen.vg, ", report, 1, true)
             assert.matches("\nZ-Library: not logged in, at https://z-lib.sk\n", report, 1, true)
             assert.matches("\nLanguages: en\n", report, 1, true)
+            assert.matches("\nEncrypted DNS: off\n", report, 1, true)
             assert.matches("\nCovers: on\n", report, 1, true)
         end)
 

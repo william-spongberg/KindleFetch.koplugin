@@ -71,6 +71,7 @@ describe("SettingsPage", function()
             "Keep Searches For: 14 days",
             "Keep Mirrors For: 7 days",
             "HTTP Proxy: Off",
+            "Encrypted DNS: ☐",
             "Clear Cache",
         }, itemTexts(lastMenu()))
         assert.are.equal("Kindle Fetch Settings", lastMenu().title)
@@ -267,6 +268,27 @@ describe("SettingsPage", function()
             assert.is_false(helper.wasClosed(dialog))
             assert.is_nil(require("socket.http").PROXY)
             assert.are.equal("Enter the proxy's address, e.g. http://proxy.example:8080", helper.lastNotification())
+        end)
+    end)
+
+    -- where the network's own DNS blocks the sites (#55)
+    describe("encrypted DNS", function()
+        it("can't be turned on where curl can't look names up with it", function()
+            SettingsPage:showSettings()
+            assert.are.equal("Encrypted DNS: ☐", lastMenu().item_table[11].text)
+            assert.is_false(lastMenu().item_table[11].enabled)
+        end)
+
+        it("turns on and off, where curl can", function()
+            helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
+            SettingsPage:showSettings()
+            assert.is_true(lastMenu().item_table[11].enabled)
+
+            tap("Encrypted DNS")
+            assert.is_true(Settings:getEncryptedDns())
+            assert.are.equal("Encrypted DNS: ☑", lastMenu().item_table[11].text)
+            tap("Encrypted DNS")
+            assert.is_false(Settings:getEncryptedDns())
         end)
     end)
 

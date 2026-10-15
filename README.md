@@ -116,6 +116,7 @@ When a search finds books, but none in the languages and file types chosen, Kind
 - **Check for Updates Automatically**: Check for plugin and curl updates at most once a day while connected (default: enabled)
 
 - **Keep Searches For / Keep Mirrors For**: How long search results (default: 14 days), and Library Genesis' mirrors and Z-Library's addresses (default: 7 days) are cached
+- **Encrypted DNS**: Look the sites up with Cloudflare's DNS over HTTPS (at 1.1.1.1), rather than the network's own DNS, which can be what's blocking them (needs curl 7.62 or later, so not where KOReader's own HTTP fetches in its place; default: off). Kindle Fetch offers to turn it on when a network can't find any of Library Genesis' or Z-Library's sites
 - **HTTP Proxy**: KOReader's HTTP proxy, the same setting as in KOReader's network settings, which Kindle Fetch goes through for everything (searches, covers and books, with curl too) as KOReader does: turn it on with its address, e.g. `http://proxy.example:8080`, or off (default: off)
 
 <img width="350" alt="How long searches are kept" src="docs/screenshots/20-settings-cache.png" />
@@ -128,6 +129,7 @@ When a search finds books, but none in the languages and file types chosen, Kind
 
 Kindle Fetch looks Library Genesis' sites up on Wikipedia, then searches them in turn. When Wikipedia answers, but none of the sites can be found, the network or its internet provider is most likely blocking Library Genesis, as many do. To check, open one of them, such as [libgen.li](https://libgen.li), on a phone or computer on the same network. If it doesn't open there either, try:
 
+- Encrypted DNS in the [settings](#settings), which Kindle Fetch offers when it can't find them, as it looks them up with Cloudflare's DNS rather than the network's
 - another Wi-Fi network, such as a phone's hotspot
 - another DNS server on your router, such as 1.1.1.1 or 8.8.8.8, as the Kindle uses the one its Wi-Fi network gives it
 - a proxy (see HTTP Proxy in the [settings](#settings), or [Environment Variables](#environment-variables)) or VPN

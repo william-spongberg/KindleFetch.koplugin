@@ -16,6 +16,8 @@ describe("KindleFetch", function()
     -- the settings' menus for choosing languages, file types and book types that were opened, and what each calls once
     -- closed
     local choosers
+    -- whether curl can look names up with encrypted DNS
+    local can_use_encrypted_dns
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
     local opened
@@ -173,6 +175,13 @@ describe("KindleFetch", function()
             end,
             setSkippedVersion = function(_, version)
                 settings.skipped_version = version
+            end,
+            getEncryptedDns = function()
+                return settings.encrypted_dns
+            end,
+            setEncryptedDns = function(_, on)
+                settings.encrypted_dns = on
+                return true
             end,
         })
 
@@ -361,9 +370,13 @@ describe("KindleFetch", function()
         })
         helper.stub("cache.covercache", {})
         leftovers_removed = 0
+        can_use_encrypted_dns = true
         helper.stub("util.curlutil", {
             getVersion = function()
                 return "8.17.0"
+            end,
+            canUseEncryptedDns = function()
+                return can_use_encrypted_dns
             end,
             removeLeftovers = function()
                 leftovers_removed = leftovers_removed + 1
@@ -1250,6 +1263,34 @@ describe("KindleFetch", function()
                 again.callback()
                 assert.are.same({ { "dune", 1 }, { "dune", 1 } }, searches)
                 assert.are.same({ "Dune" }, itemTexts(menus[1]))
+            end)
+
+            -- where the network's own DNS may be what's blocking them (#55)
+            it(
+                "looks the sites up with encrypted DNS, then searches again, where the network can't find them",
+                function()
+                    search_results[1] = { nil, require("util.errors").UNFOUND }
+                    search(openUI(), "dune")
+
+                    local encrypted_dns = helper.lastShown().other_buttons[1][1]
+                    assert.are.equal("Use encrypted DNS", encrypted_dns.text)
+                    encrypted_dns.callback()
+                    assert.is_true(settings.encrypted_dns)
+                    assert.are.equal(2, #searches)
+                end
+            )
+
+            it("only offers encrypted DNS where curl can look names up with it, and it's off", function()
+                search_results[1] = { nil, require("util.errors").UNFOUND }
+                can_use_encrypted_dns = false
+                search(openUI(), "dune")
+                -- just the other sites
+                assert.are.equal("Search Internet Archive", helper.lastShown().other_buttons[1][1].text)
+
+                can_use_encrypted_dns = true
+                settings.encrypted_dns = true
+                search(openUI(), "dune")
+                assert.are.equal("Search Internet Archive", helper.lastShown().other_buttons[1][1].text)
             end)
 
             it("logs in again, then searches again, once Z-Library has logged Kindle Fetch out", function()

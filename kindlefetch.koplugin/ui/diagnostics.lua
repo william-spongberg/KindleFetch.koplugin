@@ -89,6 +89,11 @@ function Diagnostics.report(tested)
     add("Languages", list(KindleFetchSettings:getPreferredLanguages()))
     add("File types", list(KindleFetchSettings:getPreferredFileTypes()))
     add("Book types", list(KindleFetchSettings:getPreferredBookTypes()))
+    add(
+        "Encrypted DNS",
+        onOff(KindleFetchSettings:getEncryptedDns())
+            .. (CurlUtil.canUseEncryptedDns() and "" or " (which curl can't do)")
+    )
     add("Covers", onOff(KindleFetchSettings:getShowBookCovers()))
     add("Update checks", onOff(KindleFetchSettings:getCheckForUpdates()))
 
