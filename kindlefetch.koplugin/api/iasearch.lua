@@ -13,10 +13,11 @@ local _ = require("gettext")
 -- download links (see Sources)
 local IaSearch = {
     NAME = "Internet Archive",
+    SOURCE = "archive",
 }
 
 -- constants
-local SOURCE = "archive"
+local SOURCE = IaSearch.SOURCE
 local SITE = "https://archive.org"
 local RESULTS_PER_PAGE = 50
 -- Internet Archive's names for the formats it has each file type in, the best first: a PDF of a scan's text before
@@ -433,44 +434,13 @@ end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
 function IaSearch:isCached(query, page, scope)
-    local cached = SearchCache:get(
-        SOURCE,
-        query,
-        page,
-        KindleFetchSettings:getPreferredLanguages(),
-        KindleFetchSettings:getPreferredFileTypes(),
-        {},
-        scope
-    )
-    return cached ~= nil and cached.books ~= nil
+    return SearchCache:hasPage(self, query, page, scope)
 end
 
--- search the given page of Internet Archive's results, returning the books found, the page to carry on from (or
--- nil once there are no more results), and how many results were read to find them, narrowed down by scope, where
--- given (as LlgiSearch:search does)
-function IaSearch:search(query, page, scope)
-    local languages = KindleFetchSettings:getPreferredLanguages()
-    local file_types = KindleFetchSettings:getPreferredFileTypes()
-    LogUtil.info(
-        string.format(
-            "searching %s for %q%s from page %d, in %s, as %s",
-            self.NAME,
-            query,
-            scope and " by " .. scope or "",
-            page,
-            table.concat(languages, "/"),
-            table.concat(file_types, "/")
-        )
-    )
-
-    local cached = SearchCache:get(SOURCE, query, page, languages, file_types, {}, scope)
-    if cached and cached.books then
-        LogUtil.info("showing", #cached.books, "books saved from an earlier search")
-        return cached.books, nil, cached.next_page
-    end
-
+-- the books on a page of Internet Archive's results, as search returns them
+local function fetchResults(query, page, scope, languages, file_types)
     if #formatTerms(file_types) == 0 then
-        LogUtil.warn(self.NAME, "has none of the file types chosen")
+        LogUtil.warn(IaSearch.NAME, "has none of the file types chosen")
         return nil, Errors.NO_FILE_TYPES
     end
     local search = IaSearch.buildQuery(query, languages, file_types, scope)
@@ -490,11 +460,11 @@ function IaSearch:search(query, page, scope)
         if body then
             LogUtil.warn(
                 "unexpected search results from",
-                self.NAME .. ": HTTP",
+                IaSearch.NAME .. ": HTTP",
                 status,
                 #body,
                 "bytes:",
-                body:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                LogUtil.excerpt(body)
             )
         end
         return nil, explainFailure(body, err, status)
@@ -505,21 +475,23 @@ function IaSearch:search(query, page, scope)
         string.format(
             "page %d of %s's %d results: kept %d of its %d%s",
             page,
-            self.NAME,
+            IaSearch.NAME,
             total,
             #books,
             results,
             next_page and "" or ", the last"
         )
     )
-    -- add new query result to cache before returning, unless empty as the page may have been an error
-    if #books > 0 then
-        SearchCache:set({
-            books = books,
-            next_page = next_page,
-        }, SOURCE, query, page, languages, file_types, {}, scope)
-    end
     return books, nil, next_page, results
+end
+
+-- search the given page of Internet Archive's results, returning the books found, the page to carry on from (or
+-- nil once there are no more results), and how many results were read to find them, narrowed down by scope, where
+-- given (as LlgiSearch:search does)
+function IaSearch:search(query, page, scope)
+    return SearchCache:search(self, query, page, scope, function(languages, file_types)
+        return fetchResults(query, page, scope, languages, file_types)
+    end)
 end
 
 -- a file's path in a book's folder, for its address: each folder's name and the file's name escaped as need be
@@ -572,7 +544,7 @@ function IaSearch.findDownloadLink(book)
                 #body,
                 "bytes,",
                 not ok and data and "which couldn't be read (" .. tostring(data) .. "):" or "which isn't a list:",
-                body:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                LogUtil.excerpt(body)
             )
         end
         return nil, explainFailure(body, err, status)

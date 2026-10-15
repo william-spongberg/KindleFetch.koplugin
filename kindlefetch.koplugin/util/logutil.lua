@@ -56,4 +56,9 @@ function LogUtil.site(url)
     return url:match("^%a+://([^/?#]+)") or url
 end
 
+-- the start of a page a site answered with, as text without its tags, to log what it said when it can't be used
+function LogUtil.excerpt(html)
+    return (html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200))
+end
+
 return LogUtil

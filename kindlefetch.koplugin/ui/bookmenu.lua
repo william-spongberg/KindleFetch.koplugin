@@ -28,21 +28,7 @@ local _ = require("gettext")
 local COVER_SIZE = Screen:scaleBySize(100)
 
 local function formatBookDetails(book)
-    local details = {}
-
-    local function addBookDetail(detail)
-        if StringUtil.assertValidString(detail) then
-            table.insert(details, detail)
-        end
-    end
-
-    addBookDetail(book.year)
-    addBookDetail(book.language)
-    addBookDetail(book.book_type)
-    addBookDetail(book.file_type)
-    addBookDetail(book.file_size)
-
-    return table.concat(details, " · ")
+    return StringUtil.joinDetails(book.year, book.language, book.book_type, book.file_type, book.file_size)
 end
 
 local BookMenuItem = InputContainer:extend {}

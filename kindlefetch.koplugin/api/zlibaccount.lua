@@ -94,7 +94,7 @@ function ZlibAccount:request(path, form, refresh)
                     status,
                     #body,
                     "bytes:",
-                    body:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                    LogUtil.excerpt(body)
                 )
             end
             last_err = status

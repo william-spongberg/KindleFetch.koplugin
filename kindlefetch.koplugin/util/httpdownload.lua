@@ -23,14 +23,6 @@ local function exitCode(err)
     return CurlUtil.exitCodeFor(err) or 56
 end
 
-local function writeFile(path, content)
-    local f = io.open(path, "w")
-    if f then
-        f:write(content)
-        f:close()
-    end
-end
-
 -- download url to path, in the process downloading it, returning the exit code curl would have. the headers it was
 -- sent are noted down in headers_file, as curl does with -D (see CurlUtil.getDownloadStatus), where given
 local function download(url, path, opts)
@@ -65,7 +57,7 @@ local function download(url, path, opts)
     end
     if opts.headers_file then
         local length = type(headers) == "table" and headers["content-length"]
-        writeFile(
+        FileUtil.writeFile(
             opts.headers_file,
             string.format(
                 "%s\r\n%s\r\n",
@@ -91,7 +83,7 @@ local function start(fn)
             LogUtil.err("downloading with KOReader's HTTP went wrong:", tostring(exit_code))
             exit_code = 1
         end
-        writeFile(exit_file, tostring(exit_code) .. "\n")
+        FileUtil.writeFile(exit_file, tostring(exit_code) .. "\n")
     end)
     if not pid then
         LogUtil.warn("could not start a process to download with KOReader's HTTP:", tostring(err))

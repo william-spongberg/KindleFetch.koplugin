@@ -135,15 +135,7 @@ function UrlApi:getUrls(key, url, parse, refresh, name)
         return urls
     end
 
-    LogUtil.warn(
-        "found no mirrors on",
-        url,
-        "(HTTP",
-        tostring(status) .. ",",
-        #html,
-        "bytes):",
-        html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
-    )
+    LogUtil.warn("found no mirrors on", url, "(HTTP", tostring(status) .. ",", #html, "bytes):", LogUtil.excerpt(html))
     return nil, _("no mirrors listed"), true
 end
 
