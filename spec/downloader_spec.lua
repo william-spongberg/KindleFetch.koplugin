@@ -347,6 +347,24 @@ describe("Downloader", function()
                 assert.are.equal(1, web.scrapes)
             end)
 
+            -- rather than showing again, as a new download's would
+            it("stays hidden when hidden while a mirror fails, and the mirrors are looked up again", function()
+                local failed = false
+                HttpUtil.getBody = function(url)
+                    if url:find("/ads.php", 1, true) and not failed then
+                        failed = true
+                        progress().hide_button.callback()
+                        return nil, "HTTP error response", 500
+                    end
+                    return getBody(url)
+                end
+
+                download()
+                assert.are.equal(2, web.scrapes)
+                assert.are.equal(1, #spawned)
+                assert.is_false(progress().is_visible)
+            end)
+
             it("says something went wrong, rather than leaving the progress showing", function()
                 local widget
                 HttpUtil.getBody = function()
@@ -1042,6 +1060,22 @@ describe("Downloader", function()
             helper.tick()
             assert.are.equal(1, links)
             assert.are.equal("https://dl1.example/1984.epub", spawned[2].url)
+        end)
+
+        -- rather than showing again, as a new download's would
+        it("keeps a hidden download's progress hidden while it asks for another link", function()
+            download()
+            progress().hide_button.callback()
+            local shown = #helper.state.shown
+            serverAnswered(522)
+            helper.tick()
+
+            assert.are.equal(2, #spawned)
+            assert.is_false(progress().is_visible)
+            assert.are.equal(shown, #helper.state.shown)
+            -- and can still be shown again
+            assert.is_true(Downloader:showDownload(book.id))
+            assert.are.equal(progress().container, helper.lastShown())
         end)
 
         it("asks for another link when the server doesn't answer at all", function()

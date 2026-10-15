@@ -363,8 +363,9 @@ local function pollDownload(transfer)
     end, transfer.abandon)
 end
 
--- failed_url is the link the book failed to download from, when asking for another (see transfer.relink)
-function Downloader:_startDownload(book, filepath, callback, retrying, failed_url)
+-- failed_url is the link the book failed to download from, when asking for another (see transfer.relink), and hidden
+-- is whether its progress was hidden, when trying again, so it stays hidden rather than showing again
+function Downloader:_startDownload(book, filepath, callback, retrying, failed_url, hidden)
     local source = Sources[book.source]
     LogUtil.info(
         string.format(
@@ -394,7 +395,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         if transfer.pid then
             CurlUtil.killPid(transfer.pid)
         end
-    end)
+    end, hidden)
     transfer.progress_widget = progress_widget
 
     progress_widget:show()
@@ -436,7 +437,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         LogUtil.warn("found no download link:", lookup_err)
         -- look the mirrors up again if any failed, in case they've moved, and try again
         if not retrying and mirror_failed then
-            return Downloader:_startDownload(book, filepath, callback, true)
+            return Downloader:_startDownload(book, filepath, callback, true, nil, not progress_widget.is_visible)
         end
 
         callback(false, lookup_err)
@@ -486,7 +487,14 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
             FileUtil.removeFile(part_path)
             UIManager:forceRePaint()
             -- looking the link up without holding KOReader up, as when the download was started
-            self:_startDownloadInBackground(book, filepath, callback, true, transfer.download_url)
+            self:_startDownloadInBackground(
+                book,
+                filepath,
+                callback,
+                true,
+                transfer.download_url,
+                not progress_widget.is_visible
+            )
         end
     end
 
@@ -514,9 +522,9 @@ end
 
 -- start downloading the book (see _startDownload) without holding KOReader up while its link is looked up, as that
 -- can mean trying several mirrors, and saying so if something goes wrong in Kindle Fetch meanwhile (see Guard)
-function Downloader:_startDownloadInBackground(book, filepath, callback, retrying, failed_url)
+function Downloader:_startDownloadInBackground(book, filepath, callback, retrying, failed_url, hidden)
     Trapper:wrap(Guard.wrap("starting the download of " .. tostring(book.title), function()
-        self:_startDownload(book, filepath, callback, retrying, failed_url)
+        self:_startDownload(book, filepath, callback, retrying, failed_url, hidden)
     end, function(err)
         local download = Downloader.active_downloads[book.id]
         if download and download.transfer then

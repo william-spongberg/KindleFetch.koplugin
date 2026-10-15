@@ -22,14 +22,15 @@ DownloadProgress.__index = DownloadProgress
 -- fixed width for the whole widget's contents to prevent overdrawing
 local CONTENT_WIDTH = Screen:scaleBySize(280)
 
--- on_cancel: function called when the user taps Cancel.
-function DownloadProgress.new(title, on_cancel)
+-- on_cancel: function called when the user taps Cancel. hidden: whether it starts out hidden, as when it's for the
+-- download of a book whose progress was hidden, which is trying again
+function DownloadProgress.new(title, on_cancel, hidden)
     local self = setmetatable({}, DownloadProgress)
 
     self.title = title
     self.cancelled = false
     self.on_cancel = on_cancel
-    self.is_visible = true
+    self.is_visible = not hidden
     self.percentage = 0
     self.status_text = ""
     self:build()
