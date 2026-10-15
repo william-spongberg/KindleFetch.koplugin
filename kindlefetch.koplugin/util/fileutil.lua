@@ -95,4 +95,22 @@ function FileUtil.isValidDirectory(path)
     return lfs.attributes(path, "mode") == "directory"
 end
 
+-- the names of what's in a folder (without . and ..), or nil and why not, e.g. when it can't be read: lfs.dir raises
+-- an error for that rather than returning it, which KOReader would exit on
+function FileUtil.listDir(path)
+    local names = {}
+    local ok, err = pcall(function()
+        for name in lfs.dir(path) do
+            if name ~= "." and name ~= ".." then
+                table.insert(names, name)
+            end
+        end
+    end)
+    if not ok then
+        LogUtil.warn("could not read the folder", path .. ":", tostring(err))
+        return nil, tostring(err)
+    end
+    return names
+end
+
 return FileUtil

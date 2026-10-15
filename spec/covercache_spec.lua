@@ -36,6 +36,20 @@ describe("CoverCache", function()
         CoverCache:clear()
     end)
 
+    -- which lfs.dir raises, and KOReader would exit on
+    it("carries on when its folder can't be read", function()
+        fixtures.cacheCover(helper, "abc")
+        helper.stubs.lfs.dir = function(path)
+            error("cannot open " .. path .. ": Permission denied")
+        end
+        CoverCache:clear()
+        CurlUtil.downloadMultiple = function()
+            return nil, nil, nil, "unable to launch curl"
+        end
+        assert.is_true(CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6))
+        assert.is_true(CurlUtil.removeLeftovers() == nil)
+    end)
+
     it("stores covers by book id", function()
         assert.are.equal(covers_dir .. "abc.jpg", CoverCache:getPath("abc"))
         assert.is_true(helper.isDir(covers_dir))

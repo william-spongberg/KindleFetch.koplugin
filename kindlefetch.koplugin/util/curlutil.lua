@@ -69,7 +69,7 @@ function CurlUtil.removeLeftovers()
     end
 
     local leftovers = {}
-    for file in lfs.dir(TMP_DIR) do
+    for _, file in ipairs(FileUtil.listDir(TMP_DIR) or {}) do
         if file:find("^curl_download") then
             table.insert(leftovers, file)
         end

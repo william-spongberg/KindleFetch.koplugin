@@ -43,6 +43,17 @@ local function explainFailure(err)
     return err
 end
 
+-- luasocket's http.request, which returns what went wrong, but can raise it instead, e.g. from the TLS library, which
+-- KOReader would exit on, without its timeouts being put back
+local function request(options)
+    local requested, ok, status, headers = pcall(http.request, options)
+    if not requested then
+        LogUtil.warn("KOReader's HTTP raised an error rather than returning it:", tostring(ok))
+        return nil, ok
+    end
+    return ok, status, headers
+end
+
 -- whether requests made from inside Trapper:wrap can be called off (see setTrapWidget), which those made with curl can
 function HttpUtil.canCancel()
     return CurlUtil.canFetch()
@@ -168,7 +179,7 @@ function HttpUtil.requestBody(request_url, proxy_url, opts)
         if cookies and cookies ~= "" then
             request_headers["Cookie"] = cookies
         end
-        ok, status, headers = http.request {
+        ok, status, headers = request {
             url = url,
             method = form_body and "POST" or "GET",
             source = form_body and ltn12.source.string(form_body),
@@ -246,7 +257,7 @@ local function downloadWithKOReader(url, path)
     end
 
     socketutil:set_timeout(ANSWER_TIMEOUT, FILE_TIMEOUT)
-    local ok, status = http.request {
+    local ok, status = request {
         url = url,
         headers = {
             ["User-Agent"] = "Mozilla/5.0",

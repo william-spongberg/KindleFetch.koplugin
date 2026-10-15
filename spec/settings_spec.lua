@@ -42,6 +42,27 @@ describe("KindleFetchSettings", function()
 
     after_each(helper.cleanup)
 
+    -- e.g. by hand, which what reads them failed on, possibly as KOReader started
+    it("ignores settings saved as something they can't be", function()
+        helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+            show_book_covers = "yes",
+            search_cache_expiry_days = {},
+            preferred_languages = "en",
+            preferred_file_types = { "epub", 7, { "pdf" } },
+            recent_searches = { "dune", false, "emma" },
+            last_update_check = "yesterday",
+        }
+        assert.is_true(Settings:getShowBookCovers())
+        assert.are.equal(14, Settings:getSearchCacheExpiryDays())
+        assert.are.same({ "en" }, Settings:getPreferredLanguages())
+        assert.are.same({ "epub" }, Settings:getPreferredFileTypes())
+        assert.are.same({ "dune", "emma" }, Settings:getRecentSearches())
+        assert.is_nil(Settings:getLastUpdateCheck())
+        assert.is_truthy(
+            helper.logged("warn", "^ignoring show_book_covers as it's saved as a string rather than a boolean")
+        )
+    end)
+
     describe("getDownloadDir", function()
         it("uses the saved download folder", function()
             helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {

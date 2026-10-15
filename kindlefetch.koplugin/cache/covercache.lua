@@ -64,7 +64,7 @@ local function removeOrphans()
     end
 
     local orphans = {}
-    for file in lfs.dir(CACHE_DIR) do
+    for _, file in ipairs(FileUtil.listDir(CACHE_DIR) or {}) do
         local id = file:match("^(.+)%.jpg$")
         if id and not downloading[id] and not persistent_cache:get(id) then
             table.insert(orphans, file)
@@ -120,10 +120,8 @@ function CoverCache:clear()
     downloading = {}
     unavailable = {}
     if lfs.attributes(CACHE_DIR, "mode") == "directory" then
-        for file in lfs.dir(CACHE_DIR) do
-            if file ~= "." and file ~= ".." then
-                FileUtil.removeFile(CACHE_DIR .. file)
-            end
+        for _, file in ipairs(FileUtil.listDir(CACHE_DIR) or {}) do
+            FileUtil.removeFile(CACHE_DIR .. file)
         end
     end
 end

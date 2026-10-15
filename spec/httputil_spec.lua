@@ -58,6 +58,19 @@ describe("HttpUtil", function()
         assert.is_nil(helper.state.http_timeouts)
     end)
 
+    -- e.g. from the TLS library, which KOReader exited on, without its timeouts being put back
+    it("says what went wrong when KOReader's HTTP raises it rather than returning it", function()
+        http.request = function()
+            error("wantread")
+        end
+
+        local body, err = HttpUtil.getBody("https://libgen.example")
+        assert.is_nil(body)
+        assert.matches("wantread", err)
+        assert.is_nil(helper.state.http_timeouts)
+        assert.is_truthy(helper.logged("warn", "^KOReader's HTTP raised an error rather than returning it"))
+    end)
+
     it("returns the HTTP status, e.g. of an error page", function()
         respond({ "<html>Forbidden</html>", 1, 403 })
 
@@ -455,6 +468,18 @@ describe("HttpUtil", function()
             assert.is_nil(ok)
             assert.are.equal("timeout", err)
             assert.is_false(helper.exists(path))
+        end)
+
+        it("leaves nothing behind when KOReader's HTTP raises what went wrong", function()
+            http.request = function()
+                error("closed")
+            end
+
+            local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
+            assert.is_nil(ok)
+            assert.matches("closed", err)
+            assert.is_false(helper.exists(path))
+            assert.is_nil(helper.state.http_timeouts)
         end)
 
         -- rather than keeping the page saying what's wrong in place of the file

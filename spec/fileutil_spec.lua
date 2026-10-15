@@ -76,6 +76,27 @@ describe("FileUtil", function()
         end)
     end)
 
+    describe("listDir", function()
+        it("lists what's in a folder", function()
+            helper.writeFile(dir .. "/listed/a.txt", "a")
+            helper.writeFile(dir .. "/listed/b.txt", "b")
+            local names = FileUtil.listDir(dir .. "/listed")
+            table.sort(names)
+            assert.are.same({ "a.txt", "b.txt" }, names)
+        end)
+
+        -- which lfs.dir raises, and KOReader would exit on
+        it("says when the folder can't be read", function()
+            helper.stubs.lfs.dir = function(path)
+                error("cannot open " .. path .. ": No such file or directory")
+            end
+            local names, err = FileUtil.listDir(dir .. "/missing")
+            assert.is_nil(names)
+            assert.matches("No such file or directory", err)
+            assert.is_truthy(helper.logged("warn", "^could not read the folder"))
+        end)
+    end)
+
     describe("isValidFile / isValidDirectory", function()
         it("tells files and directories apart", function()
             helper.writeFile(dir .. "/book.epub", "data")
