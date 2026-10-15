@@ -3,6 +3,7 @@ local StringUtil = require("util.stringutil")
 local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
 local ZlibAccount = require("api.zlibaccount")
+local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
@@ -57,9 +58,10 @@ local function text(value)
     return value ~= "" and value or nil
 end
 
+-- the book, or nil, and whether that's because it couldn't be read, rather than it not being in a preferred file type
 local function parseBook(book, is_preferred)
     if type(book) ~= "table" then
-        return nil
+        return nil, true
     end
     local id = tonumber(book.id)
     -- both of which are sent back in the address its download link is asked for at
@@ -70,7 +72,7 @@ local function parseBook(book, is_preferred)
     file_type = file_type and file_type:lower()
     if not (id and hash and title and file_type) then
         LogUtil.warn("skipped a book without an id, hash, title or file type")
-        return nil
+        return nil, true
     end
     -- in case Z-Library didn't keep to the file types it was asked for
     if not is_preferred[file_type] then
@@ -101,7 +103,8 @@ local function parseBook(book, is_preferred)
     }
 end
 
--- the books in the preferred file types, from what Z-Library answers a search with, or nil if it isn't that
+-- the books in the preferred file types, from what Z-Library answers a search with, and how many of its books could
+-- be read (which are the results read), or nil if it isn't that
 function ZlibSearch.parseResults(data, file_types)
     if type(data) ~= "table" or type(data.books) ~= "table" then
         return nil
@@ -111,15 +114,18 @@ function ZlibSearch.parseResults(data, file_types)
         is_preferred[file_type] = true
     end
 
-    local books = {}
-    for __, book in ipairs(data.books) do
-        book = parseBook(book, is_preferred)
+    local books, read = {}, 0
+    for __, result in ipairs(data.books) do
+        local book, unreadable = parseBook(result, is_preferred)
         if book then
             table.insert(books, book)
             LogUtil.debug("new book found", book)
         end
+        if not unreadable then
+            read = read + 1
+        end
     end
-    return books
+    return books, read
 end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
@@ -161,10 +167,14 @@ function ZlibSearch:search(query, page)
     if not data then
         return nil, err
     end
-    local books = ZlibSearch.parseResults(data, file_types)
+    local books, read = ZlibSearch.parseResults(data, file_types)
     if not books then
         LogUtil.warn("Z-Library's answer to a search had no books in it")
         return nil, T(_("unexpected response from %1"), self.NAME)
+    end
+    -- none of them could be read, as when Z-Library has changed what it answers with
+    if read == 0 and #data.books > 0 then
+        return nil, Errors.UNREADABLE
     end
 
     local pagination = type(data.pagination) == "table" and data.pagination or {}
@@ -190,7 +200,7 @@ function ZlibSearch:search(query, page)
             next_page = next_page,
         }, SOURCE, query, page, languages, file_types, {})
     end
-    return books, nil, next_page, #data.books
+    return books, nil, next_page, read
 end
 
 -- the book's download link, which Z-Library only gives the account a few of a day, so it's only asked for while

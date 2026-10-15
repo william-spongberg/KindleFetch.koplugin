@@ -294,6 +294,31 @@ describe("LlgiSearch", function()
         end)
 
         -- so books KOReader can't open are never found
+        -- which were said to be results in other languages or file types, offering the settings, when Library Genesis
+        -- had changed its page
+        it("doesn't count rows it can't read as results", function()
+            results(mirrors[1], {
+                { title = "No md5", file_type = "epub" },
+                { md5 = "abc", title = "Too few cells", file_type = "epub", cells = 9 },
+                { md5 = "def", title = "Dune", language = "Spanish", file_type = "epub" },
+            })
+            local books, err, _, results_read = LlgiSearch:search("dune", 1)
+            assert.is_nil(err)
+            assert.are.same({}, books)
+            assert.are.equal(1, results_read)
+            assert.is_truthy(helper.logged("warn", "^2 of the page's 3 rows couldn't be read as books"))
+        end)
+
+        it("says its results couldn't be read when none of its rows can be", function()
+            results(mirrors[1], {
+                { title = "No md5", file_type = "epub" },
+                { md5 = "abc", title = "Too few cells", file_type = "epub", cells = 9 },
+            })
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal(require("util.errors").UNREADABLE, err)
+        end)
+
         it("only keeps the preferred file types and languages", function()
             results(mirrors[1], {
                 fixtures.DUNE,

@@ -25,6 +25,10 @@ local Errors = {
     BUSY = _("Library Genesis is too busy to send books right now, try again in a few minutes"),
     BUSY_SEARCH = _("Library Genesis is too busy to search right now, try again in a few minutes"),
     BLOCKED_DOWNLOAD = _("Library Genesis is blocking automated downloads right now, try again later"),
+    -- nothing on a site's page of results could be read, as when it has changed how its pages are laid out
+    UNREADABLE = _(
+        "the site's results couldn't be read, as its pages may have changed, so check for updates to Kindle " .. "Fetch"
+    ),
     -- a site has none of the file types chosen in the settings, so nothing can be found on it
     NO_FILE_TYPES = _("none of the file types chosen in the settings"),
     -- none of Z-Library's addresses' names could be looked up, though Wikipedia's could, as for Library Genesis below

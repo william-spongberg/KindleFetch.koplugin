@@ -167,26 +167,35 @@ local function languageNames(codes)
     return names
 end
 
--- books in the preferred languages and file types, and the number of results on the page
+-- books in the preferred languages and file types, the number of results on the page, and the number of its rows
+-- that couldn't be read as books, which aren't results: they were said to be results in other languages or file
+-- types, when Library Genesis had changed its page
 function LlgiSearch.parseResults(html, base_url, languages, file_types)
     local books = {}
     local tbody = html:match('id="tablelibgen".-<tbody>(.-)</tbody>')
     if not tbody then
-        return books, 0
+        return books, 0, 0
     end
 
     local language_names = languageNames(languages)
-    local results = 0
+    local results, unreadable = 0, 0
     for row in tbody:gmatch("<tr[^>]*>(.-)</tr>") do
-        results = results + 1
         local book = parseBook(StringUtil.convertHtmlToText(row), base_url)
-        if book and isPreferred(book, language_names, file_types) then
-            table.insert(books, book)
-            LogUtil.debug("new book found", book)
+        if book then
+            results = results + 1
+            if isPreferred(book, language_names, file_types) then
+                table.insert(books, book)
+                LogUtil.debug("new book found", book)
+            end
+        else
+            unreadable = unreadable + 1
         end
     end
+    if unreadable > 0 then
+        LogUtil.warn(unreadable, "of the page's", results + unreadable, "rows couldn't be read as books")
+    end
 
-    return books, results
+    return books, results, unreadable
 end
 
 -- whether Library Genesis has more results after the given page, which had this many: as it says itself, in the
@@ -420,7 +429,11 @@ function LlgiSearch:search(query, page)
             return nil, err
         end
 
-        local page_books, results = LlgiSearch.parseResults(html, url, languages, file_types)
+        local page_books, results, unreadable = LlgiSearch.parseResults(html, url, languages, file_types)
+        -- nothing on the page could be read, as when Library Genesis has changed it
+        if results == 0 and unreadable > 0 and #books == 0 and results_read == 0 then
+            return nil, Errors.UNREADABLE
+        end
         LogUtil.info(
             string.format(
                 "page %d from %s: kept %d of its %d results",

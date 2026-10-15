@@ -109,6 +109,22 @@ describe("ZlibSearch", function()
             assert.are.equal("zlib_2", books[2].title)
         end)
 
+        -- which were said to be results in other file types, when Z-Library had changed what it answers with
+        it("doesn't count books it can't read as results", function()
+            results({ book(), { id = "not a number" }, book({ id = 3, hash = "abc", extension = "azw3" }) })
+            local books, err, _, results_read = ZlibSearch:search("orwell", 1)
+            assert.is_nil(err)
+            assert.are.equal(1, #books)
+            assert.are.equal(2, results_read)
+        end)
+
+        it("says its results couldn't be read when none of its books can be", function()
+            results({ { id = "not a number" }, { title = "no id" } })
+            local books, err = ZlibSearch:search("orwell", 1)
+            assert.is_nil(books)
+            assert.are.equal(require("util.errors").UNREADABLE, err)
+        end)
+
         it("reads each book from the results", function()
             results({
                 book(),
