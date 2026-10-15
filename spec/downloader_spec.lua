@@ -367,6 +367,64 @@ describe("Downloader", function()
             end)
         end)
 
+        -- which KOReader would have exited on, leaving curl running and the progress up
+        it("stops the download, and says something went wrong, when checking on it goes wrong", function()
+            download()
+            local widget = progress()
+            CurlUtil.getDownloadSize = function()
+                error("unexpected")
+            end
+            curlWrote(MB / 2)
+            helper.tick()
+
+            assert.are.same({ { ok = false, err = "something went wrong, see crash.log" } }, results)
+            assert.are.same({ 1000 }, killed)
+            assert.is_false(helper.exists(filepath .. ".part"))
+            assert.is_false(helper.exists(spawned[1].headers_file))
+            assert.is_true(helper.wasClosed(widget.container))
+            assert.are.same({}, Downloader:getActiveDownloads())
+            assert.is_truthy(helper.logged("err", "^checking on a download went wrong:.*unexpected"))
+            -- and isn't checked on again
+            assert.are.equal(0, helper.tick())
+        end)
+
+        -- e.g. offering to read it: the book did download
+        it("doesn't say a download failed once it has finished, when what's done with the book goes wrong", function()
+            Downloader:downloadBook(book, filepath, function(ok, err)
+                table.insert(results, { ok = ok, err = err })
+                if ok then
+                    error("unexpected")
+                end
+            end, onOpenExisting)
+            prompts[1].on_download(prompts[1].filepath)
+            curlWrote(MB, 0)
+            helper.tick()
+
+            assert.are.same({ { ok = true } }, results)
+            assert.is_true(helper.exists(filepath))
+            assert.is_truthy(helper.logged("err", "^checking on a download went wrong:.*unexpected"))
+        end)
+
+        -- which was only lost, as Trapper drops what goes wrong once its function has waited on something
+        it("says something went wrong when starting the download goes wrong once its link is found", function()
+            CurlUtil.createHeadersFile = function()
+                error("unexpected")
+            end
+            Downloader:downloadBook(book, filepath, onResult)
+            local widget
+            local show = require("ui.downloadprogress").show
+            require("ui.downloadprogress").show = function(self)
+                widget = self
+                return show(self)
+            end
+            prompts[1].on_download(filepath)
+
+            assert.are.same({ { ok = false, err = "something went wrong, see crash.log" } }, results)
+            assert.is_true(helper.wasClosed(widget.container))
+            assert.are.same({}, Downloader:getActiveDownloads())
+            assert.is_truthy(helper.logged("err", "^starting the download of Dune went wrong:.*unexpected"))
+        end)
+
         -- which could be another book entirely, with the same title
         it("doesn't carry on from what's left of an earlier download of a book of the same name", function()
             helper.writeFile(filepath .. ".part", "another book")

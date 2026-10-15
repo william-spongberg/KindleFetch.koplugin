@@ -9,6 +9,7 @@ local StringUtil = require("util.stringutil")
 local WaitingMessage = require("ui.waitingmessage")
 local ZlibAccount = require("api.zlibaccount")
 local Errors = require("util.errors")
+local Guard = require("util.guard")
 local _ = require("gettext")
 
 local ZlibLogin = {}
@@ -20,20 +21,27 @@ local last_email
 -- until Z-Library has answered, with a button to call it off. calls on_logged_in once logged in
 function ZlibLogin.login(email, password, on_logged_in)
     NetworkMgr:runWhenConnected(function()
-        Trapper:wrap(function()
-            local message = WaitingMessage.new(_("Logging in to Z-Library..."))
+        local message
+        local function closeMessage()
+            if message and not message.cancelled and not message.closed then
+                message.closed = true
+                UIManager:close(message)
+            end
+        end
+
+        -- an error is passed on rather than left to Trapper, which would lose it and leave the message up, including
+        -- one in what's done once logged in
+        Trapper:wrap(Guard.wrap("logging in to Z-Library", function()
+            message = WaitingMessage.new(_("Logging in to Z-Library..."))
             UIManager:show(message)
             UIManager:forceRePaint()
 
-            -- an error is passed on rather than left to Trapper, which would log it and leave the message up
             HttpUtil.trap_widget = message
-            local ok, logged_in, err = pcall(ZlibAccount.login, ZlibAccount, email, password)
+            local ok, logged_in, err =
+                Guard.pcall("logging in to Z-Library", ZlibAccount.login, ZlibAccount, email, password)
             HttpUtil.trap_widget = nil
-            if not message.cancelled then
-                UIManager:close(message)
-            end
+            closeMessage()
             if not ok then
-                LogUtil.err("logging in to Z-Library went wrong:", tostring(logged_in))
                 logged_in, err = false, Errors.UNEXPECTED
             end
 
@@ -49,7 +57,11 @@ function ZlibLogin.login(email, password, on_logged_in)
             if on_logged_in then
                 on_logged_in()
             end
-        end)
+        end, function(err)
+            HttpUtil.trap_widget = nil
+            closeMessage()
+            Guard.say(err)
+        end))
     end)
 end
 

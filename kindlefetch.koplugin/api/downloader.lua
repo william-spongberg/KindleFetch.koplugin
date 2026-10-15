@@ -11,6 +11,7 @@ local CurlUtil = require("util.curlutil")
 local Sources = require("api.sources")
 local CoverCache = require("cache.covercache")
 local Errors = require("util.errors")
+local Guard = require("util.guard")
 local _ = require("gettext")
 
 -- downloads books from the site they were found on (see Sources), in the background
@@ -178,9 +179,9 @@ local function pollDownload(transfer)
                 transfer.on_finish(false, spawn_err or "download failed and could not be tried again")
                 return
             end
-            UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
+            Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
                 pollDownload(transfer)
-            end)
+            end, transfer.abandon)
             return
         end
 
@@ -219,9 +220,9 @@ local function pollDownload(transfer)
     end
 
     -- schedule download check
-    UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
+    Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
         pollDownload(transfer)
-    end)
+    end, transfer.abandon)
 end
 
 -- failed_url is the link the book failed to download from, when asking for another (see transfer.relink)
@@ -278,11 +279,10 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     -- which would leave the progress showing
     HttpUtil.trap_widget = progress_widget
     local looked_up, download_url, lookup_err, mirror_failed =
-        pcall(source.findDownloadLink, book, retrying, failed_url)
+        Guard.pcall("looking up the download link", source.findDownloadLink, book, retrying, failed_url)
     HttpUtil.trap_widget = nil
     progress_widget.dismiss_callback = nil
     if not looked_up then
-        LogUtil.err("looking up the download link went wrong:", tostring(download_url))
         download_url, lookup_err, mirror_failed = nil, Errors.UNEXPECTED, false
     end
 
@@ -310,7 +310,23 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     local headers_file = CurlUtil.createHeadersFile()
     transfer.headers_file = headers_file
     Downloader.active_downloads[book.id].headers_file = headers_file
+    -- after a mistake in Kindle Fetch while checking on the download (see Guard), stop it, cleaning up all that can be
+    transfer.abandon = function(err)
+        -- other than once it has finished, when what's done with the book went wrong: it did download, and there's
+        -- nothing left to stop
+        if transfer.finished then
+            return
+        end
+        CurlUtil.killPid(transfer.pid)
+        FileUtil.removeFile(part_path)
+        FileUtil.removeFile(headers_file)
+        progress_widget:close()
+        Downloader.active_downloads[book.id] = nil
+        callback(false, err)
+    end
+    Downloader.active_downloads[book.id].transfer = transfer
     transfer.on_finish = function(ok, err)
+        transfer.finished = true
         progress_widget:close()
         Downloader.active_downloads[book.id] = nil -- cleanup after download finishes
         FileUtil.removeFile(headers_file)
@@ -332,9 +348,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
             FileUtil.removeFile(part_path)
             UIManager:forceRePaint()
             -- looking the link up without holding KOReader up, as when the download was started
-            Trapper:wrap(function()
-                self:_startDownload(book, filepath, callback, true, transfer.download_url)
-            end)
+            self:_startDownloadInBackground(book, filepath, callback, true, transfer.download_url)
         end
     end
 
@@ -355,9 +369,28 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
 
     -- which takes a few seconds, and sometimes many more, before the book starts to arrive
     progress_widget:update(0, string.format(_("Waiting for %s..."), source.NAME))
-    UIManager:scheduleIn(DOWNLOAD_POLL_INTERVAL, function()
+    Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
         pollDownload(transfer)
-    end)
+    end, transfer.abandon)
+end
+
+-- start downloading the book (see _startDownload) without holding KOReader up while its link is looked up, as that
+-- can mean trying several mirrors, and saying so if something goes wrong in Kindle Fetch meanwhile (see Guard)
+function Downloader:_startDownloadInBackground(book, filepath, callback, retrying, failed_url)
+    Trapper:wrap(Guard.wrap("starting the download of " .. tostring(book.title), function()
+        self:_startDownload(book, filepath, callback, retrying, failed_url)
+    end, function(err)
+        local download = Downloader.active_downloads[book.id]
+        if download and download.transfer then
+            download.transfer.abandon(err)
+            return
+        end
+        if download then
+            download.progress_widget:close()
+            Downloader.active_downloads[book.id] = nil
+        end
+        callback(false, err)
+    end))
 end
 
 -- open_existing is optionally called with the path of a book that's already there, when asked to read that one
@@ -384,10 +417,7 @@ function Downloader:downloadBook(book, filepath, callback, open_existing)
         local function start()
             -- turning on wifi first if need be, as KOReader is set up to (it says so itself if it can't connect)
             NetworkMgr:runWhenConnected(function()
-                -- so that looking up the download link doesn't hold KOReader up (see _startDownload)
-                Trapper:wrap(function()
-                    self:_startDownload(book, confirmed_filepath, callback, false)
-                end)
+                self:_startDownloadInBackground(book, confirmed_filepath, callback, false)
             end)
         end
 

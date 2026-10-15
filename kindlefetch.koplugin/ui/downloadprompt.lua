@@ -22,6 +22,7 @@ local UIManager = require("ui/uimanager")
 local LogUtil = require("util.logutil")
 local CoverCache = require("cache.covercache")
 local CoverPlaceholder = require("ui.coverplaceholder")
+local Guard = require("util.guard")
 local _ = require("gettext")
 
 local DownloadPrompt = {}
@@ -75,12 +76,13 @@ function DownloadPrompt.new(book, filepath, on_download)
         return false
     end
     -- show the cover once it has downloaded, or take its placeholder away if it couldn't be, but not for other
-    -- books' covers, which can arrive several times a second while search results are open
-    function self.outer_container.onKindleFetchCoversDownloaded()
+    -- books' covers, which can arrive several times a second while search results are open (only logging what goes
+    -- wrong, as KOReader doesn't catch it, see Guard)
+    self.outer_container.onKindleFetchCoversDownloaded = Guard.wrap("showing the book's cover", function()
         if parent_ref:coverState() ~= parent_ref.cover_state then
             parent_ref:refreshCover()
         end
-    end
+    end, Guard.quiet)
 
     self:buildCover()
     self:buildPathButton()

@@ -132,6 +132,17 @@ describe("ZlibLogin", function()
         assert.is_truthy(helper.logged("info", "^logging in to Z%-Library was called off$"))
     end)
 
+    -- which was lost, as Trapper drops what goes wrong once its function has waited on something
+    it("says when what's done once logged in goes wrong", function()
+        ZlibLogin.show(function()
+            error("unexpected")
+        end)
+        logIn("reader@example.com", "secret")
+
+        assert.are.equal("Kindle Fetch: something went wrong, see crash.log", helper.lastError())
+        assert.is_truthy(helper.logged("err", "^logging in to Z%-Library went wrong:.*unexpected"))
+    end)
+
     it("says when something went wrong, rather than leaving the message up", function()
         login_result = function()
             error("boom")

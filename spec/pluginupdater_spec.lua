@@ -200,6 +200,17 @@ for _, layout in ipairs(LAYOUTS) do
                 assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
             end)
 
+            -- which KOReader would have exited on
+            it("reports when looking up the latest release goes wrong, if the user asked", function()
+                latestRelease("v0.4")
+                CurlUtil.getExitCode = function()
+                    error("unexpected")
+                end
+                checkForUpdates(true)
+                assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
+                assert.is_truthy(helper.logged("err", "^looking up the latest release went wrong:.*unexpected"))
+            end)
+
             it("gives up when curl cannot be started", function()
                 CurlUtil.download = function()
                     return nil, nil, "unable to launch curl"

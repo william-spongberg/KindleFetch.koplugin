@@ -484,6 +484,22 @@ describe("CoverCache", function()
             assert.are.same({ 0 }, results)
         end)
 
+        -- which KOReader would have exited on, rather than taking the placeholders away
+        it("gives up on the covers when checking on them goes wrong", function()
+            CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone)
+            CurlUtil.getExitCode = function()
+                error("unexpected")
+            end
+            helper.runScheduled()
+
+            assert.are.same({ 0 }, results)
+            assert.is_false(CoverCache:isComing(book("a", "https://covers.example/a.jpg")))
+            assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
+            assert.is_truthy(helper.logged("err", "^checking on covers' downloads went wrong:.*unexpected"))
+            -- placeholders are all that would say so
+            assert.is_nil(helper.lastError())
+        end)
+
         it("reports nothing downloaded when curl cannot be started", function()
             CurlUtil.downloadMultiple = function()
                 return nil, nil, nil, "unable to launch curl"

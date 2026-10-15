@@ -433,6 +433,21 @@ describe("KindleFetch", function()
             assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
         end)
 
+        -- which wasn't asked for, so isn't said
+        it("only logs what goes wrong checking for updates", function()
+            helper.stub("updater.curlupdater", {
+                checkVersion = function()
+                    error("unexpected")
+                end,
+            })
+            KindleFetch = dofile("kindlefetch.koplugin/main.lua")
+            openUI()
+            helper.tick()
+
+            assert.is_truthy(helper.logged("err", "^checking for updates went wrong:.*unexpected"))
+            assert.is_nil(helper.lastError())
+        end)
+
         it("does not check for updates when automatic checks are turned off", function()
             settings.check_for_updates = false
             openUI()
@@ -900,6 +915,19 @@ describe("KindleFetch", function()
 
                 assert.are.equal(menus[1], helper.state.shown[2])
                 assert.are.same({ false }, trap_widgets)
+            end)
+
+            -- which was lost, as Trapper drops what goes wrong once its function has waited on something
+            it("says so when showing the books found goes wrong", function()
+                search_results[1] = { { book("Dune") } }
+                require("ui.bookmenu").new = function()
+                    error("attempt to call a nil value")
+                end
+                search(openUI(), "dune")
+
+                assert.is_true(helper.wasClosed(message()))
+                assert.are.equal("Search failed: something went wrong, see crash.log", helper.lastError())
+                assert.matches("attempt to call a nil value", helper.logged("err", '^searching for "dune" went wrong'))
             end)
 
             it("says so when the search goes wrong, rather than leaving its message up", function()

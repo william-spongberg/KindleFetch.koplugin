@@ -11,6 +11,7 @@ local VersionUtil = require("util.versionutil")
 local StringUtil = require("util.stringutil")
 local PathUtil = require("util.pathutil")
 local KindleFetchSettings = require("settings.settings")
+local Guard = require("util.guard")
 local _ = require("gettext")
 
 -- constants
@@ -74,11 +75,15 @@ local function fetchUpdateInfo(callback)
         return
     end
 
+    -- as if it couldn't be looked up, once something goes wrong (see Guard)
+    local function failed()
+        callback(nil)
+    end
     local function poll()
         local exit_code = CurlUtil.getExitCode(exit_file)
         if not exit_code then
             if CurlUtil.isPidRunning(pid) then
-                UIManager:scheduleIn(POLL_INTERVAL, poll)
+                Guard.scheduleIn(POLL_INTERVAL, "looking up the latest release", poll, failed)
                 return
             end
             -- curl may have finished between checking for its exit code and whether it was running
@@ -100,7 +105,7 @@ local function fetchUpdateInfo(callback)
 
         callback(parseUpdateInfo(output))
     end
-    UIManager:scheduleIn(POLL_INTERVAL, poll)
+    Guard.scheduleIn(POLL_INTERVAL, "looking up the latest release", poll, failed)
 end
 
 -- read installed plugin version from version.txt

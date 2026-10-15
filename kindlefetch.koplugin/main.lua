@@ -29,6 +29,7 @@ local PluginUpdater = require("updater.pluginupdater")
 local FileUtil = require("util.fileutil")
 local PathUtil = require("util.pathutil")
 local Errors = require("util.errors")
+local Guard = require("util.guard")
 local _ = require("gettext")
 
 -- a new plugin instance is created every time the file manager or a book is opened,
@@ -175,7 +176,8 @@ function KindleFetch:init()
         and updateCheckDue()
     then
         update_check_scheduled = true
-        UIManager:scheduleIn(0.1, function()
+        -- (saying nothing if it goes wrong, as it wasn't asked for)
+        Guard.scheduleIn(0.1, "checking for updates", function()
             -- the next check waits a day from here, whether or not the latest release can be looked up: on a Kindle
             -- whose curl is too old to look it up, updating curl was offered every time KOReader started (#57)
             KindleFetchSettings:setLastUpdateCheck(os.time())
@@ -183,7 +185,7 @@ function KindleFetch:init()
             CurlUpdater.checkVersion()
             -- check for updates
             PluginUpdater.checkForUpdates(false)
-        end)
+        end, Guard.quiet)
     end
 end
 
@@ -493,9 +495,18 @@ end
 -- HttpUtil), showing waiting_text until it has. calls on_done with what search returned, unless the search was
 -- called off before finding anything, with the message's Cancel button
 function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
-    Trapper:wrap(function()
-        -- results saved from an earlier search are there straight away
-        local message
+    -- results saved from an earlier search are there straight away
+    local message
+    local function closeMessage()
+        if message and not message.cancelled and not message.closed then
+            message.closed = true
+            UIManager:close(message)
+        end
+    end
+
+    -- an error is passed on rather than left to Trapper, which would lose it and leave the message up, including one
+    -- in showing what was found
+    Trapper:wrap(Guard.wrap(string.format("searching for %q", query), function()
         if not Sources[self.source]:isCached(query, page) then
             message = WaitingMessage.new(waiting_text)
             UIManager:show(message)
@@ -504,15 +515,12 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
             UIManager:forceRePaint()
         end
 
-        -- an error is passed on rather than left to Trapper, which would log it and leave the message up
         HttpUtil.trap_widget = message
-        local ok, books, err, next_page, results_read = pcall(self.search, self, query, page)
+        local ok, books, err, next_page, results_read =
+            Guard.pcall(string.format("search for %q", query), self.search, self, query, page)
         HttpUtil.trap_widget = nil
-        if message and not message.cancelled then
-            UIManager:close(message)
-        end
+        closeMessage()
         if not ok then
-            LogUtil.err(string.format("search for %q went wrong: %s", query, tostring(books)))
             books, err, next_page = nil, Errors.UNEXPECTED, nil
         end
 
@@ -521,7 +529,12 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
             return
         end
         on_done(books, err, next_page, results_read)
-    end)
+    end, function(err)
+        HttpUtil.trap_widget = nil
+        closeMessage()
+        -- which says it failed, as it does for any other error
+        on_done(nil, err)
+    end))
 end
 
 -- a book's title, authors and file type, which the results are looked through for (see filterBooks), as is each
@@ -731,12 +744,12 @@ function KindleFetch:showBooks(books)
         is_downloaded = function(book)
             return this:isDownloaded(book)
         end,
-        onPageChange = function(page)
+        onPageChange = Guard.wrap("loading covers", function(page)
             if KindleFetchSettings:getShowBookCovers() then
                 LogUtil.debug("loading covers for page", page)
                 menu:loadCoversForPage(page)
             end
-        end,
+        end, Guard.quiet),
     }
 
     self.books_menu = menu
@@ -846,7 +859,7 @@ function KindleFetch:downloadBook(book)
                 self.books_menu:updateItems()
             end
             -- ask on the next tick, once the download progress has closed
-            UIManager:nextTick(function()
+            Guard.nextTick("offering to read the downloaded book", function()
                 -- centred, with the title in bold on a line of its own, so it stands out from the question
                 local dialog
                 dialog = ButtonDialog:new {

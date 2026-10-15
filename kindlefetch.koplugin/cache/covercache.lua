@@ -6,6 +6,7 @@ local Event = require("ui/event")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
 local LogUtil = require("util.logutil")
+local Guard = require("util.guard")
 
 local CoverCache = {}
 
@@ -189,8 +190,11 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_progress
     if not exit_code then
         if CurlUtil.isPidRunning(pid) then
             on_progress(downloadedPaths(CurlUtil.getTransferResults(results_file), filepaths))
-            UIManager:scheduleIn(POLL_INTERVAL, function()
+            -- once something goes wrong, as having none of them (see Guard)
+            Guard.scheduleIn(POLL_INTERVAL, "checking on covers' downloads", function()
                 pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
+            end, function()
+                on_done({})
             end)
             return
         end
@@ -239,8 +243,10 @@ local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs
         return
     end
 
-    UIManager:scheduleIn(POLL_INTERVAL, function()
+    Guard.scheduleIn(POLL_INTERVAL, "checking on covers' downloads", function()
         pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
+    end, function()
+        on_done({})
     end)
 end
 
