@@ -5,6 +5,8 @@ local fixtures = require("fixtures")
 describe("Downloader", function()
     local MB = 1024 * 1024
     local data_dir, filepath, book, web, mirrors, prompts, spawned, running, killed, results, remote_size
+    -- whether curl can fetch, and which downloads were started with KOReader's own HTTP, as they are where it can't
+    local can_fetch, koreader_downloads
     local cover_downloads
     local CurlUtil, UrlApi, Downloader
 
@@ -83,6 +85,10 @@ describe("Downloader", function()
         web = fixtures.fakeWeb(helper)
 
         CurlUtil = require("util.curlutil")
+        can_fetch, koreader_downloads = true, {}
+        CurlUtil.canFetch = function()
+            return can_fetch
+        end
         CurlUtil.startDownload = function(url, path, use_proxy, _, opts)
             local exit_file = CurlUtil.createExitFile()
             table.insert(spawned, {
@@ -96,6 +102,11 @@ describe("Downloader", function()
                 resume = opts.resume,
             })
             return spawned[#spawned].pid, exit_file
+        end
+        -- which is followed just as curl is (see HttpDownload)
+        require("util.httpdownload").start = function(url, path, opts)
+            table.insert(koreader_downloads, url)
+            return CurlUtil.startDownload(url, path, opts.proxy ~= nil, nil, opts)
         end
         -- book covers, which download in the background (and fail here)
         cover_downloads = {}
@@ -372,6 +383,7 @@ describe("Downloader", function()
 
             -- whose taps would only arrive once it's over
             it("can't be cancelled or hidden while KOReader's own HTTP holds KOReader up", function()
+                can_fetch = false
                 local enabled = {}
                 HttpUtil.getBody = function(url)
                     table.insert(enabled, progress().cancel_button.enabled)
@@ -509,6 +521,20 @@ describe("Downloader", function()
             assert.is_true(helper.wasClosed(widget.container))
             assert.are.same({}, Downloader:getActiveDownloads())
             assert.is_truthy(helper.logged("err", "^starting the download of Dune went wrong:.*unexpected"))
+        end)
+
+        -- which failed every download on a device without curl, as a Kobo can be (#63)
+        it("downloads with KOReader's own HTTP where curl can't", function()
+            can_fetch = false
+            download()
+            assert.are.same({ getUrl(mirrors[1]) }, koreader_downloads)
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
+            assert.are.equal(MB, #helper.readFile(filepath))
+            -- collecting its process once it's over
+            assert.is_true(helper.state.subprocesses_collected[1000])
         end)
 
         -- which could be another book entirely, with the same title

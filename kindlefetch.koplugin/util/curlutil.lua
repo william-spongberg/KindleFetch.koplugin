@@ -211,6 +211,39 @@ function CurlUtil.forgetVersion()
     can_fetch, can_decompress = nil, nil
 end
 
+-- what KOReader's own HTTP (luasocket, and LuaSec for TLS) says went wrong, in lower case, with the exit code curl
+-- would have given up with for it, so it's said the same way whichever fetched it
+local LUASOCKET_ERRORS = {
+    { "host or service not provided, or not known", 6 },
+    { "no address associated with hostname", 6 },
+    { "name or service not known", 6 },
+    { "temporary failure in name resolution", 6 },
+    { "host not found", 6 },
+    { "timeout", 28 },
+    { "connection refused", 7 },
+    { "no route to host", 7 },
+    { "network is unreachable", 7 },
+    { "certificate", 60 },
+    { "wantread", 35 },
+    { "wantwrite", 35 },
+    { "handshake", 35 },
+    { "ssl", 35 },
+    { "tls", 35 },
+    { "closed", 56 },
+    { "connection reset", 56 },
+}
+
+-- the exit code curl would have given up with for what KOReader's own HTTP says went wrong, or nil for what curl has
+-- no words of its own for
+function CurlUtil.exitCodeFor(luasocket_err)
+    local lower = tostring(luasocket_err):lower()
+    for __, known in ipairs(LUASOCKET_ERRORS) do
+        if lower:find(known[1], 1, true) then
+            return known[2]
+        end
+    end
+end
+
 function CurlUtil.getErrorMeaning(exit_code)
     return CURL_ERRORS[exit_code] or T(_("(curl exit code %1)"), tostring(exit_code))
 end

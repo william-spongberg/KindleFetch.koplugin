@@ -29,48 +29,12 @@ local FILE_TIMEOUT = 300
 -- and with curl, how long it can go without any of it arriving before it's given up on
 local FILE_STALL_TIME = 30
 
--- what KOReader's own HTTP says when a site's name couldn't be looked up, in lower case
-local UNRESOLVED_ERRORS = {
-    ["host or service not provided, or not known"] = true,
-    ["no address associated with hostname"] = true,
-    ["name or service not known"] = true,
-    ["temporary failure in name resolution"] = true,
-    ["host not found"] = true,
-}
-
--- the curl exit codes whose meanings say what else KOReader's own HTTP says, in lower case, which is otherwise said
--- as luasocket and its TLS library say it (e.g. "wantread"), and differently from when curl fetched the page
-local LUASOCKET_ERRORS = {
-    { "timeout", 28 },
-    { "connection refused", 7 },
-    { "no route to host", 7 },
-    { "network is unreachable", 7 },
-    { "certificate", 60 },
-    { "wantread", 35 },
-    { "wantwrite", 35 },
-    { "handshake", 35 },
-    { "ssl", 35 },
-    { "tls", 35 },
-    { "closed", 56 },
-    { "connection reset", 56 },
-}
-
 -- what went wrong when KOReader's own HTTP had no answer, as curl says it (logging what it said itself, for
 -- crash.log)
 local function explainFailure(err)
     err = tostring(err or _("no response"))
-    local lower = err:lower()
-    local explained = err
-    if UNRESOLVED_ERRORS[lower] then
-        explained = HttpUtil.UNRESOLVED
-    else
-        for __, known in ipairs(LUASOCKET_ERRORS) do
-            if lower:find(known[1], 1, true) then
-                explained = CurlUtil.getErrorMeaning(known[2])
-                break
-            end
-        end
-    end
+    local exit_code = CurlUtil.exitCodeFor(err)
+    local explained = exit_code and CurlUtil.getErrorMeaning(exit_code) or err
     if explained ~= err then
         LogUtil.info("KOReader's HTTP said:", err)
     end
