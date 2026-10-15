@@ -328,7 +328,7 @@ local function fetchResults(params, refresh)
                     status,
                     #html,
                     "bytes:",
-                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                    LogUtil.excerpt(html)
                 )
             end
             -- with the status it answered with, as for the other sites
@@ -522,7 +522,7 @@ function LlgiSearch.findDownloadLink(book, retrying)
                 "error page from",
                 LogUtil.site(url) .. "'s download page: HTTP",
                 status,
-                html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                LogUtil.excerpt(html)
             )
             last_err = T(_("Library Genesis answered with an error (HTTP %1), try again later"), status)
             mirror_failed = true
@@ -531,7 +531,7 @@ function LlgiSearch.findDownloadLink(book, retrying)
             LogUtil.warn(
                 "no download link on",
                 LogUtil.site(url) .. "'s download page (" .. #html .. " bytes):",
-                html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                LogUtil.excerpt(html)
             )
             last_err = _("no Library Genesis download link found")
         elseif status then

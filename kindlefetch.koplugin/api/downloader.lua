@@ -184,6 +184,13 @@ end
 
 local pollDownload
 
+-- check on the download again in this many seconds (see pollDownload), abandoning it once something goes wrong
+local function pollIn(seconds, transfer)
+    Guard.scheduleIn(seconds, "checking on a download", function()
+        pollDownload(transfer)
+    end, transfer.abandon)
+end
+
 -- try a download again once it has failed, or what arrived wasn't the book (bad_book, see checkBook): from the
 -- beginning, where the site wouldn't carry on from where it stopped, or what arrived can't be carried on from; through
 -- the proxy as a backup (carrying on from there otherwise); or with another link, from a site whose links each go to
@@ -212,9 +219,7 @@ local function retry(transfer, exit_code, http_status, bad_book)
             transfer.on_finish(false, spawn_err or _("download failed and could not be tried again"))
             return true
         end
-        Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
-            pollDownload(transfer)
-        end, transfer.abandon)
+        pollIn(DOWNLOAD_POLL_INTERVAL, transfer)
         return true
     end
 
@@ -328,14 +333,7 @@ function pollDownload(transfer)
         if not transfer.sleeping and NetworkMgr:isConnected() and not resumeTransfer(transfer) then
             return
         end
-        Guard.scheduleIn(
-            transfer.paused and RECONNECT_POLL_INTERVAL or DOWNLOAD_POLL_INTERVAL,
-            "checking on a download",
-            function()
-                pollDownload(transfer)
-            end,
-            transfer.abandon
-        )
+        pollIn(transfer.paused and RECONNECT_POLL_INTERVAL or DOWNLOAD_POLL_INTERVAL, transfer)
         return
     end
 
@@ -453,9 +451,7 @@ function pollDownload(transfer)
             -- (as curl has stopped, there's nothing to stop)
             transfer.pid = nil
             pauseTransfer(transfer, "Wi-Fi is off")
-            Guard.scheduleIn(RECONNECT_POLL_INTERVAL, "checking on a download", function()
-                pollDownload(transfer)
-            end, transfer.abandon)
+            pollIn(RECONNECT_POLL_INTERVAL, transfer)
             return
         end
 
@@ -493,9 +489,7 @@ function pollDownload(transfer)
     end
 
     -- schedule download check
-    Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
-        pollDownload(transfer)
-    end, transfer.abandon)
+    pollIn(DOWNLOAD_POLL_INTERVAL, transfer)
 end
 
 -- failed_url is the link the book failed to download from, when asking for another (see transfer.relink), and hidden
@@ -667,9 +661,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
 
     -- which takes a few seconds, and sometimes many more, before the book starts to arrive
     progress_widget:update(0, T(_("Waiting for %1..."), source.NAME))
-    Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
-        pollDownload(transfer)
-    end, transfer.abandon)
+    pollIn(DOWNLOAD_POLL_INTERVAL, transfer)
 end
 
 -- start downloading the book (see _startDownload) without holding KOReader up while its link is looked up, as that

@@ -464,7 +464,7 @@ local function fetchResults(query, page, scope, languages, file_types)
                 status,
                 #body,
                 "bytes:",
-                body:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                LogUtil.excerpt(body)
             )
         end
         return nil, explainFailure(body, err, status)
@@ -544,7 +544,7 @@ function IaSearch.findDownloadLink(book)
                 #body,
                 "bytes,",
                 not ok and data and "which couldn't be read (" .. tostring(data) .. "):" or "which isn't a list:",
-                body:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+                LogUtil.excerpt(body)
             )
         end
         return nil, explainFailure(body, err, status)
