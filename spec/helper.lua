@@ -233,6 +233,9 @@ local function createStubs(state)
             inhibitInputUntil = function(_, set_or_seconds)
                 state.input_inhibited = set_or_seconds
             end,
+            group = {
+                Back = { "Back" },
+            },
         },
         screen = {
             scaleBySize = function(_, size)
@@ -250,6 +253,10 @@ local function createStubs(state)
         },
         isKindle = function(self)
             return self.kindle
+        end,
+        -- whether it has keys, such as Back, rather than only a touch screen
+        hasKeys = function(self)
+            return self.keys
         end,
         isSDL = function(self)
             return self.sdl
@@ -719,6 +726,7 @@ local WIDGET_MODULES = {
     "ui/widget/buttondialog",
     "ui/widget/iconwidget",
     "ui/widget/buttontable",
+    "ui/widget/focusmanager",
 }
 
 local CONSTANT_MODULES = {

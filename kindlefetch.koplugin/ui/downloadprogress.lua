@@ -1,4 +1,6 @@
 local Blitbuffer = require("ffi/blitbuffer")
+local Device = require("device")
+local FocusManager = require("ui/widget/focusmanager")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
@@ -12,7 +14,7 @@ local Button = require("ui/widget/button")
 local Font = require("ui/font")
 local Size = require("ui/size")
 local Geom = require("ui/geometry")
-local Screen = require("device").screen
+local Screen = Device.screen
 local UIManager = require("ui/uimanager")
 local _ = require("gettext")
 
@@ -125,13 +127,33 @@ function DownloadProgress:build()
         },
     }
 
-    self.container = CenterContainer:new {
+    -- with keys to move between its buttons and press them, on devices with them, and Back to hide it, which
+    -- couldn't be reached on those devices
+    local progress = self
+    self.container = FocusManager:new {
         dimen = Geom:new {
             w = Screen:getWidth(),
             h = Screen:getHeight(),
         },
-        self.frame,
+        layout = { { self.cancel_button, self.hide_button } },
+        CenterContainer:new {
+            dimen = Geom:new {
+                w = Screen:getWidth(),
+                h = Screen:getHeight(),
+            },
+            self.frame,
+        },
     }
+    if Device:hasKeys() then
+        self.container.key_events = self.container.key_events or {}
+        self.container.key_events.Close = { { Device.input.group.Back } }
+    end
+    function self.container.onClose()
+        if progress.is_visible then
+            progress:toggleVisibility()
+        end
+        return true
+    end
 end
 
 -- show the widget, refreshing only the part of the screen it takes up, as a download refreshes it twice a second
