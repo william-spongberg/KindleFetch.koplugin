@@ -43,6 +43,9 @@ describe("CoverCache", function()
             error("cannot open " .. path .. ": Permission denied")
         end
         CoverCache:clear()
+        CurlUtil.canFetch = function()
+            return true
+        end
         CurlUtil.downloadMultiple = function()
             return nil, nil, nil, "unable to launch curl"
         end
@@ -124,6 +127,9 @@ describe("CoverCache", function()
 
         it("is false once the cover couldn't be downloaded, until it's tried again", function()
             local a = book("a", "https://covers.example/a.jpg")
+            CurlUtil.canFetch = function()
+                return true
+            end
             CurlUtil.downloadMultiple = function()
                 return nil, nil, nil, "unable to launch curl"
             end
@@ -166,6 +172,9 @@ describe("CoverCache", function()
 
     -- which KOReader exited on, with every cover on the page left waiting for
     it("takes the placeholders away when the covers can't be downloaded, as the device's storage is full", function()
+        CurlUtil.canFetch = function()
+            return true
+        end
         local results = {}
         local covers = { book("a", "https://covers.example/a.jpg") }
         helper.writeFile(data_dir .. "/settings/tmp", "not a folder")
@@ -176,6 +185,27 @@ describe("CoverCache", function()
         assert.are.same({ 0 }, results)
         assert.is_false(CoverCache:isComing(covers[1]))
         assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
+    end)
+
+    -- which left every cover a placeholder on a device without curl, as a Kobo can be (#63)
+    it("downloads covers with KOReader's own HTTP where curl can't", function()
+        helper.stubs.http.request = function(request)
+            request.sink("jpeg " .. request.url)
+            return 1, 200, {}, "HTTP/1.1 200 OK"
+        end
+        local counts = {}
+        CoverCache:downloadMultiple(
+            { book("a", "https://covers.example/a.jpg"), book("b", "https://covers.example/b.jpg") },
+            6,
+            function(count)
+                table.insert(counts, count)
+            end
+        )
+        helper.runScheduled()
+
+        assert.are.same({ 2 }, counts)
+        assert.are.equal("jpeg https://covers.example/b.jpg", helper.readFile(CoverCache:get("b")))
+        assert.is_true(helper.state.subprocesses_collected[helper.state.subprocesses[1]])
     end)
 
     describe("downloadMultiple", function()
@@ -197,6 +227,9 @@ describe("CoverCache", function()
 
         before_each(function()
             runs, results = {}, {}
+            CurlUtil.canFetch = function()
+                return true
+            end
             CurlUtil.downloadMultiple = function(urls, paths, use_proxy, background, parallel_jobs, _, _, opts)
                 assert.is_true(background)
                 local run = {

@@ -275,6 +275,9 @@ describe("DownloadPrompt", function()
         it("is taken away when it couldn't be downloaded", function()
             book.image_url = "https://covers.example/dune.jpg"
             local prompt = newPrompt()
+            require("util.curlutil").canFetch = function()
+                return true
+            end
             require("util.curlutil").downloadMultiple = function()
                 return nil, nil, nil, "unable to launch curl"
             end
@@ -331,6 +334,9 @@ describe("DownloadPrompt", function()
                 CoverCache = require("cache.covercache")
                 runs = {}
                 local CurlUtil = require("util.curlutil")
+                CurlUtil.canFetch = function()
+                    return true
+                end
                 CurlUtil.downloadMultiple = function(urls, paths)
                     local run = {
                         urls = urls,

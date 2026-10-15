@@ -10,6 +10,7 @@ local DownloadPrompt = require("ui.downloadprompt")
 local HttpUtil = require("util.httputil")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
+local HttpDownload = require("util.httpdownload")
 local Sources = require("api.sources")
 local CoverCache = require("cache.covercache")
 local Errors = require("util.errors")
@@ -94,16 +95,28 @@ function Downloader:untrack(id)
     end
 end
 
--- start curl downloading the book in the background, as transfer says (see _startDownload), returning whether it
--- started, and why not if it didn't
+-- start curl downloading the book in the background, as transfer says (see _startDownload), or where curl can't
+-- (see CurlUtil.canFetch), KOReader's own HTTP, as a device may have no curl at all, as a Kobo can (#63), which
+-- failed every download. returns whether it started, and why not if it didn't
 local function startCurl(transfer)
-    local pid, exit_file_or_err =
-        CurlUtil.startDownload(transfer.download_url, transfer.part_path, transfer.tried_proxy, nil, {
+    local pid, exit_file_or_err
+    if CurlUtil.canFetch() then
+        pid, exit_file_or_err =
+            CurlUtil.startDownload(transfer.download_url, transfer.part_path, transfer.tried_proxy, nil, {
+                headers_file = transfer.headers_file,
+                stall_time = DOWNLOAD_STALL_TIME,
+                -- so that curl carries on from where a download that stalled got to, rather than starting it again
+                resume = transfer.resume,
+            })
+    else
+        -- (from the beginning, as KOReader's HTTP can't carry on from what's there)
+        LogUtil.info("downloading with KOReader's own HTTP, as curl can't")
+        pid, exit_file_or_err = HttpDownload.start(transfer.download_url, transfer.part_path, {
             headers_file = transfer.headers_file,
             stall_time = DOWNLOAD_STALL_TIME,
-            -- so that curl carries on from where a download that stalled got to, rather than starting it again
-            resume = transfer.resume,
+            proxy = transfer.tried_proxy and os.getenv("PROXY_URL") or nil,
         })
+    end
     if not pid then
         return false, exit_file_or_err
     end
@@ -120,6 +133,7 @@ local function pauseTransfer(transfer, why)
     transfer.paused = true
     -- (whose exit code isn't looked at)
     CurlUtil.killPid(transfer.pid)
+    HttpDownload.collect(transfer.pid)
     transfer.pid = nil
     LogUtil.info(
         string.format(
@@ -470,6 +484,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
             return
         end
         CurlUtil.killPid(transfer.pid)
+        HttpDownload.collect(transfer.pid)
         FileUtil.removeFile(part_path)
         FileUtil.removeFile(headers_file)
         progress_widget:close()
@@ -482,6 +497,8 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         progress_widget:close()
         Downloader:untrack(book.id)
         FileUtil.removeFile(headers_file)
+        -- where it was KOReader's own process that downloaded it, rather than curl
+        HttpDownload.collect(transfer.pid)
         if ok and not os.rename(part_path, filepath) then
             LogUtil.warn("could not move the downloaded book from", part_path, "to", filepath)
             FileUtil.removeFile(part_path)

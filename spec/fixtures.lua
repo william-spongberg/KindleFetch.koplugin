@@ -17,6 +17,17 @@ function fixtures.fakeWeb(helper)
     helper.useLiveHttp()
     local HttpUtil = require("util.httputil")
     local fetchLive = HttpUtil.getBody
+    -- live, with luasocket (see helper.useLiveHttp), whatever curl can do in the spec
+    local function fetchWithLuasocket(url, opts)
+        local CurlUtil = require("util.curlutil")
+        local canFetch = CurlUtil.canFetch
+        CurlUtil.canFetch = function()
+            return false
+        end
+        local body, err, status = fetchLive(url, opts)
+        CurlUtil.canFetch = canFetch
+        return body, err, status
+    end
     HttpUtil.getBody = function(url, opts)
         table.insert(web.fetched, url)
         table.insert(web.requests, { url = url, form = opts and opts.form, cookies = opts and opts.cookies })
@@ -30,10 +41,10 @@ function fixtures.fakeWeb(helper)
             if web.pages[url] then
                 return web.pages[url]
             end
-            return fetchLive(url)
+            return fetchWithLuasocket(url)
         end
         if web.live then
-            return fetchLive(url, opts)
+            return fetchWithLuasocket(url, opts)
         end
         local page, err, status = web.pages[url], nil, nil
         if type(page) == "function" then

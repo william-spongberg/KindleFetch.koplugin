@@ -19,7 +19,7 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
 - **Looking Through Results**: Show only the books found with some text in their title, authors or file type, without searching again
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders until each one arrives; tap a cover in the download prompt to see it full size
 - **Download Progress**: Visual download progress bar with real-time file size information, saying what it's waiting for until the book starts to arrive, and when the download has stalled
-- **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes, including when the device is powered off or restarted, or its storage is shared over USB
+- **Background Downloads**: Downloads run in the background using curl, or where there's no curl that can (such as on a Kobo, which may have none at all), KOReader's own HTTP in a process of its own, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes, including when the device is powered off or restarted, or its storage is shared over USB
 - **Staying Awake**: Keeps the device from going to sleep while books download, as that turns Wi-Fi off: no standby between taps, and no suspending while it isn't used (by KOReader's AutoSuspend, or a Kindle's own screensaver), each put back as it was once the last download is over
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch for Library Genesis, or Kindle Fetch: search Internet Archive or Z-Library, in KOReader's gesture manager)
@@ -198,6 +198,7 @@ kindlefetch.koplugin/
     ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
     ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from
     ├── guard.lua              # Runs what KOReader runs later (scheduled tasks, Trapper's functions, event handlers), catching errors, logging where they happened and cleaning up
+    ├── httpdownload.lua       # Downloads books and covers with KOReader's own HTTP in a process of its own, where curl can't, followed and stopped as curl's downloads are
     ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback; posts forms and sends cookies, giving them to curl in a file rather than on its command line; downloads files with curl, or KOReader's own HTTP where curl can't connect
     ├── fileutil.lua           # File operations (size, reading, writing and deleting files, listing folders) and directory checks
     ├── stringutil.lua         # String utilities (trimming, validation, cleaning titles and file names, HTML entity conversion, checking web addresses)

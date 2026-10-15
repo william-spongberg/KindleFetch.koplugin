@@ -5,6 +5,7 @@ local UIManager = require("ui/uimanager")
 local Event = require("ui/event")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
+local HttpDownload = require("util.httpdownload")
 local LogUtil = require("util.logutil")
 local Guard = require("util.guard")
 
@@ -203,6 +204,8 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_progress
     local results = CurlUtil.getTransferResults(results_file)
     FileUtil.removeFile(config_file)
     FileUtil.removeFile(results_file)
+    -- where it was KOReader's own process that downloaded them, rather than curl
+    HttpDownload.collect(pid)
 
     -- keep the covers that downloaded, removing any partial files left by ones that failed
     local downloaded = downloadedPaths(results, filepaths, exit_code)
@@ -230,11 +233,22 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_progress
     on_done(downloaded)
 end
 
+-- with curl, or where curl can't (see CurlUtil.canFetch), KOReader's own HTTP, one after another, as a device may have
+-- no curl at all, as a Kobo can (#63), which left every cover a placeholder
 local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs, on_progress, on_done)
-    local pid, exit_file, config_file, err =
-        CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, true, parallel_jobs, false, 15, {
+    local pid, exit_file, config_file, err
+    if CurlUtil.canFetch() then
+        pid, exit_file, config_file, err =
+            CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, true, parallel_jobs, false, 15, {
+                stall_time = COVER_STALL_TIME,
+            })
+    else
+        pid, exit_file, config_file, err = HttpDownload.startMultiple(download_urls, filepaths, {
             stall_time = COVER_STALL_TIME,
+            max_time = COVER_MAX_TIME,
+            proxy = use_proxy and os.getenv("PROXY_URL") or nil,
         })
+    end
     if not pid then
         LogUtil.warn("could not start curl to download", #download_urls, "covers:", err)
         on_done({})

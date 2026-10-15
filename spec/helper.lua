@@ -409,6 +409,28 @@ local function createStubs(state)
                 end)
             )
         end,
+        -- KOReader runs what it's given in a process of its own; here it's run straight away, as if it had finished
+        -- by the time it's checked on, keeping each one's pid in state.subprocesses (or failing to start, as fork
+        -- does, when state.fork_fails is set)
+        runInSubProcess = function(fn)
+            if state.fork_fails then
+                return false, "fork failed: Resource temporarily unavailable"
+            end
+            -- (above any pid Linux gives, so none is taken to be running)
+            local pid = 5000000 + #state.subprocesses
+            table.insert(state.subprocesses, pid)
+            fn(pid)
+            return pid
+        end,
+        -- whether a process has finished, collecting it, which they all have here, unless listed in
+        -- state.subprocesses_running
+        isSubProcessDone = function(pid)
+            if state.subprocesses_running[pid] then
+                return false
+            end
+            state.subprocesses_collected[pid] = true
+            return true
+        end,
     }
 
     stubs.inputdialog = {
@@ -782,6 +804,9 @@ function helper.reset()
         },
         lipc = {},
         standby_prevented = 0,
+        subprocesses = {},
+        subprocesses_running = {},
+        subprocesses_collected = {},
         executed = {},
         popen_calls = {},
         shown = {},
