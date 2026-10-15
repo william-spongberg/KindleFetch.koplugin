@@ -1,4 +1,5 @@
 local LogUtil = require("util.logutil")
+local ProxyUtil = require("util.proxyutil")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local VersionUtil = require("util.versionutil")
@@ -360,18 +361,6 @@ function CurlUtil.getExitCode(exit_file)
     return exit_code
 end
 
-function CurlUtil.getProxyFlag(use_proxy)
-    local proxy_flag = ""
-    if use_proxy then
-        local proxy_url = os.getenv("PROXY_URL")
-        if proxy_url and proxy_url ~= "" then
-            proxy_flag = "-x " .. CurlUtil.shellQuote(proxy_url)
-        end
-    end
-
-    return proxy_flag
-end
-
 -- start cmd in the background (see echoPid), returning its pid, or nil and Errors.START_FAILED
 function CurlUtil.spawnCurlPid(cmd)
     -- execute command
@@ -442,8 +431,21 @@ function CurlUtil.enableParallel(curl_cmd, max_parallel)
     return cmd
 end
 
-function CurlUtil.applyProxy(curl_cmd)
-    return string.format("%s %s", curl_cmd, CurlUtil.getProxyFlag(true))
+-- curl_cmd, going through the proxy (see ProxyUtil.get, its backup when use_backup is set), which is given to curl in
+-- a config file (see createConfigFile), rather than on its command line, where any program on the device can read it,
+-- as it can have a password in it. the config file is returned too, to remove once curl has read it. without a proxy
+-- (or where the file can't be written, when curl goes without, saying so), it's curl_cmd as it was
+function CurlUtil.applyProxy(curl_cmd, use_backup)
+    local proxy = ProxyUtil.get(use_backup)
+    if not proxy then
+        return curl_cmd
+    end
+    local config_file = CurlUtil.createConfigFile({ { "proxy", proxy } })
+    if not config_file then
+        LogUtil.warn("could not give curl the proxy, so it's going without")
+        return curl_cmd
+    end
+    return string.format("%s -K %s", curl_cmd, CurlUtil.shellQuote(config_file)), config_file
 end
 
 -- a file curl can read more options from (see fetchCommand), for what mustn't be on its command line, where any
@@ -473,7 +475,8 @@ end
 -- site didn't answer) and curl's own exit code, e.g. "200 0". unlike a download, a page with an error status is
 -- kept, as what it says is of use. answer_timeout and page_timeout are how long, in seconds, the site can take to
 -- answer and then to send the whole page. config_file optionally gives curl more options (see createConfigFile),
--- and is removed once curl has read it and finished, even if what's waiting for it has been called off
+-- and is removed once curl has read it and finished, even if what's waiting for it has been called off. it goes
+-- through the proxy, the backup where use_proxy is set (see applyProxy)
 function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_timeout, config_file)
     checkCurl()
 
@@ -485,16 +488,23 @@ function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_t
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, url)
     cmd = string.format("%s --connect-timeout %d --max-time %d", cmd, answer_timeout, page_timeout)
-    if use_proxy then
-        cmd = CurlUtil.applyProxy(cmd)
+    -- each config file curl is given, removed once it has finished with them
+    local config_files = {}
+    local proxy_config
+    cmd, proxy_config = CurlUtil.applyProxy(cmd, use_proxy)
+    if proxy_config then
+        table.insert(config_files, CurlUtil.shellQuote(proxy_config))
     end
     if config_file then
+        cmd = string.format("%s -K %s", cmd, CurlUtil.shellQuote(config_file))
+        table.insert(config_files, CurlUtil.shellQuote(config_file))
+    end
+    if #config_files > 0 then
         return string.format(
-            '(%s -K %s -w %s; exit_code=$?; rm -f %s; echo " $exit_code") 2>/dev/null',
+            '(%s -w %s; exit_code=$?; rm -f %s; echo " $exit_code") 2>/dev/null',
             cmd,
-            CurlUtil.shellQuote(config_file),
             CurlUtil.shellQuote("%{http_code}"),
-            CurlUtil.shellQuote(config_file)
+            table.concat(config_files, " ")
         )
     end
 
@@ -534,11 +544,13 @@ end
 -- run cmd in a shell that saves its exit code to exit_file once it has finished. the shell's pid is the one a
 -- background download is followed and stopped by (see echoPid and killPid), so it passes being stopped on to cmd,
 -- which would otherwise carry on by itself, writing to its file, and waits for cmd to stop before saving its exit code
-function CurlUtil.saveExitCode(cmd, exit_file)
+function CurlUtil.saveExitCode(cmd, exit_file, config_file)
     local command = string.format(
         "(trap 'kill $c 2>/dev/null' TERM; %s & c=$!; wait $c; s=$?; "
-            .. "if kill -0 $c 2>/dev/null; then wait $c; s=$?; fi; echo $s > %s)",
+            .. "if kill -0 $c 2>/dev/null; then wait $c; s=$?; fi; %secho $s > %s)",
         cmd,
+        -- (the one curl was given its options in, once it has finished with it)
+        config_file and string.format("rm -f %s; ", CurlUtil.shellQuote(config_file)) or "",
         CurlUtil.shellQuote(exit_file)
     )
     command = string.format("%s >/dev/null 2>&1", command) -- do not print errors to terminal
@@ -555,7 +567,8 @@ end
 -- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize),
 -- opts.stall_time gives up on a download once nothing has arrived for that many seconds, and opts.resume has curl
 -- carry on from what's already in filepath, including when it tries again after a download stops partway (where
--- the site says it can), rather than starting again from the beginning
+-- the site says it can), rather than starting again from the beginning. it goes through the proxy, the backup where
+-- use_proxy is set (see applyProxy)
 local function downloadCommand(download_url, filepath, use_proxy, max_time, opts)
     opts = opts or {}
 
@@ -576,12 +589,11 @@ local function downloadCommand(download_url, filepath, use_proxy, max_time, opts
     if opts.stall_time then
         cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
-    if use_proxy then
-        cmd = CurlUtil.applyProxy(cmd)
-    end
+    local proxy_config
+    cmd, proxy_config = CurlUtil.applyProxy(cmd, use_proxy)
 
     local exit_file = CurlUtil.createExitFile()
-    cmd = CurlUtil.saveExitCode(cmd, exit_file)
+    cmd = CurlUtil.saveExitCode(cmd, exit_file, proxy_config)
 
     -- without the link, which can carry a temporary key
     LogUtil.debug("curl downloading from", LogUtil.site(download_url), "to", filepath)
@@ -660,6 +672,11 @@ function CurlUtil.downloadMultiple(
         return (value:gsub("\\", "\\\\"):gsub('"', '\\"'))
     end
     local lines = {}
+    -- the proxy to go through (see ProxyUtil.get), with the files, rather than on curl's command line (see applyProxy)
+    local proxy = ProxyUtil.get(use_proxy)
+    if proxy and not proxy:find("%c") then
+        table.insert(lines, string.format('proxy = "%s"\n', quote(proxy)))
+    end
     for i, download_url in ipairs(download_urls) do
         -- an address with a line break in it would add lines of its own to the config file, so leave it out
         if StringUtil.isSafeUrl(download_url) and not filepaths[i]:find("%c") then
@@ -703,9 +720,6 @@ function CurlUtil.downloadMultiple(
         cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
     cmd = CurlUtil.enableParallel(cmd, num_parallel_jobs)
-    if use_proxy then
-        cmd = CurlUtil.applyProxy(cmd)
-    end
     -- write each file's result, as some may download when others fail. where curl can, to its stderr, which isn't
     -- buffered like its stdout, so each file's result is there as soon as it has downloaded (and been written out
     -- in full), rather than once they all have

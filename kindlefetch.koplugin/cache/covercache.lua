@@ -7,6 +7,7 @@ local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
 local HttpDownload = require("util.httpdownload")
 local FileCheck = require("util.filecheck")
+local ProxyUtil = require("util.proxyutil")
 local LogUtil = require("util.logutil")
 local Guard = require("util.guard")
 
@@ -47,10 +48,9 @@ local function ensureCacheDir()
     lfs.mkdir(CACHE_DIR)
 end
 
--- covers that fail to download are retried through PROXY_URL, like searches and books
+-- covers that fail to download are retried through the backup proxy (see ProxyUtil), like searches and books
 local function hasProxy()
-    local proxy_url = os.getenv("PROXY_URL")
-    return proxy_url ~= nil and proxy_url ~= ""
+    return ProxyUtil.backup() ~= nil
 end
 
 -- remove the covers that older versions left behind, having forgotten them once the cache was full without
@@ -264,7 +264,7 @@ local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs
         pid, exit_file, config_file, err = HttpDownload.startMultiple(download_urls, filepaths, {
             stall_time = COVER_STALL_TIME,
             max_time = COVER_MAX_TIME,
-            proxy = use_proxy and os.getenv("PROXY_URL") or nil,
+            proxy = ProxyUtil.get(use_proxy),
         })
     end
     if not pid then

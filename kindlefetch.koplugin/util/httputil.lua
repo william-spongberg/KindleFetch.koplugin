@@ -6,6 +6,7 @@ local Trapper = require("ui/trapper")
 local CurlUtil = require("util.curlutil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
+local ProxyUtil = require("util.proxyutil")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
@@ -95,8 +96,9 @@ end
 
 -- fetch a page with curl, which asks for it compressed, and doesn't hold KOReader up while it waits when called
 -- from inside Trapper:wrap. the form and cookies (see getBody) are passed to curl in a file, rather than on its
--- command line, where any program on the device can read them
-local function requestBodyWithCurl(request_url, use_proxy, opts)
+-- command line, where any program on the device can read them, as the proxy is (see CurlUtil.applyProxy, the backup
+-- when use_backup is set)
+local function requestBodyWithCurl(request_url, use_backup, opts)
     local config_file
     if opts.form or opts.cookies then
         -- with curl keeping the cookies it's sent, as a site's check that it isn't a bot can answer with a cookie,
@@ -116,7 +118,7 @@ local function requestBodyWithCurl(request_url, use_proxy, opts)
     end
 
     local page_file = CurlUtil.createPageFile()
-    local cmd = CurlUtil.fetchCommand(request_url, page_file, use_proxy, ANSWER_TIMEOUT, PAGE_TIMEOUT, config_file)
+    local cmd = CurlUtil.fetchCommand(request_url, page_file, use_backup, ANSWER_TIMEOUT, PAGE_TIMEOUT, config_file)
 
     local completed, output
     local trap_widget = HttpUtil.getTrapWidget()
@@ -169,8 +171,9 @@ local function setCookie(headers)
     return type(set_cookie) == "string" and set_cookie:match("^%s*([^;,%s]+=[^;,]*)") or nil
 end
 
--- fetch a page with KOReader's own HTTP, which holds KOReader up until it has
-local function requestBodyWithKOReader(request_url, proxy_url, opts)
+-- fetch a page with KOReader's own HTTP, which holds KOReader up until it has, going through the proxy (see
+-- ProxyUtil.get, the backup when use_backup is set)
+local function requestBodyWithKOReader(request_url, use_backup, opts)
     -- set through KOReader, as https requests ignore luasocket's own timeout and wait a minute instead
     socketutil:set_timeout(ANSWER_TIMEOUT, PAGE_TIMEOUT)
 
@@ -196,7 +199,7 @@ local function requestBodyWithKOReader(request_url, proxy_url, opts)
             url = url,
             method = form_body and "POST" or "GET",
             source = form_body and ltn12.source.string(form_body),
-            proxy = proxy_url,
+            proxy = ProxyUtil.get(use_backup),
             sink = socketutil.table_sink(response_body),
             headers = request_headers,
             redirect = not (opts.form or opts.cookies),
@@ -230,13 +233,15 @@ end
 local TLS_FALLBACKS = 3
 local tls_fallbacks = 0
 
-function HttpUtil.requestBody(request_url, proxy_url, opts)
+-- fetch a page with curl, or KOReader's own HTTP where curl can't, going through the proxy (see ProxyUtil.get, the
+-- backup when use_backup is set)
+function HttpUtil.requestBody(request_url, use_backup, opts)
     opts = opts or {}
     if not CurlUtil.canFetch() then
-        return requestBodyWithKOReader(request_url, proxy_url, opts)
+        return requestBodyWithKOReader(request_url, use_backup, opts)
     end
 
-    local body, err, status = requestBodyWithCurl(request_url, proxy_url ~= nil, opts)
+    local body, err, status = requestBodyWithCurl(request_url, use_backup, opts)
     if body or not CurlUtil.isTlsFailure(err) then
         if body then
             tls_fallbacks = 0
@@ -251,7 +256,7 @@ function HttpUtil.requestBody(request_url, proxy_url, opts)
         "securely:",
         err .. ", so trying KOReader's own HTTP"
     )
-    local fetched, fetch_err, fetch_status = requestBodyWithKOReader(request_url, proxy_url, opts)
+    local fetched, fetch_err, fetch_status = requestBodyWithKOReader(request_url, use_backup, opts)
     if not fetched then
         return nil, err, status
     end
@@ -277,7 +282,7 @@ function HttpUtil.getBody(url, opts)
     else
         LogUtil.debug("fetching", url)
     end
-    local body, err, status = HttpUtil.requestBody(url, nil, opts)
+    local body, err, status = HttpUtil.requestBody(url, false, opts)
     if body then
         LogUtil.debug("fetched", #body, "bytes, HTTP", status, "from", url)
         return body, nil, status
@@ -288,11 +293,10 @@ function HttpUtil.getBody(url, opts)
     end
     LogUtil.warn("could not fetch", url, "error:", err)
 
-    -- use proxy as backup (without logging its address, which may include a password)
-    local proxy_url = os.getenv("PROXY_URL")
-    if proxy_url and proxy_url ~= "" then
+    -- through the backup proxy (without logging its address, which may include a password)
+    if ProxyUtil.backup() then
         LogUtil.info("retrying through the proxy")
-        body, err, status = HttpUtil.requestBody(url, proxy_url, opts)
+        body, err, status = HttpUtil.requestBody(url, true, opts)
         if body then
             return body, nil, status
         end

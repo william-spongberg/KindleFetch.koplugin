@@ -31,6 +31,18 @@ describe("SettingsPage", function()
         error("no menu item containing " .. text)
     end
 
+    -- the button in a dialog with the given text
+    local function button(dialog, text)
+        for _, row in ipairs(dialog.buttons) do
+            for _, b in ipairs(row) do
+                if b.text == text then
+                    return b
+                end
+            end
+        end
+        error("no button " .. text)
+    end
+
     before_each(function()
         helper.reset()
         data_dir = helper.tmpdir("data")
@@ -58,6 +70,7 @@ describe("SettingsPage", function()
             "Check for Updates Automatically: ☑",
             "Keep Searches For: 14 days",
             "Keep Mirrors For: 7 days",
+            "HTTP Proxy: Off",
             "Clear Cache",
         }, itemTexts(lastMenu()))
         assert.are.equal("Kindle Fetch Settings", lastMenu().title)
@@ -203,6 +216,57 @@ describe("SettingsPage", function()
 
             assert.are.equal(1, Settings:getMirrorCacheExpiryDays())
             assert.are.equal("Keep Mirrors For: 1 day", lastMenu().item_table[9].text)
+        end)
+    end)
+
+    -- KOReader's, which Kindle Fetch goes through for everything
+    describe("HTTP proxy", function()
+        it("turns KOReader's on, saying which it is, without who it's logged into as", function()
+            SettingsPage:showSettings()
+            tap("HTTP Proxy")
+            local dialog = helper.lastShown()
+            assert.are.equal("http://", dialog.input)
+            assert.is_true(dialog.keyboard_shown)
+            assert.is_false(button(dialog, "Turn off").enabled)
+
+            dialog.input_text = " http://reader:secret@proxy.example:8080 "
+            button(dialog, "Turn on").callback()
+            assert.is_true(helper.wasClosed(dialog))
+            assert.are.equal("http://reader:secret@proxy.example:8080", require("socket.http").PROXY)
+            assert.is_true(helper.state.reader_settings.http_proxy_enabled)
+            assert.are.equal("HTTP Proxy: http://proxy.example:8080", lastMenu().item_table[10].text)
+            for _, log in ipairs(helper.state.logs) do
+                for i = 3, #log do
+                    assert.is_nil(tostring(log[i]):find("secret", 1, true))
+                end
+            end
+        end)
+
+        it("turns it off, keeping its address for next time", function()
+            require("ui/network/manager"):setHTTPProxy("http://proxy.example:8080")
+            SettingsPage:showSettings()
+            assert.are.equal("HTTP Proxy: http://proxy.example:8080", lastMenu().item_table[10].text)
+            tap("HTTP Proxy")
+            local dialog = helper.lastShown()
+            assert.are.equal("http://proxy.example:8080", dialog.input)
+
+            button(dialog, "Turn off").callback()
+            assert.is_nil(require("socket.http").PROXY)
+            assert.is_false(helper.state.reader_settings.http_proxy_enabled)
+            assert.are.equal("http://proxy.example:8080", helper.state.reader_settings.http_proxy)
+            assert.are.equal("HTTP Proxy: Off", lastMenu().item_table[10].text)
+        end)
+
+        it("only turns on what's an address", function()
+            SettingsPage:showSettings()
+            tap("HTTP Proxy")
+            local dialog = helper.lastShown()
+            dialog.input_text = "proxy.example:8080"
+            button(dialog, "Turn on").callback()
+
+            assert.is_false(helper.wasClosed(dialog))
+            assert.is_nil(require("socket.http").PROXY)
+            assert.are.equal("Enter the proxy's address, e.g. http://proxy.example:8080", helper.lastNotification())
         end)
     end)
 

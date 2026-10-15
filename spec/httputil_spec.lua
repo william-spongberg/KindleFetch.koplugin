@@ -154,6 +154,15 @@ describe("HttpUtil", function()
         end
     end)
 
+    -- where it's turned on, as for KOReader's own requests
+    it("goes through KOReader's HTTP proxy", function()
+        helper.stubs.http.PROXY = "http://koreader.example:3128"
+        respond({ "<html>ok</html>", 1, 200 })
+
+        assert.are.equal("<html>ok</html>", HttpUtil.getBody("https://libgen.example"))
+        assert.are.equal("http://koreader.example:3128", requests[1].proxy)
+    end)
+
     it("does not use a proxy when PROXY_URL is not set", function()
         helper.state.env.PROXY_URL = false
         respond({ "", nil, "connection refused" })
@@ -385,7 +394,11 @@ describe("HttpUtil", function()
         it("retries through PROXY_URL when the direct request fails", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"
             curlAnswers(function(cmd)
-                if cmd:find("-x 'http://proxy.example:8080'", 1, true) then
+                -- given to curl in a file (see CurlUtil.applyProxy)
+                local config_file = cmd:match("%-K '([^']+)'")
+                if
+                    config_file and helper.readFile(config_file):find('proxy = "http://proxy.example:8080"', 1, true)
+                then
                     return "<html>via proxy</html>", 200
                 end
                 return nil, "000", 7

@@ -10,6 +10,11 @@ local UrlCache = require("cache.urlcache")
 local CoverCache = require("cache.covercache")
 local ZlibAccount = require("api.zlibaccount")
 local ZlibLogin = require("ui.zliblogin")
+local InputDialog = require("ui/widget/inputdialog")
+local NetworkMgr = require("ui/network/manager")
+local LogUtil = require("util.logutil")
+local ProxyUtil = require("util.proxyutil")
+local StringUtil = require("util.stringutil")
 local T = require("ffi/util").template
 local _ = require("gettext")
 local N_ = _.ngettext
@@ -138,6 +143,7 @@ function SettingsPage:settingsItems()
     local check_for_updates = KindleFetchSettings:getCheckForUpdates()
     local search_cache_days = KindleFetchSettings:getSearchCacheExpiryDays()
     local mirror_cache_days = KindleFetchSettings:getMirrorCacheExpiryDays()
+    local proxy = ProxyUtil.koreader()
 
     return {
         {
@@ -205,6 +211,13 @@ function SettingsPage:settingsItems()
             end,
         },
         {
+            -- KOReader's, which Kindle Fetch goes through for everything (see ProxyUtil)
+            text = T(_("HTTP Proxy: %1"), proxy and ProxyUtil.describe(proxy) or _("Off")),
+            callback = function()
+                this:changeProxy()
+            end,
+        },
+        {
             text = _("Clear Cache"),
             callback = function()
                 this:clearCache()
@@ -250,6 +263,58 @@ function SettingsPage:changeCacheExpiry(title, current_days, save)
 
     menu = self:newMenu(title, items)
     UIManager:show(menu)
+end
+
+-- set KOReader's HTTP proxy, as its network settings do, which Kindle Fetch goes through for everything, as KOReader
+-- does (see ProxyUtil), or turn it off
+function SettingsPage:changeProxy()
+    local this = self
+    local dialog
+    dialog = InputDialog:new {
+        title = _("HTTP Proxy"),
+        description = _("Kindle Fetch and KOReader go through it, as set in KOReader's network settings too."),
+        input = G_reader_settings:readSetting("http_proxy") or "http://",
+        input_hint = "http://proxy.example:8080",
+        buttons = {
+            {
+                {
+                    text = _("Cancel"),
+                    id = "close",
+                    callback = function()
+                        UIManager:close(dialog)
+                    end,
+                },
+                {
+                    text = _("Turn off"),
+                    enabled = ProxyUtil.koreader() ~= nil,
+                    callback = function()
+                        UIManager:close(dialog)
+                        NetworkMgr:setHTTPProxy(nil)
+                        LogUtil.info("turned KOReader's HTTP proxy off")
+                        this:refresh()
+                    end,
+                },
+                {
+                    text = _("Turn on"),
+                    is_enter_default = true,
+                    callback = function()
+                        local proxy = StringUtil.trim(dialog:getInputText())
+                        if not proxy:find("^%a[%w+.-]*://[^%s/]+") then
+                            NotifyUtil.info(_("Enter the proxy's address, e.g. http://proxy.example:8080"))
+                            return
+                        end
+                        UIManager:close(dialog)
+                        NetworkMgr:setHTTPProxy(proxy)
+                        -- (without who it's logged into as, which can have a password in it)
+                        LogUtil.info("turned KOReader's HTTP proxy on:", ProxyUtil.describe(proxy))
+                        this:refresh()
+                    end,
+                },
+            },
+        },
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
 end
 
 function SettingsPage:changeCheckForUpdates()

@@ -14,6 +14,16 @@ describe("CurlUtil", function()
         end
     end
 
+    -- the proxy a curl command was given in a config file, and the file
+    local function proxyGiven(cmd)
+        for config_file in cmd:gmatch("%-K '([^']+)'") do
+            local proxy = (helper.readFile(config_file) or ""):match('proxy = "(.-)"\n')
+            if proxy then
+                return proxy, config_file
+            end
+        end
+    end
+
     before_each(function()
         helper.reset()
         data_dir = helper.tmpdir("data")
@@ -181,14 +191,48 @@ describe("CurlUtil", function()
             assert.is_nil(cmd:find("--compressed", 1, true))
         end)
 
+        -- in a file, rather than on its command line, where any program on the device can read it, as it can have
+        -- a password in it
         it("goes through PROXY_URL when asked to", function()
+            helper.state.env.PROXY_URL = "http://user:secret@proxy.example:8080"
+            local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", true, 10, 60)
+
+            local proxy, config_file = proxyGiven(cmd)
+            assert.are.equal("http://user:secret@proxy.example:8080", proxy)
+            assert.is_nil(cmd:find("secret", 1, true))
+            -- removed once curl has finished with it
+            assert.matches("; rm -f '" .. config_file .. "'; ", cmd, 1, true)
+        end)
+
+        -- as KOReader's own HTTP does
+        it(
+            "goes through KOReader's HTTP proxy, where it's on, other than when asked to go through PROXY_URL",
+            function()
+                helper.stubs.http.PROXY = "http://koreader.example:3128"
+                helper.state.env.PROXY_URL = "http://proxy.example:8080"
+
+                local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", false, 10, 60)
+                assert.are.equal("http://koreader.example:3128", proxyGiven(cmd))
+                cmd = CurlUtil.fetchCommand("https://libgen.example", "page", true, 10, 60)
+                assert.are.equal("http://proxy.example:8080", proxyGiven(cmd))
+            end
+        )
+
+        it("goes without a proxy where there's none", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"
-            assert.matches(
-                "--max-time 60 -x 'http://proxy.example:8080' -w ",
-                CurlUtil.fetchCommand("https://libgen.example", "page", true, 10, 60),
-                1,
-                true
-            )
+            local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", false, 10, 60)
+            assert.is_nil(cmd:find("-K", 1, true))
+            assert.are.same({}, helper.readDir(data_dir .. "/settings/tmp"))
+        end)
+
+        -- one for the proxy, and one for the rest, e.g. a form to post
+        it("gives curl the proxy along with the other options it's given in a file", function()
+            helper.stubs.http.PROXY = "http://koreader.example:3128"
+            local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", false, 10, 60, "options.txt")
+
+            local _, config_file = proxyGiven(cmd)
+            assert.matches(" -K 'options.txt' -w ", cmd, 1, true)
+            assert.matches("; rm -f '" .. config_file .. "' 'options.txt'; ", cmd, 1, true)
         end)
 
         it("fetches into a file of its own in the plugin's tmp dir", function()
@@ -437,19 +481,6 @@ describe("CurlUtil", function()
         end)
     end)
 
-    describe("getProxyFlag", function()
-        it("uses PROXY_URL when asked to", function()
-            helper.state.env.PROXY_URL = "http://proxy.example:8080"
-            assert.are.equal("-x 'http://proxy.example:8080'", CurlUtil.getProxyFlag(true))
-            assert.are.equal("", CurlUtil.getProxyFlag(false))
-        end)
-
-        it("is empty without PROXY_URL", function()
-            helper.state.env.PROXY_URL = ""
-            assert.are.equal("", CurlUtil.getProxyFlag(true))
-        end)
-    end)
-
     it("builds a download command that saves curl's exit code", function()
         helper.state.env.PROXY_URL = "http://proxy.example:8080"
         helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
@@ -457,14 +488,20 @@ describe("CurlUtil", function()
         CurlUtil.download("https://libgen.example/get.php", path, true)
         local cmd = helper.state.executed[#helper.state.executed]
         local exit_file = cmd:match("echo %$s > '([^']+)'")
+        local _, config_file = proxyGiven(cmd)
 
+        -- removing the file curl was given the proxy in once it has finished
         assert.are.equal(
             "(trap 'kill $c 2>/dev/null' TERM; curl -sL -f -o '"
                 .. path
                 .. "' 'https://libgen.example/get.php' "
                 .. "-A 'Mozilla/5.0' -e 'https://libgen.example/' --retry 2 --retry-delay 2 --connect-timeout 15 "
-                .. "-x 'http://proxy.example:8080' & c=$!; wait $c; s=$?; if kill -0 $c 2>/dev/null; then wait $c; "
-                .. "s=$?; fi; echo $s > '"
+                .. "-K '"
+                .. config_file
+                .. "' & c=$!; wait $c; s=$?; if kill -0 $c 2>/dev/null; then wait $c; "
+                .. "s=$?; fi; rm -f '"
+                .. config_file
+                .. "'; echo $s > '"
                 .. exit_file
                 .. "') >/dev/null 2>&1",
             cmd
@@ -567,7 +604,7 @@ describe("CurlUtil", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
 
             assert.is_true(CurlUtil.download("https://libgen.example/get.php", filepath, true))
-            assert.matches("-x 'http://proxy.example:8080'", helper.state.executed[#helper.state.executed], 1, true)
+            assert.are.equal("http://proxy.example:8080", proxyGiven(helper.state.executed[#helper.state.executed]))
         end)
 
         -- which was said to have failed with "(curl exit code nil)"
@@ -711,6 +748,18 @@ describe("CurlUtil", function()
                 helper.readFile(config_file)
             )
             assert.is_truthy(helper.logged("warn", "^left out a download whose address can't be used"))
+        end)
+
+        -- with them, rather than on curl's command line
+        it("gives curl the proxy in its config file", function()
+            helper.stubCommand("& echo $!", "4242\n")
+            helper.stubs.http.PROXY = "http://koreader.example:3128"
+            helper.state.env.PROXY_URL = "http://proxy.example:8080"
+
+            local _, _, config_file = CurlUtil.downloadMultiple(urls, paths, false, true, 4, false, 15)
+            assert.matches('^proxy = "http://koreader.example:3128"\nurl = ', helper.readFile(config_file))
+            _, _, config_file = CurlUtil.downloadMultiple(urls, paths, true, true, 4, false, 15)
+            assert.matches('^proxy = "http://proxy.example:8080"\nurl = ', helper.readFile(config_file))
         end)
 
         -- the next page's covers are fetched once these have finished, and older curls only say once they all have
