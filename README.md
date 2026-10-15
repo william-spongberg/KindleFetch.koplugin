@@ -10,7 +10,7 @@ KindleFetch integrates Library Genesis, Internet Archive, Project Gutenberg and 
 
 ## Features
 
-- **Four sites, searched at once**: Library Genesis, Internet Archive, Project Gutenberg and Z-Library (with your account), each site's books shown as soon as it finds them
+- **Four sites, searched at once**: Z-Library (with your account), Library Genesis, Internet Archive and Project Gutenberg, each site's books shown as soon as it finds them
 - **Narrower searches**: search only titles, authors or ISBNs (Library Genesis and Internet Archive)
 - **Filters**: show only books in the languages, file types and book types you choose, and look through the results for a title or author
 - **Search from your books**: find more by a book's author, or search for text you've highlighted
@@ -42,7 +42,7 @@ KindleFetch integrates Library Genesis, Internet Archive, Project Gutenberg and 
 
 Search can also be opened from a gesture, in KOReader's gesture manager: Kindle Fetch, for the sites ticked last, or Kindle Fetch: search Internet Archive or Z-Library, for that site.
 
-Z-Library can only be searched with an account: the first time it's ticked, Kindle Fetch asks for its email and password, and keeps the key Z-Library logs it in with rather than your password (you can log out in the settings). Z-Library limits how many books an account can download a day; once they've all been downloaded, Kindle Fetch says so, rather than asking for another.
+Z-Library can only be searched with an account, so it's left out of searches until you log in: tap it in Sites, where it says (log in), and Kindle Fetch asks for its email and password, and keeps the key Z-Library logs it in with rather than your password (you can log out in the settings). Z-Library limits how many books an account can download a day; once they've all been downloaded, Kindle Fetch says so, rather than asking for another.
 
 <img width="350" alt="Logging in to Z-Library, then searching it, and downloading and reading a book from it" src="docs/gifs/z-library.gif" />
 
@@ -54,7 +54,7 @@ Project Gutenberg has over 75,000 free ebooks, mostly older books whose US copyr
 
 <img width="350" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" /> <img width="350" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
-1. Enter a book title, author, or keyword in the search box, or tap Recent to search again for one of your last 10 searches. Tap Sites to tick the sites to search: they're searched at once, and each one's books are shown as soon as it has found them, with the site each was found on, while the sites still being searched are listed at the end. On Library Genesis and Internet Archive, Search in narrows the search down to the books' titles, authors or ISBNs. KOReader carries on while the sites answer; tap Cancel on the message saying it's searching to call the search off.
+1. Enter a book title, author, or keyword in the search box, or tap Recent to search again for one of your last 10 searches. Tap Sites to tick the sites to search (all of them, to begin with): they're searched at once, and each one's books are shown as soon as it has found them, with the site each was found on, while the sites still being searched are listed at the end. On Library Genesis and Internet Archive, Search in narrows the search down to the books' titles, authors or ISBNs. KOReader carries on while the sites answer; tap Cancel on the message saying it's searching to call the search off.
 
 <img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" /> <img width="350" alt="Message saying it's searching, with a button to cancel" src="docs/screenshots/04-searching.png" />
 

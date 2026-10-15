@@ -410,6 +410,12 @@ local function isTicked(sources, source)
     return false
 end
 
+-- whether the site can be searched now: one that needs an account (Z-Library) only once logged into, and it's left
+-- out of the search otherwise, though ticked, rather than asking to log in to it for every search
+local function canSearch(source)
+    return not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn()
+end
+
 -- the sites' names, as they're said together, e.g. "Library Genesis and Internet Archive"
 local function sitesName(sources)
     local names = {}
@@ -443,10 +449,17 @@ local function firstPages(sources)
     return pages
 end
 
--- what the search box's Sites button says: the sites ticked, or that they all are
+-- what the search box's Sites button says: the sites ticked, or that they all are, or all but one, which is shorter
 local function sitesText(sources)
     if #sources == #MultiSearch.SOURCES then
         return _("Sites: All")
+    end
+    if #sources == #MultiSearch.SOURCES - 1 and #sources > 1 then
+        for __, source in ipairs(MultiSearch.SOURCES) do
+            if not isTicked(sources, source) then
+                return T(_("Sites: All but %1"), Sources[source].NAME)
+            end
+        end
     end
     return T(_("Sites: %1"), sitesName(sources))
 end
@@ -463,6 +476,24 @@ local function describeFailures(one, several, failures, sites_searched)
         table.insert(lines, T(_("%1: %2"), Sources[failure.source].NAME, failure.err))
     end
     return T(several, table.concat(lines, "\n"))
+end
+
+-- the sites ticked in the search box that can be searched now (see canSearch), in the order they're offered
+function KindleFetch:sitesToSearch()
+    local sources = {}
+    for __, source in ipairs(self.sources) do
+        if canSearch(source) then
+            table.insert(sources, source)
+        end
+    end
+    return sources
+end
+
+-- what the search box's Sites button says: the sites it searches, or those ticked, where none of them can be searched
+-- yet (as when Z-Library is the only one, and isn't logged into)
+function KindleFetch:sitesButtonText()
+    local sources = self:sitesToSearch()
+    return sitesText(#sources > 0 and sources or self.sources)
 end
 
 -- open the search box, for searching the sites ticked in it: sources, where given (e.g. the site a gesture is for),
@@ -488,7 +519,7 @@ function KindleFetch:setupUI(query, scope, sources, search_now)
         -- which sites to search (see chooseSites)
         {
             {
-                text = sitesText(self.sources),
+                text = self:sitesButtonText(),
                 id = "sites",
                 callback = function()
                     this:chooseSites()
@@ -543,14 +574,17 @@ function KindleFetch:setupUI(query, scope, sources, search_now)
 end
 
 -- tick or untick which sites the search box searches, which it searches from then on (see
--- KindleFetchSettings:getSearchSources). Z-Library is logged into before it's ticked, as it can only be searched with
--- an account, and at least one site stays ticked
+-- KindleFetchSettings:getSearchSources). Z-Library shows as ticked only once logged into, as it can only be searched
+-- with an account (see canSearch), and is logged into on ticking it, and at least one site stays ticked
 function KindleFetch:chooseSites()
     local this = self
     local dialog
+    local function shownTicked(source)
+        return isTicked(this.sources, source) and canSearch(source)
+    end
     local function label(source)
-        local text = (isTicked(this.sources, source) and "✓ " or "") .. Sources[source].NAME
-        if Sources[source].NEEDS_LOGIN and not ZlibAccount:isLoggedIn() then
+        local text = (shownTicked(source) and "✓ " or "") .. Sources[source].NAME
+        if not canSearch(source) then
             return T(_("%1 (log in)"), text)
         end
         return text
@@ -570,7 +604,7 @@ function KindleFetch:chooseSites()
         end
         local sites_button = this.search_box and this.search_box.button_table:getButtonById("sites")
         if sites_button then
-            sites_button:setText(sitesText(sources), sites_button.width)
+            sites_button:setText(this:sitesButtonText(), sites_button.width)
             UIManager:setDirty(this.search_box, "ui")
         end
     end
@@ -582,8 +616,8 @@ function KindleFetch:chooseSites()
                 text = label(source),
                 id = source,
                 callback = function()
-                    local ticked = isTicked(this.sources, source)
-                    if ticked and #this.sources == 1 then
+                    local ticked = shownTicked(source)
+                    if ticked and #this:sitesToSearch() == 1 then
                         NotifyUtil.info(_("Choose at least one site to search"))
                         return
                     end
@@ -691,8 +725,9 @@ end
 -- results for these
 function KindleFetch:otherSites(query)
     local buttons = {}
+    local searched = self:sitesToSearch()
     for __, source in ipairs(MultiSearch.SOURCES) do
-        if not isTicked(self.sources, source) and (not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn()) then
+        if not isTicked(searched, source) and canSearch(source) then
             table.insert(buttons, {
                 text = T(_("Search %1"), Sources[source].NAME),
                 callback = function()
@@ -725,8 +760,9 @@ function KindleFetch:performSearch()
 
     -- nothing can be found with every language, file type or book type (where a site ticked has them) turned off.
     -- said like the other things the search box needs first, each in a sentence of its own, to be translated whole
+    local sources = self:sitesToSearch()
     local has_book_types = false
-    for __, source in ipairs(self.sources) do
+    for __, source in ipairs(sources) do
         has_book_types = has_book_types or Sources[source].HAS_BOOK_TYPES == true
     end
     local turned_off = #KindleFetchSettings:getPreferredLanguages() == 0 and "language"
@@ -742,17 +778,20 @@ function KindleFetch:performSearch()
         return
     end
 
-    -- e.g. once Z-Library has logged Kindle Fetch out (see ZlibAccount:request)
+    -- where the only sites ticked can't be searched until they're logged into, e.g. once Z-Library has logged Kindle
+    -- Fetch out (see ZlibAccount:request)
     local function searchOnceLoggedIn()
         self:performSearch()
     end
-    for __, source in ipairs(self.sources) do
-        if needsLogin(source, searchOnceLoggedIn) then
-            return
+    if #sources == 0 then
+        for __, source in ipairs(self.sources) do
+            if needsLogin(source, searchOnceLoggedIn) then
+                return
+            end
         end
     end
 
-    local pages = firstPages(self.sources)
+    local pages = firstPages(sources)
     if not self:canSearchNow(query, pages, function()
         self:performSearch()
     end) then
@@ -1343,7 +1382,7 @@ function KindleFetch:showResultsMenu()
         { text = _("Languages…"), change = SettingsPage.changeLanguages },
         { text = _("File types…"), change = SettingsPage.changeFileTypes },
     }
-    for __, source in ipairs(self.sources) do
+    for __, source in ipairs(self:sitesToSearch()) do
         if Sources[source].HAS_BOOK_TYPES then
             table.insert(changes, { text = _("Book types…"), change = SettingsPage.changeBookTypes })
             break
@@ -1378,7 +1417,7 @@ function KindleFetch:changeChoices(change)
         if self.books_menu then
             UIManager:close(self.books_menu)
         end
-        self:searchOnline(query, firstPages(self.sources))
+        self:searchOnline(query, firstPages(self:sitesToSearch()))
     end)
 end
 

@@ -20,8 +20,9 @@ local DEFAULTS = {
     download_dir = nil,
     -- and every file type and book type, set below
     preferred_languages = { "en" },
-    -- the sites the search box searches (see Sources), until others are ticked in it
-    search_sources = { "libgen" },
+    -- the sites the search box searches (see Sources), until others are ticked in it: all of them, Z-Library once
+    -- logged into
+    search_sources = { "zlib", "libgen", "archive", "gutenberg" },
 }
 
 -- available settings
@@ -708,7 +709,7 @@ function KindleFetchSettings:getSearchSources()
     for __, source in ipairs(KindleFetchSettings:getSetting("search_sources")) do
         table.insert(sources, source)
     end
-    return #sources > 0 and sources or { "libgen" }
+    return #sources > 0 and sources or { unpack(DEFAULTS.search_sources) }
 end
 function KindleFetchSettings:setSearchSources(sources)
     return KindleFetchSettings:setSetting("search_sources", sources)
