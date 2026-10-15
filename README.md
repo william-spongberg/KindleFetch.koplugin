@@ -19,7 +19,7 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
 - **Looking Through Results**: Show only the books found with some text in their title, authors or file type, without searching again
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders until each one arrives; tap a cover in the download prompt to see it full size
 - **Download Progress**: Visual download progress bar with real-time file size information, saying what it's waiting for until the book starts to arrive, and when the download has stalled
-- **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes
+- **Background Downloads**: Downloads run in the background using curl, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes, including when the device is powered off or restarted, or its storage is shared over USB
 - **Read Now**: Offers to open a book as soon as it has downloaded
 - **Wi-Fi and Gestures**: Turns on Wi-Fi to search if it's off, and search can be opened from a gesture (Kindle Fetch for Library Genesis, or Kindle Fetch: search Internet Archive or Z-Library, in KOReader's gesture manager)
 - **Automatic Curl Updates**: Offers to install curl 8.21.0, the latest static build, on Kindles with an older one (downloading it with KOReader's own HTTP, as a Kindle's own curl can be too old to connect to GitHub, and only installing the build that was released, putting the old curl back if the new one doesn't run), and says how to update it when a download fails because a Kindle's own curl is too old to connect to Library Genesis
@@ -265,7 +265,7 @@ kindlefetch.koplugin/
    - The mirror that last answered a search or gave a download link is tried first from then on, rather than asking the ones before it, which may be too busy, every time
    - If Wikipedia answers without listing any mirrors (e.g. once its page has been rearranged), the mirrors known when the plugin was released are used
    - Only site names are accepted as mirrors, and a book cover whose address isn't a plain web address is left out, as Wikipedia can be edited by anyone and a mirror can send anything. Z-Library's addresses are only taken from the website row of its Wikipedia page, and only those named as its addresses have been (such as z-lib.sk or 1lib.sk), as your password is sent to them when logging in
-   - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes
+   - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes (which it does when the device is powered off or restarted, or its storage is shared over USB, as well as when it exits), rather than curl carrying on, writing to the storage being shared
    - Curl exit codes are mapped to human-readable error messages, and what went wrong is shown in a message that stays until it's dismissed
    - A mistake in Kindle Fetch itself, in what KOReader runs later and doesn't catch errors in (such as checking on a download), is logged to crash.log with where it happened, and stops what was going on, cleaning up after it, rather than KOReader exiting
 

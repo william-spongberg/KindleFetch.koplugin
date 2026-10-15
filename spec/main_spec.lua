@@ -332,6 +332,15 @@ describe("KindleFetch", function()
             assert.is_nil(openUI():onRestart())
             assert.are.equal(1, cancelled_downloads)
         end)
+
+        -- as when the device is powered off or restarted, or its storage is shared over USB, which curl carried on
+        -- writing to
+        it("cancels downloads when KOReader closes without exiting", function()
+            active_downloads = { { id = "dune", title = "Dune" } }
+            assert.is_nil(openUI():onClose())
+            assert.are.equal(1, cancelled_downloads)
+            assert.is_truthy(helper.logged("info", "^cancelling downloads, as KOReader is closing"))
+        end)
     end)
 
     -- to make sense of a crash.log from someone's device

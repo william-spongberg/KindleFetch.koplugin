@@ -126,12 +126,17 @@ function KindleFetch:onDispatcherRegisterActions()
 end
 
 -- cancel downloads when KOReader exits or restarts, so curl isn't left running and partial books are removed
--- (without returning true, so the event still reaches the rest of KOReader)
+-- (without returning true, so the event still reaches the rest of KOReader). KOReader closes without exiting too:
+-- when the device is powered off or restarted, its storage is shared over USB (which curl would carry on writing
+-- to), or it's quit from the file manager, each of which only sends Close (as closing a book doesn't)
 function KindleFetch:onExit()
-    LogUtil.debug("cancelling downloads before exiting")
+    if #Downloader:getActiveDownloads() > 0 then
+        LogUtil.info("cancelling downloads, as KOReader is closing")
+    end
     Downloader:cancelAllDownloads()
 end
 KindleFetch.onRestart = KindleFetch.onExit
+KindleFetch.onClose = KindleFetch.onExit
 
 -- sent by the dispatcher actions, e.g. when a gesture is assigned to one
 function KindleFetch:onKindleFetch()
