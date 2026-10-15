@@ -684,13 +684,9 @@ function KindleFetch:performSearch()
         return
     end
 
-    -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once
-    -- connected,
-    -- unless the results are saved from an earlier search
-    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, 1, self.scope) then
-        NetworkMgr:runWhenConnected(function()
-            self:performSearch()
-        end)
+    if not self:canSearchNow(query, 1, function()
+        self:performSearch()
+    end) then
         return
     end
 
@@ -890,26 +886,24 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
     })
 end
 
--- search from a page of results (see searchFrom), turning on Wi-Fi first if need be, as KOReader is set up to, unless
--- the page is saved from an earlier search
-function KindleFetch:searchOnline(query, page)
-    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, page, self.scope) then
-        NetworkMgr:runWhenConnected(function()
-            self:searchFrom(query, page)
-        end)
-        return
+-- whether a page of results can be searched for now: once connected, or when it's saved from an earlier search.
+-- otherwise Wi-Fi is turned on (as KOReader is set up to), and retry is called once it's connected
+function KindleFetch:canSearchNow(query, page, retry)
+    if NetworkMgr:isConnected() or Sources[self.source]:isCached(query, page, self.scope) then
+        return true
     end
-    self:searchFrom(query, page)
+    NetworkMgr:runWhenConnected(retry)
+    return false
 end
 
-function KindleFetch:search(query, page)
-    local books, err, next_page, results_read = Sources[self.source]:search(query, page, self.scope)
-
-    if not books or type(books) ~= "table" then
-        return nil, err
+-- search from a page of results (see searchFrom), turning on Wi-Fi first if need be (see canSearchNow)
+function KindleFetch:searchOnline(query, page)
+    local function search()
+        self:searchFrom(query, page)
     end
-
-    return books, nil, next_page, results_read
+    if self:canSearchNow(query, page, search) then
+        search()
+    end
 end
 
 -- search without holding up the rest of KOReader while the site answers, where that's possible (see
@@ -937,8 +931,9 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
         end
 
         HttpUtil.setTrapWidget(message)
+        local source = Sources[self.source]
         local ok, books, err, next_page, results_read =
-            Guard.pcall(string.format("search for %q", query), self.search, self, query, page)
+            Guard.pcall(string.format("search for %q", query), source.search, source, query, page, self.scope)
         HttpUtil.setTrapWidget(nil)
         closeMessage()
         if not ok then
@@ -1237,12 +1232,10 @@ function KindleFetch:loadMoreBooks()
         return
     end
 
-    -- turn on wifi first if need be, unless the next page is saved from an earlier search
     local query = self.current_search_query
-    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, self.next_page, self.scope) then
-        NetworkMgr:runWhenConnected(function()
-            self:loadMoreBooks()
-        end)
+    if not self:canSearchNow(query, self.next_page, function()
+        self:loadMoreBooks()
+    end) then
         return
     end
 

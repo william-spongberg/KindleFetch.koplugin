@@ -48,11 +48,6 @@ local function ensureCacheDir()
     lfs.mkdir(CACHE_DIR)
 end
 
--- covers that fail to download are retried through the backup proxy (see ProxyUtil), like searches and books
-local function hasProxy()
-    return ProxyUtil.backup() ~= nil
-end
-
 -- remove the covers that older versions left behind, having forgotten them once the cache was full without
 -- removing their files. once per session, as there are only more to find after an update
 local orphans_removed = false
@@ -175,7 +170,7 @@ function CoverCache:download(id, url)
     local path = self:getPath(id)
 
     local success = CurlUtil.download(url, path, false, COVER_MAX_TIME)
-    if not success and hasProxy() then
+    if not success and ProxyUtil.backup() then
         LogUtil.info("retrying the cover download of", id, "through the proxy")
         success = CurlUtil.download(url, path, true, COVER_MAX_TIME)
     end
@@ -362,7 +357,7 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     end
 
     startDownloads(download_urls, filepaths, false, parallel_jobs, onProgress, function(downloaded_paths)
-        if #downloaded_paths == #filepaths or not hasProxy() then
+        if #downloaded_paths == #filepaths or not ProxyUtil.backup() then
             finish(downloaded_paths)
             return
         end

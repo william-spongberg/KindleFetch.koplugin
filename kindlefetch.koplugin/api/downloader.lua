@@ -51,11 +51,6 @@ local function expectedFile(listed)
     }
 end
 
--- whether there's a backup proxy to try again through (see ProxyUtil)
-local function hasProxy()
-    return ProxyUtil.backup() ~= nil
-end
-
 -- keep the device from going to sleep while books are downloading, as that turns Wi-Fi off and stops them: no
 -- standby between taps (where KOReader has it), and no suspending once it hasn't been used for a while, by KOReader's
 -- AutoSuspend, or on a Kindle, its own screensaver. each is put back as it was once the last download is over (unless
@@ -204,7 +199,7 @@ local function retry(transfer, exit_code, http_status, bad_book)
         transfer.resume = false
         FileUtil.removeFile(transfer.part_path)
     end
-    if not why and not transfer.tried_proxy and hasProxy() then
+    if not why and not transfer.tried_proxy and ProxyUtil.backup() then
         why = "retrying the download through the proxy"
         transfer.tried_proxy = true
     end
