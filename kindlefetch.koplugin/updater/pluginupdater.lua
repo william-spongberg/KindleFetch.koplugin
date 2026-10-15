@@ -14,6 +14,7 @@ local PathUtil = require("util.pathutil")
 local ShellUtil = require("util.shellutil")
 local KindleFetchSettings = require("settings.settings")
 local Guard = require("util.guard")
+local Rollback = require("updater.rollback")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
@@ -199,7 +200,8 @@ local function extract(zip_path, folder)
 end
 
 -- install the release from the zip in place of the installed plugin, keeping the installed one until the new one is
--- in place, and putting it back if it couldn't be. returns true, or nil and what went wrong
+-- in place, and putting it back if it couldn't be, then for going back to (see Rollback). returns true, or nil and
+-- what went wrong
 local function installPluginRelease(plugin_path, zip_path, version_str)
     LogUtil.info("installing KindleFetch from", zip_path, "to", plugin_path)
 
@@ -234,7 +236,14 @@ local function installPluginRelease(plugin_path, zip_path, version_str)
         else
             moved, move_err = os.rename(extracted, plugin_path)
             if moved then
-                FileUtil.removeDir(backup)
+                -- in place of any kept before, in case the new version doesn't work on this device
+                local previous = Rollback.previousPath(plugin_path)
+                FileUtil.removeDir(previous)
+                local kept, keep_err = os.rename(backup, previous)
+                if not kept then
+                    LogUtil.warn("could not keep", backup, "as", previous, "to go back to:", keep_err)
+                    FileUtil.removeDir(backup)
+                end
             else
                 LogUtil.warn("could not move", extracted, "to", plugin_path .. ":", move_err)
                 local restored, restore_err = os.rename(backup, plugin_path)

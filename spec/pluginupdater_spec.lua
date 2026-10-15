@@ -454,6 +454,17 @@ for _, layout in ipairs(LAYOUTS) do
                 )
             end)
 
+            -- in case the new version doesn't work on this device (see Rollback)
+            it("keeps the version installed before to go back to, in place of any kept before", function()
+                helper.writeFile(plugin_path .. "/main.lua", "-- v0.3\n")
+                helper.writeFile(plugin_path .. ".previous/version.txt", "0.2\n")
+                acceptUpdate()
+
+                assert.are.equal("0.3\n", helper.readFile(plugin_path .. ".previous/version.txt"))
+                assert.is_true(helper.exists(plugin_path .. ".previous/util/pathutil.lua"))
+                assert.are.equal("0.3", require("updater.rollback").previousVersion(plugin_path))
+            end)
+
             it("cleans up the backup and downloaded files", function()
                 acceptUpdate()
 
