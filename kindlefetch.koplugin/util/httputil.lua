@@ -111,8 +111,9 @@ local function requestBodyWithCurl(request_url, use_proxy, opts)
     local cmd = CurlUtil.fetchCommand(request_url, page_file, use_proxy, ANSWER_TIMEOUT, PAGE_TIMEOUT, config_file)
 
     local completed, output
+    local trap_widget = HttpUtil.getTrapWidget()
     if Trapper:isWrapped() then
-        completed, output = Trapper:dismissablePopen(cmd, HttpUtil.getTrapWidget())
+        completed, output = Trapper:dismissablePopen(cmd, trap_widget)
     else
         local pipe = io.popen(cmd, "r")
         if pipe then
@@ -121,9 +122,17 @@ local function requestBodyWithCurl(request_url, use_proxy, opts)
         end
     end
     if not completed then
-        -- curl carries on until it has finished or timed out. what it leaves behind is removed when KOReader
-        -- next starts
-        return nil, HttpUtil.CANCELLED
+        -- called off by a tap on the widget's Cancel, which marks it cancelled (see WaitingMessage and
+        -- DownloadProgress), or without one, a tap anywhere. curl carries on until it has finished or timed out, and
+        -- what it leaves behind is removed when KOReader next starts
+        if Trapper:isWrapped() and (not trap_widget or trap_widget.cancelled) then
+            return nil, HttpUtil.CANCELLED
+        end
+        -- or the shell that runs curl couldn't be started, which isn't the same, and isn't to be passed over
+        LogUtil.warn("could not start curl to fetch", LogUtil.site(request_url))
+        FileUtil.removeFile(page_file)
+        FileUtil.removeFile(config_file)
+        return nil, Errors.START_FAILED
     end
 
     local body = FileUtil.readFile(page_file)

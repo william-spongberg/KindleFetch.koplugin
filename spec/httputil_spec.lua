@@ -360,6 +360,32 @@ describe("HttpUtil", function()
             assert.are.equal('cookie = ""\ndata = "email=a%40b.c"\n', config)
         end)
 
+        -- which was said to have been called off, so nothing was said at all, and the password was left in a file
+        it("says when curl couldn't be started, rather than that it was called off", function()
+            local popen = io.popen
+            io.popen = function(cmd, ...)
+                if cmd:find(" -w '%{http_code}'", 1, true) then
+                    return nil
+                end
+                return popen(cmd, ...)
+            end
+            local body, err = HttpUtil.getBody("https://z-lib.example/eapi/user/login", {
+                form = { { "password", "secret" } },
+            })
+            io.popen = popen
+            assert.is_nil(body)
+            assert.are.equal("could not start curl", err)
+            assert.are.same({}, helper.readDir(data_dir .. "/settings/tmp"))
+
+            -- as it does when waiting in the background with a message that wasn't tapped
+            helper.stubs.trapper.wrapped = true
+            HttpUtil.setTrapWidget({ text = "Logging in..." })
+            helper.state.dismiss = true
+            body, err = HttpUtil.getBody("https://z-lib.example/eapi/user/login")
+            assert.is_nil(body)
+            assert.are.equal("could not start curl", err)
+        end)
+
         it("fetches other pages without a file of options", function()
             curlAnswers(function()
                 return "<html>results</html>", 200
@@ -418,6 +444,8 @@ describe("HttpUtil", function()
 
             it("says so when it's called off, without trying again through PROXY_URL", function()
                 helper.state.env.PROXY_URL = "http://proxy.example:8080"
+                -- a tap on its Cancel
+                message.cancelled = true
                 helper.state.dismiss = true
 
                 local body, err, status = HttpUtil.getBody("https://libgen.example")
