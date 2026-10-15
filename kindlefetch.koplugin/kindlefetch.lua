@@ -30,8 +30,6 @@ local CurlUpdater = require("updater.curlupdater")
 local CurlUtil = require("util.curlutil")
 local PluginUpdater = require("updater.pluginupdater")
 local FileUtil = require("util.fileutil")
-local PathUtil = require("util.pathutil")
-local Rollback = require("updater.rollback")
 local Errors = require("util.errors")
 local Guard = require("util.guard")
 local T = require("ffi/util").template
@@ -59,10 +57,6 @@ local function updateCheckDue()
     return not last_check or math.abs(os.time() - last_check) >= UPDATE_CHECK_INTERVAL
 end
 
-local function installedVersion()
-    return FileUtil.readFile(PathUtil.getPluginPath() .. "/version.txt")
-end
-
 -- what's needed to make sense of a crash.log from someone else's device
 local function logEnvironment()
     LogUtil.info(Diagnostics.summary())
@@ -81,7 +75,7 @@ end
 
 -- clear caches left by other versions of the plugin, as their contents may not work with this one
 local function clearCachesAfterUpdate()
-    local version = installedVersion()
+    local version = Diagnostics.version()
     if not version or version == KindleFetchSettings:getLastVersion() then
         return
     end
@@ -339,42 +333,6 @@ function KindleFetch:addToMainMenu(menu_items)
             end,
         })
     end
-
-    -- the version installed before the last update, while it's kept, in case this one doesn't work on this device
-    local previous_version = Rollback.previousVersion(PathUtil.getPluginPath())
-    if previous_version then
-        table.insert(menu_items.kindlefetch.sub_item_table, {
-            text = T(_("Go back to v%1"), previous_version),
-            callback = function()
-                self:goBack(previous_version)
-            end,
-        })
-    end
-end
-
--- go back to the version installed before the last update (see Rollback), once KOReader has restarted
-function KindleFetch:goBack(previous_version)
-    local current_version = installedVersion() or "?"
-    UIManager:show(ConfirmBox:new {
-        text = T(
-            _("Go back to Kindle Fetch v%1? v%2, the version installed now, is kept to go forward to again."),
-            previous_version,
-            current_version
-        ),
-        ok_text = _("Go back"),
-        ok_callback = function()
-            local ok, err = Rollback.goBack(PathUtil.getPluginPath())
-            if not ok then
-                NotifyUtil.error(T(_("Going back failed: %1"), err))
-                return
-            end
-            -- so it isn't offered again every day, only when asked to check for updates
-            KindleFetchSettings:setSkippedVersion(current_version)
-            UIManager:askForRestart(
-                T(_("Kindle Fetch has gone back to v%1, which KOReader will use once it restarts."), previous_version)
-            )
-        end,
-    })
 end
 
 -- show the progress of the download in progress, or list them to choose from when there are several

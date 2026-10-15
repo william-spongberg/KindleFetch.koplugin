@@ -671,55 +671,11 @@ describe("KindleFetch", function()
             end
         end
 
-        -- in case the version installed by the last update doesn't work on this device
-        describe("going back to the version before", function()
-            before_each(function()
-                helper.writeFile(plugin_dir .. ".previous/main.lua", "-- v0.3")
-                helper.writeFile(plugin_dir .. ".previous/version.txt", "0.3\n")
-            end)
-
-            it("isn't offered when there's no version kept from before", function()
-                helper.run("rm -rf " .. helper.quote(plugin_dir .. ".previous"))
-                assert.is_nil(menuItem(openUI(), "Go back to v0.3"))
-            end)
-
-            it("swaps the versions once confirmed, then offers to restart KOReader", function()
-                menuItem(openUI(), "Go back to v0.3").callback()
-                local confirm = helper.lastShown()
-                assert.are.equal(
-                    "Go back to Kindle Fetch v0.3? v0.4, the version installed now, is kept to go forward to again.",
-                    confirm.text
-                )
-
-                confirm.ok_callback()
-                assert.are.equal("0.3\n", helper.readFile(plugin_dir .. "/version.txt"))
-                assert.are.equal("0.4\n", helper.readFile(plugin_dir .. ".previous/version.txt"))
-                assert.are.same(
-                    { "Kindle Fetch has gone back to v0.3, which KOReader will use once it restarts." },
-                    helper.state.restart_prompts
-                )
-                -- and isn't offered again every day
-                assert.are.equal("0.4", settings.skipped_version)
-            end)
-
-            it("says why it couldn't", function()
-                local rename = os.rename
-                os.rename = function(from, to)
-                    if from == plugin_dir .. ".previous" then
-                        return nil, "Permission denied"
-                    end
-                    return rename(from, to)
-                end
-                finally(function()
-                    os.rename = rename
-                end)
-                menuItem(openUI(), "Go back to v0.3").callback()
-                helper.lastShown().ok_callback()
-
-                assert.are.equal("Going back failed: Permission denied", helper.lastError())
-                assert.are.equal("0.4\n", helper.readFile(plugin_dir .. "/version.txt"))
-                assert.are.same({}, helper.state.restart_prompts)
-            end)
+        -- which is in the settings (see SettingsPage:goBack)
+        it("doesn't offer to go back to the version before", function()
+            helper.writeFile(plugin_dir .. ".previous/main.lua", "-- v0.3")
+            helper.writeFile(plugin_dir .. ".previous/version.txt", "0.3\n")
+            assert.is_nil(menuItem(openUI(), "Go back to v0.3"))
         end)
 
         -- where a download that was hidden can be shown again, without finding its book again

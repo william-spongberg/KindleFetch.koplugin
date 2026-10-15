@@ -609,4 +609,81 @@ describe("SettingsPage", function()
             assert.are.equal("Cache cleared", helper.lastNotification())
         end)
     end)
+
+    -- in case the version installed by the last update doesn't work on this device
+    describe("going back to the version before", function()
+        local plugin_dir
+
+        before_each(function()
+            plugin_dir = helper.tmpdir("plugin")
+            helper.writeFile(plugin_dir .. "/version.txt", "0.4\n")
+            helper.writeFile(plugin_dir .. ".previous/main.lua", "-- v0.3")
+            helper.writeFile(plugin_dir .. ".previous/version.txt", "0.3\n")
+            -- rather than the folder the plugin's own code is in, for what's gone back from and to
+            helper.stub(
+                "util.pathutil",
+                setmetatable({
+                    getPluginPath = function()
+                        return plugin_dir
+                    end,
+                }, { __index = require("util.pathutil") })
+            )
+            package.loaded["ui.diagnostics"] = nil
+            package.loaded["settings.settingspage"] = nil
+            SettingsPage = require("settings.settingspage")
+        end)
+
+        it("is offered at the end of the settings, while a version is kept from before", function()
+            SettingsPage:showSettings()
+            local texts = itemTexts(lastMenu())
+            assert.are.equal("Go back to v0.3", texts[#texts])
+        end)
+
+        it("isn't offered when there's no version kept from before", function()
+            helper.run("rm -rf " .. helper.quote(plugin_dir .. ".previous"))
+            SettingsPage:showSettings()
+            local texts = itemTexts(lastMenu())
+            assert.are.equal("Clear Cache", texts[#texts])
+        end)
+
+        it("swaps the versions once confirmed, then offers to restart KOReader", function()
+            SettingsPage:showSettings()
+            tap("Go back to v0.3")
+            local confirm = helper.lastShown()
+            assert.are.equal(
+                "Go back to Kindle Fetch v0.3? v0.4, the version installed now, is kept to go forward to again.",
+                confirm.text
+            )
+
+            confirm.ok_callback()
+            assert.are.equal("0.3\n", helper.readFile(plugin_dir .. "/version.txt"))
+            assert.are.equal("0.4\n", helper.readFile(plugin_dir .. ".previous/version.txt"))
+            assert.are.same(
+                { "Kindle Fetch has gone back to v0.3, which KOReader will use once it restarts." },
+                helper.state.restart_prompts
+            )
+            -- and isn't offered again every day
+            assert.are.equal("0.4", Settings:getSkippedVersion())
+        end)
+
+        it("says why it couldn't", function()
+            local rename = os.rename
+            os.rename = function(from, to)
+                if from == plugin_dir .. ".previous" then
+                    return nil, "Permission denied"
+                end
+                return rename(from, to)
+            end
+            finally(function()
+                os.rename = rename
+            end)
+            SettingsPage:showSettings()
+            tap("Go back to v0.3")
+            helper.lastShown().ok_callback()
+
+            assert.are.equal("Going back failed: Permission denied", helper.lastError())
+            assert.are.equal("0.4\n", helper.readFile(plugin_dir .. "/version.txt"))
+            assert.are.same({}, helper.state.restart_prompts)
+        end)
+    end)
 end)
