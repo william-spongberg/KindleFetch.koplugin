@@ -10,7 +10,7 @@ describe("CurlUtil", function()
             if output and body then
                 helper.writeFile(output, body)
             end
-            helper.writeFile(cmd:match("echo %$%? > '([^']+)'"), tostring(exit_code or 0) .. "\n")
+            helper.writeFile(cmd:match("echo %$s > '([^']+)'"), tostring(exit_code or 0) .. "\n")
         end
     end
 
@@ -227,6 +227,34 @@ describe("CurlUtil", function()
             assert.is_false(CurlUtil.isPidRunning(pid))
         end)
 
+        -- Cancel left curl running by itself, using the Wi-Fi and filling the book's .part file
+        it("stops what a background download runs, not only the shell that waits for it", function()
+            local exit_file = CurlUtil.createExitFile()
+            -- sleep standing in for curl
+            local pipe = io.popen(CurlUtil.echoPid(CurlUtil.saveExitCode("sleep 30", exit_file)))
+            local pid = tonumber(pipe:read("*l"))
+            pipe:close()
+            os.execute("sleep 0.2")
+            pipe = io.popen("pgrep -P " .. pid)
+            local child = tonumber(pipe:read("*l"))
+            pipe:close()
+            assert.is_true(CurlUtil.isPidRunning(child))
+
+            CurlUtil.killPid(pid)
+            os.execute("sleep 0.3")
+            assert.is_false(CurlUtil.isPidRunning(child))
+            assert.is_false(CurlUtil.isPidRunning(pid))
+        end)
+
+        it("saves the exit code of what a download runs once it has finished", function()
+            local exit_file = CurlUtil.createExitFile()
+            os.execute(CurlUtil.saveExitCode("sh -c 'exit 22'", exit_file))
+            assert.are.equal(22, CurlUtil.getExitCode(exit_file))
+            -- the shell's own, when curl isn't there to run
+            os.execute(CurlUtil.saveExitCode("kindlefetch-no-such-command -s", exit_file))
+            assert.are.equal(127, CurlUtil.getExitCode(exit_file))
+        end)
+
         it("looks in /proc, without starting a shell", function()
             local proc = helper.tmpdir("proc")
             CurlUtil.PROC_DIR = proc
@@ -378,8 +406,9 @@ describe("CurlUtil", function()
         local cmd = CurlUtil.getCMD("https://libgen.example/get.php", "Dune.epub", "exit", true)
 
         assert.are.equal(
-            "(curl -sL -f -o 'Dune.epub' 'https://libgen.example/get.php' --retry 2 --retry-delay 2 "
-                .. "--connect-timeout 15 -x 'http://proxy.example:8080'; echo $? > 'exit') >/dev/null 2>&1",
+            "(trap 'kill $c 2>/dev/null' TERM; curl -sL -f -o 'Dune.epub' 'https://libgen.example/get.php' --retry 2 "
+                .. "--retry-delay 2 --connect-timeout 15 -x 'http://proxy.example:8080' & c=$!; wait $c; s=$?; "
+                .. "if kill -0 $c 2>/dev/null; then wait $c; s=$?; fi; echo $s > 'exit') >/dev/null 2>&1",
             cmd
         )
     end)
@@ -517,7 +546,7 @@ describe("CurlUtil", function()
                     end
                 end
                 helper.writeFile(cmd:match("%-w '[^']*' 2?> '([^']+)'"), table.concat(results, "\n"))
-                helper.writeFile(cmd:match("echo %$%? > '([^']+)'"), tostring(exit_code or 0))
+                helper.writeFile(cmd:match("echo %$s > '([^']+)'"), tostring(exit_code or 0))
             end
         end
 
