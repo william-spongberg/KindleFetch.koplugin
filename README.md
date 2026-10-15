@@ -190,7 +190,7 @@ kindlefetch.koplugin/
 │   └── covercache.lua         # Downloads and caches book covers and full-size covers by book (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
 │   ├── curlupdater.lua        # Checks curl version on Kindles and offers to install static curl (8.21.0) if it's older, downloading it with KOReader's own HTTP, checking it's the build that was released, and that it runs
-│   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes
+│   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes, unzipping the update with KOReader's own archiver (or unzip, where it has none) next to the plugin, and keeping the installed version until the new one is in place
 └── util/
     ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
     ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from
@@ -201,6 +201,7 @@ kindlefetch.koplugin/
     ├── logutil.lua            # Logger wrapper
     ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed
     ├── pathutil.lua           # Plugin install location and temporary download directory
+    ├── shellutil.lua          # Runs a step of installing an update with shell commands, saying what went wrong in the command's own words
     └── versionutil.lua        # Version parsing and comparison utilities
 ```
 

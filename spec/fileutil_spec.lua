@@ -74,6 +74,31 @@ describe("FileUtil", function()
         end)
     end)
 
+    describe("removeDir", function()
+        it("removes a folder and everything in it", function()
+            helper.writeFile(dir .. "/plugin/main.lua", "-- v0.4")
+            helper.writeFile(dir .. "/plugin/util/curlutil.lua", "-- v0.4")
+            assert.is_true(FileUtil.removeDir(dir .. "/plugin"))
+            assert.is_false(helper.exists(dir .. "/plugin"))
+            -- and there's nothing to do once it's gone
+            assert.is_true(FileUtil.removeDir(dir .. "/plugin"))
+        end)
+
+        it("doesn't follow links out of it", function()
+            helper.writeFile(dir .. "/books/Dune.epub", "epub")
+            helper.writeFile(dir .. "/plugin/main.lua", "-- v0.4")
+            helper.run(
+                string.format(
+                    "ln -s %s %s",
+                    helper.quote(helper.abs(dir .. "/books")),
+                    helper.quote(dir .. "/plugin/books")
+                )
+            )
+            assert.is_true(FileUtil.removeDir(dir .. "/plugin"))
+            assert.are.equal("epub", helper.readFile(dir .. "/books/Dune.epub"))
+        end)
+    end)
+
     describe("listDir", function()
         it("lists what's in a folder", function()
             helper.writeFile(dir .. "/listed/a.txt", "a")

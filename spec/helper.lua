@@ -292,6 +292,19 @@ local function createStubs(state)
                 return names[i]
             end
         end,
+        -- the mode of what's at the path, without following a link to what it links to
+        symlinkattributes = function(path, request)
+            local mode
+            if succeeded("test -L " .. quote(path)) then
+                mode = "link"
+            else
+                mode = stubs.lfs.attributes(path, "mode")
+            end
+            if request == "mode" then
+                return mode
+            end
+            return mode and { mode = mode } or nil
+        end,
         mkdir = function(path)
             if succeeded("mkdir " .. quote(path) .. " 2>/dev/null") then
                 return true

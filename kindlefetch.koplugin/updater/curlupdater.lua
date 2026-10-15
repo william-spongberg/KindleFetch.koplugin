@@ -9,6 +9,7 @@ local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local VersionUtil = require("util.versionutil")
 local PathUtil = require("util.pathutil")
+local ShellUtil = require("util.shellutil")
 local KindleFetchSettings = require("settings.settings")
 local sha2 = require("ffi/sha2")
 local T = require("ffi/util").template
@@ -50,27 +51,10 @@ local function runVersion(path)
     return said and said:match("^curl%s+([%d%.]+)"), said
 end
 
--- run a step of installing curl, returning true, or nil and what went wrong (the command's own words, e.g. "cp: write
--- error: No space left on device"), which is logged along with the step
-local function run(step, cmd)
-    local pipe = io.popen(string.format('(%s) 2>&1; echo "exit $?"', cmd))
-    local output = pipe and pipe:read("*a") or ""
-    if pipe then
-        pipe:close()
-    end
-    local said, exit_code = output:match("^(.-)%s*exit (%d+)%s*$")
-    if exit_code == "0" then
-        return true
-    end
-    said = said ~= "" and said or "exit code " .. tostring(exit_code)
-    LogUtil.warn("could not", step .. ":", said)
-    return nil, said
-end
-
 -- remount root as read-only, returning true, or nil and what went wrong
 local function remountReadOnly()
     LogUtil.debug("remounting rootfs as read-only")
-    return run("make the root file system read-only again", "mntroot ro")
+    return ShellUtil.run("make the root file system read-only again", "mntroot ro")
 end
 
 -- copy the new curl into place as the Kindle's, keeping its own (once) to put back by hand. returns true, or nil and
@@ -79,7 +63,7 @@ local function install(curl_path)
     -- copied whole before it's kept, as a backup cut short by the storage filling up was taken to be the Kindle's curl
     if not FileUtil.isValidFile(BACKUP_CURL) then
         LogUtil.debug("backing up system curl")
-        local ok, err = run(
+        local ok, err = ShellUtil.run(
             "back up the Kindle's own curl",
             string.format(
                 "cp %s %s && mv %s %s",
@@ -90,7 +74,7 @@ local function install(curl_path)
             )
         )
         if not ok then
-            run("remove the backup cut short", "rm -f " .. CurlUtil.shellQuote(BACKUP_CURL .. ".new"))
+            ShellUtil.run("remove the backup cut short", "rm -f " .. CurlUtil.shellQuote(BACKUP_CURL .. ".new"))
             return nil, T(_("the Kindle's own curl couldn't be backed up (%1)"), err)
         end
     end
@@ -98,32 +82,32 @@ local function install(curl_path)
     -- next to the old one, which is only replaced once the new one is all there and runs: copying over it directly
     -- left it cut short, and nothing would run, when the storage filled up
     LogUtil.debug("copying static curl to", NEW_CURL)
-    local ok, err = run(
+    local ok, err = ShellUtil.run(
         "copy the new curl into place",
         string.format("cp %s %s", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(NEW_CURL))
     )
     if not ok then
-        run("remove the new curl cut short", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
+        ShellUtil.run("remove the new curl cut short", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
         return nil, T(_("the new curl couldn't be copied into place (%1)"), err)
     end
-    if not run("set the new curl's permissions", "chmod 755 " .. CurlUtil.shellQuote(NEW_CURL)) then
+    if not ShellUtil.run("set the new curl's permissions", "chmod 755 " .. CurlUtil.shellQuote(NEW_CURL)) then
         LogUtil.warn("carrying on without setting the new curl's permissions")
     end
 
     local installed_version, said = runVersion(NEW_CURL)
     if installed_version ~= MIN_VERSION then
         LogUtil.warn("the new curl doesn't run on this Kindle, saying", said, "so keeping the old one")
-        run("remove the new curl", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
+        ShellUtil.run("remove the new curl", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
         return nil, _("the new curl doesn't run on this Kindle, so the old one has been kept")
     end
 
     -- in one go, so there's always a curl there
-    ok, err = run(
+    ok, err = ShellUtil.run(
         "replace the old curl",
         string.format("mv %s %s", CurlUtil.shellQuote(NEW_CURL), CurlUtil.shellQuote(SYSTEM_CURL))
     )
     if not ok then
-        run("remove the new curl", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
+        ShellUtil.run("remove the new curl", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
         return nil, T(_("the old curl couldn't be replaced (%1)"), err)
     end
     return true
@@ -161,14 +145,14 @@ local function updateCurl()
     end
 
     local ok
-    ok, err = run("make the new curl executable", "chmod +x " .. CurlUtil.shellQuote(curl_path))
+    ok, err = ShellUtil.run("make the new curl executable", "chmod +x " .. CurlUtil.shellQuote(curl_path))
     if not ok then
         FileUtil.removeFile(curl_path)
         return nil, T(_("the new curl couldn't be made executable (%1)"), err)
     end
 
     LogUtil.debug("remounting rootfs as read-write")
-    ok, err = run("make the root file system writable", "mntroot rw")
+    ok, err = ShellUtil.run("make the root file system writable", "mntroot rw")
     if not ok then
         FileUtil.removeFile(curl_path)
         return nil, T(_("the Kindle's system files couldn't be made writable (%1)"), err)
