@@ -209,15 +209,25 @@ function LlgiSearch.hasMorePages(html, page, results)
     return results >= FULL_PAGE
 end
 
-function LlgiSearch.buildParams(query, page, book_types)
+-- what a search can be narrowed to (see Sources), searching only those of its fields (the boxes ticked on its search
+-- page), rather than the books' titles, authors and series
+LlgiSearch.SCOPES = { "title", "author", "isbn" }
+local SCOPE_COLUMNS = {
+    title = { "t" },
+    author = { "a" },
+    isbn = { "i" },
+}
+local COLUMNS = { "t", "a", "s" }
+
+function LlgiSearch.buildParams(query, page, book_types, scope)
     local params = {
         "req=" .. util.urlEncode(query),
         "res=" .. RESULTS_PER_PAGE,
-        "columns%5B%5D=t",
-        "columns%5B%5D=a",
-        "columns%5B%5D=s",
-        "objects%5B%5D=f",
     }
+    for __, column in ipairs(SCOPE_COLUMNS[scope] or COLUMNS) do
+        table.insert(params, "columns%5B%5D=" .. column)
+    end
+    table.insert(params, "objects%5B%5D=f")
     for __, book_type in ipairs(book_types) do
         if TOPICS[book_type] then
             table.insert(params, "topics%5B%5D=" .. TOPICS[book_type])
@@ -361,22 +371,24 @@ local function fetchResults(params, refresh)
 end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
-function LlgiSearch:isCached(query, page)
+function LlgiSearch:isCached(query, page, scope)
     local cached = SearchCache:get(
         SOURCE,
         query,
         page,
         KindleFetchSettings:getPreferredLanguages(),
         KindleFetchSettings:getPreferredFileTypes(),
-        KindleFetchSettings:getPreferredBookTypes()
+        KindleFetchSettings:getPreferredBookTypes(),
+        scope
     )
     return cached ~= nil and cached.books ~= nil
 end
 
 -- search from the given page of Library Genesis' results, returning the books found, the page to carry on from
 -- (or nil once there are no more results), and how many results were read to find them: most may have been in
--- other languages or file types (unknown, so nil, for books saved from an earlier search)
-function LlgiSearch:search(query, page)
+-- other languages or file types (unknown, so nil, for books saved from an earlier search). scope narrows it down to
+-- one of the books' fields, where given (see SCOPES)
+function LlgiSearch:search(query, page, scope)
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
     local book_types = KindleFetchSettings:getPreferredBookTypes()
@@ -384,15 +396,16 @@ function LlgiSearch:search(query, page)
     -- check cache first (ignoring results cached by older versions, which were just a list of books)
     LogUtil.info(
         string.format(
-            "searching for %q from page %d, in %s, as %s, from %s",
+            "searching for %q%s from page %d, in %s, as %s, from %s",
             query,
+            scope and " by " .. scope or "",
             page,
             table.concat(languages, "/"),
             table.concat(file_types, "/"),
             table.concat(book_types, "/")
         )
     )
-    local cached = SearchCache:get(SOURCE, query, page, languages, file_types, book_types)
+    local cached = SearchCache:get(SOURCE, query, page, languages, file_types, book_types, scope)
     if cached and cached.books then
         LogUtil.info("showing", #cached.books, "books saved from an earlier search")
         return cached.books, nil, cached.next_page
@@ -404,7 +417,7 @@ function LlgiSearch:search(query, page)
     local next_page = page
     local results_read = 0
     for __ = 1, MAX_PAGES do
-        local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types))
+        local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types, scope))
         if not html then
             -- show the books found so far, carrying on from the page that failed, or that the search was called off
             -- on, rather than throwing away what earlier pages found. that may be none, but how many results they
@@ -474,7 +487,7 @@ function LlgiSearch:search(query, page)
         SearchCache:set({
             books = books,
             next_page = next_page,
-        }, SOURCE, query, page, languages, file_types, book_types)
+        }, SOURCE, query, page, languages, file_types, book_types, scope)
     end
     return books, nil, next_page, results_read
 end

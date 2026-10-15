@@ -68,6 +68,25 @@ describe("IaSearch", function()
             )
         end)
 
+        it("looks for each word in only the title, or the author's name, where the search is narrowed to it", function()
+            assert.matches(
+                '^title:"emma" AND title:"austen" AND ',
+                IaSearch.buildQuery("emma austen", {}, { "epub" }, "title")
+            )
+            assert.matches('^creator:"austen" AND ', IaSearch.buildQuery("austen", {}, { "epub" }, "author"))
+            assert.are.same({ "title", "author", "isbn" }, IaSearch.SCOPES)
+        end)
+
+        -- as it's saved, without its hyphens
+        it("looks for an ISBN's digits, where the search is narrowed to ISBNs", function()
+            assert.matches(
+                '^isbn:"9780441013593" AND ',
+                IaSearch.buildQuery("978-0-441-01359-3", {}, { "epub" }, "isbn")
+            )
+            assert.matches('^isbn:"044101359X" AND ', IaSearch.buildQuery("ISBN 0-441-01359-x", {}, { "epub" }, "isbn"))
+            assert.is_nil(IaSearch.buildQuery("no digits", {}, { "epub" }, "isbn"))
+        end)
+
         -- most of its books are lent out instead, as files only its app can open
         it("only looks for texts that anyone can download", function()
             local search = IaSearch.buildQuery("emma", { "en" }, { "epub" })

@@ -201,7 +201,7 @@ local function addFileDialogButtons()
                         if menu and menu.file_dialog then
                             UIManager:close(menu.file_dialog)
                         end
-                        latest:searchFor(author)
+                        latest:searchFor(author, "author")
                     end),
                 },
             }
@@ -335,7 +335,7 @@ function KindleFetch:addToMainMenu(menu_items)
                 return firstAuthor(self.ui.doc_props) ~= nil
             end,
             callback = function()
-                self:searchFor(firstAuthor(self.ui.doc_props))
+                self:searchFor(firstAuthor(self.ui.doc_props), "author")
             end,
         })
     end
@@ -448,54 +448,116 @@ local function needsLogin(source, on_logged_in)
     return true
 end
 
+-- the name of what a search can be narrowed to (see SCOPES in Sources), or of searching all a site does
+local function scopeName(scope)
+    return ({ title = _("Title"), author = _("Author"), isbn = _("ISBN") })[scope] or _("All")
+end
+
+-- whether the site can narrow a search down to scope (see SCOPES in Sources)
+local function canNarrow(source, scope)
+    for __, site_scope in ipairs(Sources[source].SCOPES or {}) do
+        if site_scope == scope then
+            return true
+        end
+    end
+    return false
+end
+
 -- open the search box, for searching the site source names (see Sources), once logged into it where it needs that,
--- searching for query straight away, where given (e.g. the search another site found nothing for, see otherSites)
-function KindleFetch:setupUI(source, query)
+-- searching for query straight away, where given (e.g. the search another site found nothing for, see otherSites),
+-- and narrowed down to scope (e.g. only the books' authors, see SCOPES in Sources), where given and the site can
+function KindleFetch:setupUI(source, query, scope)
     -- grab self reference for callbacks
     local this = self
     local function openOnceLoggedIn()
-        this:setupUI(source, query)
+        this:setupUI(source, query, scope)
     end
     if needsLogin(source, openOnceLoggedIn) then
         return
     end
     self.source = source
+    self.scope = canNarrow(source, scope) and scope or nil
 
+    local buttons = {
+        {
+            {
+                text = "Cancel",
+                callback = function()
+                    UIManager:close(this.search_box)
+                end,
+            },
+            {
+                text = _("Recent"),
+                id = "recent",
+                enabled = #KindleFetchSettings:getRecentSearches() > 0,
+                callback = function()
+                    this:showRecentSearches()
+                end,
+            },
+            {
+                text = "Search",
+                -- so the keyboard's enter key searches too
+                is_enter_default = true,
+                callback = function()
+                    this:performSearch()
+                end,
+            },
+        },
+    }
+    -- where the site can narrow a search down (see chooseScope)
+    if Sources[source].SCOPES then
+        table.insert(buttons, 1, {
+            {
+                text = T(_("Search in: %1"), scopeName(self.scope)),
+                id = "scope",
+                callback = function()
+                    this:chooseScope()
+                end,
+            },
+        })
+    end
     self.search_box = InputDialog:new {
         title = T(_("Search %1"), Sources[source].NAME),
         input = query,
         input_type = "text",
-        buttons = {
-            {
-                {
-                    text = "Cancel",
-                    callback = function()
-                        UIManager:close(this.search_box)
-                    end,
-                },
-                {
-                    text = _("Recent"),
-                    id = "recent",
-                    enabled = #KindleFetchSettings:getRecentSearches() > 0,
-                    callback = function()
-                        this:showRecentSearches()
-                    end,
-                },
-                {
-                    text = "Search",
-                    -- so the keyboard's enter key searches too
-                    is_enter_default = true,
-                    callback = function()
-                        this:performSearch()
-                    end,
-                },
-            },
-        },
+        buttons = buttons,
     }
     UIManager:show(self.search_box)
     if query then
         self:performSearch()
     end
+end
+
+-- choose what the search is narrowed down to (see SCOPES in Sources), e.g. only the books' authors, or all a site
+-- searches, for the search box that's open
+function KindleFetch:chooseScope()
+    local this = self
+    local dialog
+    local row = {}
+    local scopes = { false }
+    for __, scope in ipairs(Sources[self.source].SCOPES) do
+        table.insert(scopes, scope)
+    end
+    for __, scope in ipairs(scopes) do
+        scope = scope or nil
+        table.insert(row, {
+            text = (scope == this.scope and "✓ " or "") .. scopeName(scope),
+            callback = function()
+                UIManager:close(dialog)
+                this.scope = scope
+                LogUtil.info("searching", scope and "by " .. scope or "all", "from now on")
+                local scope_button = this.search_box.button_table:getButtonById("scope")
+                scope_button:setText(T(_("Search in: %1"), scopeName(scope)), scope_button.width)
+                UIManager:setDirty(this.search_box, "ui")
+            end,
+        })
+    end
+    dialog = ButtonDialog:new {
+        title = _("Search in"),
+        title_align = "center",
+        buttons = { row },
+    }
+    UIManager:show(dialog)
 end
 
 -- add Search Kindle Fetch to the dialog KOReader shows on highlighting text in a book, to search for it (see
@@ -514,8 +576,9 @@ function KindleFetch:addToHighlightDialog()
 end
 
 -- search for query, e.g. more by a book's author, or what's highlighted in one, on whichever site is chosen (Z-Library
--- only once logged in, as for otherSites): on one line, and only the start of it when it's long (see MAX_QUERY_LENGTH)
-function KindleFetch:searchFor(query)
+-- only once logged in, as for otherSites): on one line, and only the start of it when it's long (see MAX_QUERY_LENGTH).
+-- narrowed down to scope (e.g. the books' authors), where given and the site can (see setupUI)
+function KindleFetch:searchFor(query, scope)
     query = StringUtil.trim(query or ""):gsub("%s+", " ")
     if #query > MAX_QUERY_LENGTH then
         -- at a space, or otherwise between characters, rather than partway through one (whose next byte would carry
@@ -539,7 +602,7 @@ function KindleFetch:searchFor(query)
                 callback = function()
                     UIManager:close(dialog)
                     LogUtil.info(string.format("searching %s for %q, from a book", Sources[source].NAME, query))
-                    self:setupUI(source, query)
+                    self:setupUI(source, query, scope)
                 end,
             })
         end
@@ -574,8 +637,10 @@ function KindleFetch:otherSites(query)
                     -- once what it's in has closed
                     Guard.nextTick("searching another site", function()
                         LogUtil.info(string.format("searching %s for %q instead", Sources[source].NAME, query))
+                        local scope = self.scope
                         self:closeSearch()
-                        self:setupUI(source, query)
+                        -- narrowed down as this one was, where it can be
+                        self:setupUI(source, query, scope)
                     end)
                 end,
             })
@@ -622,7 +687,7 @@ function KindleFetch:performSearch()
     -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once
     -- connected,
     -- unless the results are saved from an earlier search
-    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, 1) then
+    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, 1, self.scope) then
         NetworkMgr:runWhenConnected(function()
             self:performSearch()
         end)
@@ -828,7 +893,7 @@ end
 -- search from a page of results (see searchFrom), turning on Wi-Fi first if need be, as KOReader is set up to, unless
 -- the page is saved from an earlier search
 function KindleFetch:searchOnline(query, page)
-    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, page) then
+    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, page, self.scope) then
         NetworkMgr:runWhenConnected(function()
             self:searchFrom(query, page)
         end)
@@ -838,7 +903,7 @@ function KindleFetch:searchOnline(query, page)
 end
 
 function KindleFetch:search(query, page)
-    local books, err, next_page, results_read = Sources[self.source]:search(query, page)
+    local books, err, next_page, results_read = Sources[self.source]:search(query, page, self.scope)
 
     if not books or type(books) ~= "table" then
         return nil, err
@@ -863,7 +928,7 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
     -- an error is passed on rather than left to Trapper, which would lose it and leave the message up, including one
     -- in showing what was found
     Trapper:wrap(Guard.wrap(string.format("searching for %q", query), function()
-        if not Sources[self.source]:isCached(query, page) then
+        if not Sources[self.source]:isCached(query, page, self.scope) then
             message = WaitingMessage.new(waiting_text)
             UIManager:show(message)
             -- so that a second tap on what started the search doesn't land on the message
@@ -1174,7 +1239,7 @@ function KindleFetch:loadMoreBooks()
 
     -- turn on wifi first if need be, unless the next page is saved from an earlier search
     local query = self.current_search_query
-    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, self.next_page) then
+    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, self.next_page, self.scope) then
         NetworkMgr:runWhenConnected(function()
             self:loadMoreBooks()
         end)

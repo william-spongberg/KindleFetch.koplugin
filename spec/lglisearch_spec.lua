@@ -53,6 +53,34 @@ describe("LlgiSearch", function()
             )
         end)
 
+        -- the boxes ticked for which fields to search on its search page (as an archived copy of libgen.li's from
+        -- 2026-10-11 has them, when the site itself couldn't be reached)
+        it("searches the books' titles, authors and series, or the one field the search is narrowed to", function()
+            local function columns(scope)
+                local found = {}
+                for column in LlgiSearch.buildParams("dune", 1, {}, scope):gmatch("columns%%5B%%5D=(%a)") do
+                    table.insert(found, column)
+                end
+                return found
+            end
+            assert.are.same({ "t", "a", "s" }, columns(nil))
+            assert.are.same({ "t" }, columns("title"))
+            assert.are.same({ "a" }, columns("author"))
+            assert.are.same({ "i" }, columns("isbn"))
+            assert.are.same({ "title", "author", "isbn" }, LlgiSearch.SCOPES)
+        end)
+
+        -- which finds different books
+        it("saves a search that's narrowed down apart from one that isn't", function()
+            local book_types = require("settings.settings"):getPreferredBookTypes()
+            web.pages[mirrors[1] .. "/index.php?" .. LlgiSearch.buildParams("dune", 1, book_types, "author")] =
+                fixtures.libgenResults({ fixtures.DUNE })
+            assert.are.equal(1, #LlgiSearch:search("dune", 1, "author"))
+            assert.is_true(LlgiSearch:isCached("dune", 1, "author"))
+            assert.is_false(LlgiSearch:isCached("dune", 1))
+            assert.is_truthy(helper.logged("info", '^searching for "dune" by author from page 1, in '))
+        end)
+
         it("maps every book type to a Library Genesis topic", function()
             local params = LlgiSearch.buildParams(
                 "dune",
