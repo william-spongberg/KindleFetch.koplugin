@@ -733,6 +733,11 @@ function KindleFetchSettings:setZlibAccount(account)
     if not ok then
         return nil, err
     end
+    -- the settings as they were before (KOReader keeps them in case they can't be read), which would still log into
+    -- the account, and be read in place of these, if they ever can't be
+    if not account then
+        os.remove(settingsPath() .. ".old")
+    end
     return true
 end
 

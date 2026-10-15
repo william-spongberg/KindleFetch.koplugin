@@ -240,6 +240,14 @@ describe("KindleFetchSettings", function()
             end
         end)
 
+        -- where KOReader keeps the settings as they were, in case they can't be read, which would log in again
+        it("is forgotten from the settings as they were before, too", function()
+            Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "abc" })
+            helper.writeFile(data_dir .. "/settings/kindlefetch_settings.lua.old", "return { zlib_account = 'abc' }")
+            Settings:setZlibAccount(nil)
+            assert.is_false(helper.exists(data_dir .. "/settings/kindlefetch_settings.lua.old"))
+        end)
+
         it("isn't said to have been forgotten when the settings couldn't be saved", function()
             Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "abc" })
             helper.state.settings_unwritable = true
