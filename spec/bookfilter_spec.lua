@@ -74,6 +74,30 @@ describe("BookFilter", function()
             assert.are.same({ "Comics issue (1)", "Fiction (1)", "Unknown (1)" }, counted(books, "book_type"))
         end)
 
+        it("lists the decades the books are from, the latest first", function()
+            local books = { { year = "1813" }, { year = "2005" }, { year = "2009" }, { year = "1990" }, {} }
+            assert.are.same({ "2000s (2)", "1990s (1)", "1810s (1)", "Unknown (1)" }, counted(books, "year"))
+        end)
+
+        -- as Z-Library and Library Genesis say them
+        it("lists how big the books are, the smallest first", function()
+            local books = {
+                { file_size = "2.06 MB" },
+                { file_size = "752 kB" },
+                { file_size = "1.2MB" },
+                { file_size = "250 MB" },
+                { file_size = "1 GB" },
+                { file_size = "12 MiB" },
+                -- which Library Genesis gives a book without a size
+                { file_size = "0" },
+                {},
+            }
+            assert.are.same(
+                { "Under 1 MB (1)", "1 to 10 MB (2)", "10 to 100 MB (1)", "Over 100 MB (2)", "Unknown (2)" },
+                counted(books, "size")
+            )
+        end)
+
         -- even where none of the books have one, as finding out means looking in the download folder
         it("always lists whether books have been downloaded", function()
             local books = { { id = "a" }, { id = "b" } }

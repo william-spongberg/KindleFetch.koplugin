@@ -2322,6 +2322,28 @@ describe("KindleFetch", function()
             }, (resultsMenu()))
         end)
 
+        it("offers the decades the books found are from, and how big they are, where they differ", function()
+            local dune = siteBook("Dune", "libgen", "English")
+            dune.year, dune.file_size = "1965", "2 MB"
+            local messiah = siteBook("Dune Messiah", "libgen", "English")
+            messiah.year, messiah.file_size = "2008", "250 MB"
+            search_results[1] = { { dune, messiah } }
+            search(plugin, "dune")
+            assert.are.same({
+                "Look through the books found…",
+                "Years: All",
+                "Sizes: All",
+                "Downloaded: All",
+                "Search again…",
+            }, (resultsMenu()))
+
+            show("Years:", { "2000" })
+            assert.are.same({ "Dune Messiah" }, itemTexts(menus[2]))
+            show("Sizes:", { "2" })
+            assert.are.equal("That would hide every book found.", helper.lastNotification())
+            assert.are.equal("Years: 2000s", filterButton("Years:").text)
+        end)
+
         it("shows which books have been downloaded already, or haven't", function()
             helper.state.fs["/mnt/us/documents/Dune.epub"] = "file"
             filterButton("Downloaded:").callback()
