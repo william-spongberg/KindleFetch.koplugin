@@ -23,6 +23,21 @@ describe("DownloadProgress", function()
         assert.is_true(helper.wasClosed(widget.container))
     end)
 
+    -- which couldn't be reached on devices with keys rather than a touch screen
+    it("is hidden with the Back key, with its buttons reachable with the others", function()
+        helper.stubs.device.keys = true
+        widget = require("ui.downloadprogress").new("Dune", function() end)
+        widget:show()
+        -- (KOReader's group of keys that are Back)
+        assert.are.same({ { { "Back" } } }, widget.container.key_events.Close)
+        assert.are.same({ { widget.cancel_button, widget.hide_button } }, widget.container.layout)
+
+        assert.is_true(widget.container:onClose())
+        assert.is_false(widget.is_visible)
+        assert.is_true(helper.wasClosed(widget.container))
+        assert.are.equal(0, cancels)
+    end)
+
     -- a fixed height cut the text off on screens with more dots to the inch, where its font is bigger
     it("makes room for its status, whatever the screen", function()
         assert.are.equal(widget.status_widget:getSize().h, widget.status_container.dimen.h)
