@@ -38,6 +38,20 @@ describe("The plugin's code", function()
         assert.are.same({}, linesWith("UIManager:nextTick%(", { ["kindlefetch.koplugin/util/guard.lua"] = true }))
     end)
 
+    -- the code that finds out what went wrong passes it on, for what's on screen to say once (see NotifyUtil)
+    it("only says things from what's on screen", function()
+        local said = {}
+        for _, line in ipairs(linesWith("NotifyUtil%.")) do
+            local path = line:match("^kindlefetch%.koplugin/([^:]+)")
+            if path:find("^api/") or path:find("^cache/") or path == "settings/settings.lua" then
+                table.insert(said, line)
+            elseif path:find("^util/") and path ~= "util/notifyutil.lua" and path ~= "util/guard.lua" then
+                table.insert(said, line)
+            end
+        end
+        assert.are.same({}, said)
+    end)
+
     it("wraps what Trapper runs in Guard", function()
         local unguarded = {}
         for _, line in ipairs(linesWith("Trapper:wrap%(")) do

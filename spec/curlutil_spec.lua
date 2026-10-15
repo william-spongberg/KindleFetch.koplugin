@@ -699,12 +699,14 @@ describe("CurlUtil", function()
             assert.is_true(helper.exists(paths[3]))
         end)
 
-        it("discards everything and notifies when curl fails", function()
+        -- logging why, which what's on screen says if need be, rather than a notification of its own
+        it("discards everything when curl fails", function()
             helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }, 28))
 
             assert.are.equal(0, CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15))
             assert.is_false(helper.exists(paths[1]))
-            assert.matches("request timed out", helper.lastNotification(), 1, true)
+            assert.are.same({}, helper.state.notifications)
+            assert.is_truthy(helper.logged("warn", "^parallel download command failed"))
         end)
 
         it("runs in the background and returns the pid and files to poll", function()

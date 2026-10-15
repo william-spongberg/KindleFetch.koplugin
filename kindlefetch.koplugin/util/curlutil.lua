@@ -1,4 +1,3 @@
-local NotifyUtil = require("util.notifyutil")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
@@ -678,7 +677,6 @@ function CurlUtil.downloadMultiple(
             exit_code = exit_code,
             reason = reason,
         })
-        NotifyUtil.info("Download failed:" .. reason)
     end
 
     local results = CurlUtil.getTransferResults(results_file)

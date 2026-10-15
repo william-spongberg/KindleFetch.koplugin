@@ -78,6 +78,16 @@ function HttpUtil.getTrapWidget()
     return trap_widgets[coroutine.running() or MAIN]
 end
 
+-- say what's being waited for now on that widget, where it says such things (see DownloadProgress:setStatus), e.g.
+-- that a site's mirrors are being looked up, which takes a while, or with nil, what it said before. what's waiting
+-- says so, rather than the module that knows, so only what's on screen shows anything
+function HttpUtil.sayStatus(text)
+    local widget = HttpUtil.getTrapWidget()
+    if widget and widget.setStatus then
+        widget:setStatus(text)
+    end
+end
+
 -- the fields of a form, as a list of each one's name and value, as they're sent
 local function formBody(form)
     local fields = {}

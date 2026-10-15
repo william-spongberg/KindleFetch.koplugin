@@ -1,8 +1,8 @@
 local HttpUtil = require("util.httputil")
 local UrlCache = require("cache.urlcache")
 local LogUtil = require("util.logutil")
-local NotifyUtil = require("util.notifyutil")
 local Errors = require("util.errors")
+local T = require("ffi/util").template
 local _ = require("gettext")
 
 local UrlApi = {}
@@ -87,9 +87,11 @@ function UrlApi:getUrls(key, url, parse, refresh, name)
         end
     end
 
-    -- this takes a while, especially on the first search, so say what's happening
-    NotifyUtil.info(string.format(_("Looking up %s mirrors..."), name or "Library Genesis"))
+    -- this takes a while, especially on the first search, so say what's happening, where what's waiting can
+    LogUtil.info("looking up", name or "Library Genesis", "mirrors on", LogUtil.site(url))
+    HttpUtil.sayStatus(T(_("Looking up %1 mirrors..."), name or "Library Genesis"))
     local html, err, status = HttpUtil.getBody(url)
+    HttpUtil.sayStatus(nil)
     if not html then
         if err ~= HttpUtil.CANCELLED then
             LogUtil.warn("could not look up mirrors on", url, "error:", err)

@@ -570,6 +570,24 @@ describe("Downloader", function()
             assert.are.equal("50% · 0.5 / 1.0 MB", widget.status_widget.text)
         end)
 
+        -- rather than in a notification of its own, from what looks them up
+        it("says while it's looking the mirrors up", function()
+            local HttpUtil = require("util.httputil")
+            local getBody = HttpUtil.getBody
+            local while_looking_up
+            HttpUtil.getBody = function(url)
+                if url:find("wikipedia.org", 1, true) then
+                    while_looking_up = progress().status_text
+                end
+                return getBody(url)
+            end
+            require("cache.urlcache"):clear()
+
+            download()
+            assert.are.equal("Looking up Library Genesis mirrors...", while_looking_up)
+            assert.are.same({}, helper.state.notifications)
+        end)
+
         -- which can take a while
         it("says what it's waiting for until the book starts to arrive", function()
             local HttpUtil = require("util.httputil")
@@ -583,6 +601,7 @@ describe("Downloader", function()
             end
 
             download()
+            -- once the mirrors had been looked up
             assert.are.equal("Finding a download link...", while_finding_the_link)
             assert.are.equal("Waiting for Library Genesis...", progress().status_widget.text)
             helper.tick()
