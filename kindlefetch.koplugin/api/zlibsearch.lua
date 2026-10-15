@@ -24,6 +24,15 @@ local RESULTS_PER_PAGE = 50
 -- picked at random
 local LINK_ASKS = 4
 
+-- the books whose links Z-Library has given this session, and on which day (as Z-Library counts them, by UTC), as
+-- asking for one again the same day doesn't count as another of the account's downloads, so it can be once it has
+-- downloaded as many as it can that day, as when the download failed
+local links_given = {}
+
+local function today()
+    return os.date("!%Y-%m-%d")
+end
+
 -- the search for the query, as the form Z-Library's API is sent: in the languages, by their names (which is how
 -- Z-Library knows them, unless every one is chosen), and the file types, from the given page of its results
 function ZlibSearch.buildForm(query, page, languages, file_types)
@@ -216,7 +225,7 @@ function ZlibSearch.findDownloadLink(book, __, failed_url)
     local downloaded, limit = tonumber(user.downloads_today), tonumber(user.downloads_limit)
     if downloaded and limit then
         -- unless it's this book's link that's asked for again, which doesn't count again
-        if downloaded >= limit and not failed_url then
+        if downloaded >= limit and not failed_url and links_given[book.zlib_id] ~= today() then
             LogUtil.warn(string.format("the account has downloaded the %d books a day Z-Library allows", limit))
             return nil,
                 T(
@@ -246,6 +255,7 @@ function ZlibSearch.findDownloadLink(book, __, failed_url)
             )
             return nil, _("Z-Library didn't give a download link")
         end
+        links_given[book.zlib_id] = today()
         if LogUtil.site(link) ~= failed_site then
             break
         end

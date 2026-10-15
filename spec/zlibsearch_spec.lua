@@ -291,6 +291,19 @@ describe("ZlibSearch", function()
         end)
 
         -- as each link it gives counts, whether or not the book downloads
+        -- which doesn't count again, as when its download failed, but was refused all the same
+        it("asks for a book's link again the same day, once the account has downloaded as many as it can", function()
+            assert.is_not_nil(ZlibSearch.findDownloadLink(zlib_book))
+            profile(10, 10)
+            assert.are.equal("https://dl.example/books/1984.epub?token=abc", ZlibSearch.findDownloadLink(zlib_book))
+
+            -- but not another book's
+            local other = { source = "zlib", id = "zlib_7", zlib_id = 7, hash = "abc", title = "Emma" }
+            local url, err = ZlibSearch.findDownloadLink(other)
+            assert.is_nil(url)
+            assert.matches("which it has today", err, 1, true)
+        end)
+
         it("doesn't ask for the link once the account has downloaded as many books as it can today", function()
             profile(10, 10)
 
