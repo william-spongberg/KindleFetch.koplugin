@@ -11,8 +11,9 @@ local Errors = require("util.errors")
 local MultiSearch = {}
 MultiSearch.__index = MultiSearch
 
--- the sites, in the order they're offered, and searched in where it's one after another
-MultiSearch.SOURCES = { "libgen", "archive", "zlib" }
+-- the sites, in the order they're offered, and searched in where it's one after another: Z-Library last, as it can
+-- only be searched with an account
+MultiSearch.SOURCES = { "libgen", "archive", "gutenberg", "zlib" }
 
 -- whether the site can narrow a search down to scope, e.g. "author" (see SCOPES in Sources)
 function MultiSearch.canNarrow(source, scope)

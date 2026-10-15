@@ -9,5 +9,6 @@
 return {
     libgen = require("api.lglisearch"),
     archive = require("api.iasearch"),
+    gutenberg = require("api.gutenbergsearch"),
     zlib = require("api.zlibsearch"),
 }

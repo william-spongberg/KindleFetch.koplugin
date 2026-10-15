@@ -26,6 +26,7 @@ local Diagnostics = {}
 -- up among the books
 local REPORT_NAME = "kindlefetch-diagnostics.txt"
 -- Internet Archive's search, asked for a single book, to test connecting to it
+local GUTENBERG_TEST_URL = "https://www.gutenberg.org/ebooks/1342.opds"
 local ARCHIVE_TEST_URL =
     "https://archive.org/advancedsearch.php?q=identifier%3Aemma00aust&fl%5B%5D=identifier&rows=1&output=json"
 
@@ -164,15 +165,16 @@ function Diagnostics.show(tested)
 end
 
 -- what to test connecting to: Wikipedia, where the mirrors are looked up, Library Genesis' mirrors and Z-Library's
--- addresses as they are (without looking them up again, or changing them, see UrlApi.peekLibgenUrls), and Internet
--- Archive. Z-Library's at its API, as Kindle Fetch asks it, which answers without a cookie, where its home page sends
--- what hasn't one back to it, again and again
+-- addresses as they are (without looking them up again, or changing them, see UrlApi.peekLibgenUrls), Internet Archive
+-- and Project Gutenberg's catalogue. Z-Library's at its API, as Kindle Fetch asks it, which answers without a cookie,
+-- where its home page sends what hasn't one back to it, again and again
 local function testUrls()
     local urls = { UrlApi.LIBGEN_PAGE }
     for __, url in ipairs(UrlApi:peekLibgenUrls()) do
         table.insert(urls, url .. "/")
     end
     table.insert(urls, ARCHIVE_TEST_URL)
+    table.insert(urls, GUTENBERG_TEST_URL)
     for __, url in ipairs(UrlApi:peekZlibUrls()) do
         table.insert(urls, url .. "/eapi/info/languages")
     end

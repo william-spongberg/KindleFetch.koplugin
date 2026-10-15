@@ -206,7 +206,12 @@ function H.isPublicDomain(book)
 end
 
 -- the sites, by the names they're said with, as Kindle Fetch knows them (see Sources)
-H.SITES = { ["Library Genesis"] = "libgen", ["Internet Archive"] = "archive", ["Z-Library"] = "zlib" }
+H.SITES = {
+    ["Library Genesis"] = "libgen",
+    ["Internet Archive"] = "archive",
+    ["Project Gutenberg"] = "gutenberg",
+    ["Z-Library"] = "zlib",
+}
 
 -- tick the sites to search (by name: Library Genesis, unless given, or a list of them), as the search box's Sites menu
 -- does
