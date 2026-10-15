@@ -414,13 +414,22 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     })
 
     -- look the link up without holding KOReader up (where pages are fetched with curl, see HttpUtil), as it can
-    -- mean trying several mirrors, and let Cancel call it off. an error is passed on, rather than left to Trapper,
+    -- mean trying several mirrors, and let Cancel call it off. where it holds KOReader up, Cancel and Hide can't be
+    -- tapped until it's over, as the taps would only arrive then. an error is passed on, rather than left to Trapper,
     -- which would leave the progress showing
+    local can_cancel = HttpUtil.canCancel()
+    if not can_cancel then
+        progress_widget:setCancellable(false)
+        UIManager:forceRePaint()
+    end
     HttpUtil.setTrapWidget(progress_widget)
     local looked_up, download_url, lookup_err, mirror_failed =
         Guard.pcall("looking up the download link", source.findDownloadLink, book, retrying, failed_url)
     HttpUtil.setTrapWidget(nil)
     progress_widget.dismiss_callback = nil
+    if not can_cancel then
+        progress_widget:setCancellable(true)
+    end
     if not looked_up then
         download_url, lookup_err, mirror_failed = nil, Errors.UNEXPECTED, false
     end

@@ -327,6 +327,35 @@ describe("Downloader", function()
                 assert.are.equal(1, #spawned)
             end)
 
+            -- whose taps would only arrive once it's over
+            it("can't be cancelled or hidden while KOReader's own HTTP holds KOReader up", function()
+                local enabled = {}
+                HttpUtil.getBody = function(url)
+                    table.insert(enabled, progress().cancel_button.enabled)
+                    table.insert(enabled, progress().hide_button.enabled)
+                    return getBody(url)
+                end
+
+                download()
+                assert.are.same({ false, false, false, false }, enabled)
+                assert.is_true(progress().cancel_button.enabled)
+                assert.is_true(progress().hide_button.enabled)
+            end)
+
+            it("can be cancelled and hidden while curl looks it up in the background", function()
+                HttpUtil.canCancel = function()
+                    return true
+                end
+                local enabled = {}
+                HttpUtil.getBody = function(url)
+                    table.insert(enabled, progress().cancel_button.enabled ~= false)
+                    return getBody(url)
+                end
+
+                download()
+                assert.are.same({ true, true }, enabled)
+            end)
+
             it("can be called off, which says nothing about the mirrors", function()
                 HttpUtil.getBody = function(url)
                     if url:find("/ads.php", 1, true) then

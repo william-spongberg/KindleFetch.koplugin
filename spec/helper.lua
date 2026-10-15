@@ -760,6 +760,14 @@ function helper.reset()
     for _, module_name in ipairs(WIDGET_MODULES) do
         package.loaded[module_name] = widgetClass()
     end
+    -- buttons that can't be tapped until they're enabled again, as KOReader's are dimmed
+    local Button = package.loaded["ui/widget/button"]
+    function Button:enable()
+        self.enabled = true
+    end
+    function Button:disable()
+        self.enabled = false
+    end
     -- the characters TextBoxWidget uses for bold text
     local TextBoxWidget = package.loaded["ui/widget/textboxwidget"]
     -- how many lines its text wraps over, at 10px a character as in getSize, and how tall each is
