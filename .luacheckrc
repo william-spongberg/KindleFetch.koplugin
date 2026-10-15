@@ -9,6 +9,9 @@ max_line_length = 120
 -- set up by KOReader
 read_globals = {"G_reader_settings", "G_defaults"}
 
+-- __ is what's left unused where _ is gettext's, so it can be shadowed like _ (as KOReader does)
+ignore = {"4../__"}
+
 -- (.lua and .luarocks are where CI installs Lua and luacheck itself)
 exclude_files = {"koreader/", "spec/.tmp/", "e2e/.tmp/", ".dev-home/", ".lua/", ".luarocks/"}
 

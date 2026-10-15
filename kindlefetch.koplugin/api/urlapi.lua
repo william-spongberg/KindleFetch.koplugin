@@ -108,7 +108,7 @@ function UrlApi:getUrls(key, url, parse, refresh, name)
     end
 
     LogUtil.warn("found no mirrors on", url, "(" .. #html .. " bytes)")
-    return nil, "no mirrors listed", true
+    return nil, _("no mirrors listed"), true
 end
 
 -- a site's urls, looked up on its Wikipedia page again when refresh is set (see getUrls), or the ones known when
@@ -123,7 +123,7 @@ function UrlApi:getSiteUrls(key, url, parse, fallback, refresh, name)
     -- once they stop working or are due to be looked up again, rather than for every page of every search
     LogUtil.warn("using the mirrors known when KindleFetch was written, as Wikipedia didn't list any:", err)
     local fallback_urls = {}
-    for _, fallback_url in ipairs(fallback) do
+    for __, fallback_url in ipairs(fallback) do
         table.insert(fallback_urls, fallback_url)
     end
     UrlCache:set(fallback_urls, key)

@@ -7,6 +7,8 @@ local CurlUtil = require("util.curlutil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
 local Errors = require("util.errors")
+local T = require("ffi/util").template
+local _ = require("gettext")
 
 local HttpUtil = {}
 
@@ -38,7 +40,7 @@ local UNRESOLVED_ERRORS = {
 
 -- what went wrong when KOReader's own HTTP had no answer, as curl says it when it's that a name couldn't be looked up
 local function explainFailure(err)
-    err = tostring(err or "no response")
+    err = tostring(err or _("no response"))
     if UNRESOLVED_ERRORS[err:lower()] then
         return HttpUtil.UNRESOLVED
     end
@@ -91,7 +93,7 @@ end
 -- the fields of a form, as a list of each one's name and value, as they're sent
 local function formBody(form)
     local fields = {}
-    for _, field in ipairs(form) do
+    for __, field in ipairs(form) do
         table.insert(fields, util.urlEncode(field[1]) .. "=" .. util.urlEncode(tostring(field[2])))
     end
     return table.concat(fields, "&")
@@ -115,7 +117,7 @@ local function requestBodyWithCurl(request_url, use_proxy, opts)
         end
         config_file = CurlUtil.createConfigFile(options)
         if not config_file then
-            return nil, "could not write the request for curl"
+            return nil, _("could not write the request for curl")
         end
     end
 
@@ -154,14 +156,14 @@ local function requestBodyWithCurl(request_url, use_proxy, opts)
     local status, exit_code = (output or ""):match("(%d*) (%d+)%s*$")
     status, exit_code = tonumber(status), tonumber(exit_code)
     if not exit_code then
-        return nil, "no response"
+        return nil, _("no response")
     end
     -- the site didn't answer, or stopped part of the way through the page
     if exit_code ~= 0 or not status or status == 0 then
         return nil, CurlUtil.getErrorMeaning(exit_code)
     end
     if not body or body == "" then
-        return nil, "empty response (HTTP " .. tostring(status) .. ")", status
+        return nil, T(_("empty response (HTTP %1)"), tostring(status)), status
     end
 
     return body, nil, status
@@ -188,7 +190,7 @@ function HttpUtil.requestBody(request_url, proxy_url, opts)
     local response_body, ok, status, headers
     -- and once more when the site answers with a cookie and a redirect back to where it was, as its check that it
     -- isn't a bot can, which luasocket can't follow by itself, as it doesn't keep cookies (nor follow a form)
-    for _ = 1, 2 do
+    for __ = 1, 2 do
         response_body = {}
         local request_headers = {
             ["User-Agent"] = "Mozilla/5.0",
@@ -226,7 +228,7 @@ function HttpUtil.requestBody(request_url, proxy_url, opts)
         return nil, explainFailure(status)
     end
     if body == "" then
-        return nil, "empty response (HTTP " .. tostring(status) .. ")", status
+        return nil, T(_("empty response (HTTP %1)"), tostring(status)), status
     end
 
     return body, nil, status
@@ -238,7 +240,7 @@ end
 function HttpUtil.getBody(url, opts)
     if opts and opts.form then
         local names = {}
-        for _, field in ipairs(opts.form) do
+        for __, field in ipairs(opts.form) do
             table.insert(names, field[1])
         end
         LogUtil.debug("posting", table.concat(names, ", "), "to", url)
@@ -274,7 +276,7 @@ end
 local function downloadWithKOReader(url, path)
     local file, open_err = io.open(path, "wb")
     if not file then
-        return nil, "could not write the file: " .. tostring(open_err)
+        return nil, T(_("could not write the file: %1"), tostring(open_err))
     end
 
     socketutil:set_timeout(ANSWER_TIMEOUT, FILE_TIMEOUT)

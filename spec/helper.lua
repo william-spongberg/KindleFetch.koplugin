@@ -212,7 +212,12 @@ local function createStubs(state)
         end,
     }
 
-    stubs.gettext = setmetatable({}, {
+    stubs.gettext = setmetatable({
+        -- the singular or plural of a translated message, for the number
+        ngettext = function(singular, plural, n)
+            return n == 1 and singular or plural
+        end,
+    }, {
         __call = function(_, text)
             return text
         end,

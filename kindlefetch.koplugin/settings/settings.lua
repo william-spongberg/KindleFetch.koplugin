@@ -5,6 +5,7 @@ local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local LogUtil = require("util.logutil")
 local lfs = require("libs/libkoreader-lfs")
+local _ = require("gettext")
 
 local KindleFetchSettings = {}
 
@@ -429,51 +430,51 @@ local DOCUMENT_FILE_TYPES = { "pdf", "txt", "rtf", "doc", "docx", "odt", "djvu" 
 local IMAGE_FILE_TYPES = { "jpg", "tif", "pdb" }
 local WEB_FILE_TYPES = { "chm", "htm", "html", "htmlz" }
 local AVAILABLE_FILE_TYPES = {}
-for _, file_types in ipairs({
+for __, file_types in ipairs({
     EBOOK_FILE_TYPES,
     COMIC_FILE_TYPES,
     DOCUMENT_FILE_TYPES,
     IMAGE_FILE_TYPES,
     WEB_FILE_TYPES,
 }) do
-    for _, file_type in ipairs(file_types) do
+    for __, file_type in ipairs(file_types) do
         table.insert(AVAILABLE_FILE_TYPES, file_type)
     end
 end
 -- Library Genesis topics
 local AVAILABLE_BOOK_TYPES = {
     {
-        text = "Fiction",
+        text = _("Fiction"),
         code = "fiction",
     },
     {
-        text = "Non-fiction",
+        text = _("Non-fiction"),
         code = "nonfiction",
     },
     {
-        text = "Comics",
+        text = _("Comics"),
         code = "comics",
     },
     {
-        text = "Magazines",
+        text = _("Magazines"),
         code = "magazines",
     },
     {
-        text = "Scientific articles",
+        text = _("Scientific articles"),
         code = "articles",
     },
     {
-        text = "Standards",
+        text = _("Standards"),
         code = "standards",
     },
 }
 -- by default, every kind of book in every file type KOReader can open (in English)
 DEFAULTS.preferred_file_types = {}
-for _, file_type in ipairs(AVAILABLE_FILE_TYPES) do
+for __, file_type in ipairs(AVAILABLE_FILE_TYPES) do
     table.insert(DEFAULTS.preferred_file_types, file_type)
 end
 DEFAULTS.preferred_book_types = {}
-for _, book_type in ipairs(AVAILABLE_BOOK_TYPES) do
+for __, book_type in ipairs(AVAILABLE_BOOK_TYPES) do
     table.insert(DEFAULTS.preferred_book_types, book_type.code)
 end
 
@@ -555,7 +556,7 @@ local TYPES = {
 -- the strings in a list, leaving out anything else, which a list of languages or searches is never saved with
 local function strings(list)
     local kept = {}
-    for _, value in ipairs(list) do
+    for __, value in ipairs(list) do
         if type(value) == "string" then
             table.insert(kept, value)
         end
@@ -678,7 +679,7 @@ end
 -- once each, whatever its capitals, as Library Genesis finds the same books either way
 function KindleFetchSettings:addRecentSearch(query)
     local searches = { query }
-    for _, search in ipairs(self:getRecentSearches()) do
+    for __, search in ipairs(self:getRecentSearches()) do
         if search:lower() ~= query:lower() and #searches < MAX_RECENT_SEARCHES then
             table.insert(searches, search)
         end
@@ -771,8 +772,8 @@ end
 function KindleFetchSettings:getPreferredFileTypes()
     local saved = KindleFetchSettings:getSetting("preferred_file_types")
     local file_types = {}
-    for _, file_type in ipairs(saved) do
-        for _, available in ipairs(AVAILABLE_FILE_TYPES) do
+    for __, file_type in ipairs(saved) do
+        for __, available in ipairs(AVAILABLE_FILE_TYPES) do
             if available == file_type then
                 table.insert(file_types, file_type)
             end
@@ -808,9 +809,9 @@ end
 function KindleFetchSettings:getPreferredBookTypes()
     local saved = KindleFetchSettings:getSetting("preferred_book_types")
     local book_types = {}
-    for _, book_type in ipairs(saved) do
+    for __, book_type in ipairs(saved) do
         book_type = OLD_BOOK_TYPES[book_type] or book_type
-        for _, available in ipairs(AVAILABLE_BOOK_TYPES) do
+        for __, available in ipairs(AVAILABLE_BOOK_TYPES) do
             if available.code == book_type then
                 table.insert(book_types, book_type)
             end

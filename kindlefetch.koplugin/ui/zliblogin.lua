@@ -10,6 +10,7 @@ local WaitingMessage = require("ui.waitingmessage")
 local ZlibAccount = require("api.zlibaccount")
 local Errors = require("util.errors")
 local Guard = require("util.guard")
+local T = require("ffi/util").template
 local _ = require("gettext")
 
 local ZlibLogin = {}
@@ -50,7 +51,7 @@ function ZlibLogin.login(email, password, on_logged_in)
                 return
             end
             if not logged_in then
-                NotifyUtil.error(_("Couldn't log in to Z-Library: ") .. err)
+                NotifyUtil.error(T(_("Logging in to Z-Library failed: %1"), err))
                 return
             end
             NotifyUtil.info(_("Logged in to Z-Library"))

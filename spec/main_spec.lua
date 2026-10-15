@@ -906,9 +906,10 @@ describe("KindleFetch", function()
                 search(openUI(), "dune")
 
                 assert.are.equal(0, #searches)
+                -- as the search box says when there's no search term
                 assert.are.equal(
-                    "Turn on at least one " .. preference[2] .. " in Kindle Fetch's settings first.",
-                    helper.lastError()
+                    "Turn on at least one " .. preference[2] .. " in Kindle Fetch's settings first",
+                    helper.lastNotification()
                 )
             end)
         end

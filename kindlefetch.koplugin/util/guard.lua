@@ -2,6 +2,7 @@ local UIManager = require("ui/uimanager")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local Errors = require("util.errors")
+local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- KOReader doesn't catch errors in what it runs later: tasks it's asked to run in a while or on the next tick, the
@@ -16,7 +17,7 @@ end
 
 -- say that something went wrong, when what was going on has nothing of its own to clean up and say
 function Guard.say(err)
-    NotifyUtil.error(_("Kindle Fetch: ") .. err)
+    NotifyUtil.error(T(_("Kindle Fetch: %1"), err))
 end
 
 -- like pcall, logging what went wrong with where it happened, as what was being done (e.g. "searching")

@@ -52,6 +52,25 @@ describe("The plugin's code", function()
         assert.are.same({}, said)
     end)
 
+    -- which hid gettext's _, so that what was said in its loop or function couldn't be translated, or failed
+    it("doesn't name what's left unused _ where _ translates", function()
+        local hidden = {}
+        for path, source in pairs(sources) do
+            if source:find('local _ = require("gettext")', 1, true) then
+                local number = 0
+                for line in (source .. "\n"):gmatch("([^\n]*)\n") do
+                    number = number + 1
+                    local code = line:gsub("%-%-.*$", "")
+                    if code:find("for _[ ,=]") or code:find("function[%w%.:%s]*%([^)]*%f[%w_]_[,)]") then
+                        table.insert(hidden, string.format("%s:%d: %s", path, number, line))
+                    end
+                end
+            end
+        end
+        table.sort(hidden)
+        assert.are.same({}, hidden)
+    end)
+
     it("wraps what Trapper runs in Guard", function()
         local unguarded = {}
         for _, line in ipairs(linesWith("Trapper:wrap%(")) do

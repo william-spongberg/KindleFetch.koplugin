@@ -84,7 +84,7 @@ end
 -- show that menu in place of Kindle Fetch's own, when it couldn't start (registering it again, in case it went wrong
 -- before it had, which, when it hadn't, only adds the same menu twice)
 function SafeMode.takeOver(plugin, err)
-    plugin.addToMainMenu = function(_, menu_items)
+    plugin.addToMainMenu = function(__, menu_items)
         SafeMode.addToMainMenu(menu_items, err)
     end
     if plugin.ui and plugin.ui.menu then

@@ -378,7 +378,7 @@ end
 -- doesn't catch errors in it, as it does in the plugin's own event handlers, and covers arrive several times a page,
 -- so what goes wrong is only logged (see Guard)
 BookMenu.onKindleFetchCoversDownloaded = Guard.wrap("showing the covers that arrived", function(self)
-    for _, book in pairs(self.awaited_covers or {}) do
+    for __, book in pairs(self.awaited_covers or {}) do
         if not CoverCache:isComing(book) then
             self:updateItems()
             return

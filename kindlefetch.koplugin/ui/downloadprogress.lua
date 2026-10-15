@@ -174,7 +174,7 @@ end
 -- HTTP, see HttpUtil.canCancel), as taps on them would only arrive once it's over
 function DownloadProgress:setCancellable(cancellable)
     self.cancellable = cancellable
-    for _, button in ipairs({ self.cancel_button, self.hide_button }) do
+    for __, button in ipairs({ self.cancel_button, self.hide_button }) do
         if cancellable then
             button:enable()
         else
