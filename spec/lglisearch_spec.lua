@@ -78,7 +78,7 @@ describe("LlgiSearch", function()
             assert.are.equal(1, #LlgiSearch:search("dune", 1, "author"))
             assert.is_true(LlgiSearch:isCached("dune", 1, "author"))
             assert.is_false(LlgiSearch:isCached("dune", 1))
-            assert.is_truthy(helper.logged("info", '^searching for "dune" by author from page 1, in '))
+            assert.is_truthy(helper.logged("info", '^searching Library Genesis for "dune" by author from page 1, in '))
         end)
 
         it("maps every book type to a Library Genesis topic", function()
@@ -100,7 +100,7 @@ describe("LlgiSearch", function()
 
             assert.are.equal(2, #books)
             -- the search and what it found, for crash.log
-            assert.is_truthy(helper.logged("info", '^searching for "dune" from page 1, in '))
+            assert.is_truthy(helper.logged("info", '^searching Library Genesis for "dune" from page 1, in '))
             assert.is_truthy(helper.logged("info", "^page 1 from [%w%.]+: kept 2 of its 2 results$"))
             assert.is_truthy(helper.logged("info", '^found 2 books for "dune"$'))
             assert.are.same({

@@ -14,10 +14,11 @@ local LlgiSearch = {
     NAME = "Library Genesis",
     -- searches are narrowed down to the book types chosen in the settings, which are Library Genesis' topics
     HAS_BOOK_TYPES = true,
+    SOURCE = "libgen",
 }
 
 -- constants
-local SOURCE = "libgen"
+local SOURCE = LlgiSearch.SOURCE
 -- the results asked for on each page, though Library Genesis sends 25 however many are asked for (see hasMorePages)
 local RESULTS_PER_PAGE = 100
 -- as many results as Library Genesis sends on a page, on every page but its last
@@ -372,45 +373,12 @@ end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
 function LlgiSearch:isCached(query, page, scope)
-    local cached = SearchCache:get(
-        SOURCE,
-        query,
-        page,
-        KindleFetchSettings:getPreferredLanguages(),
-        KindleFetchSettings:getPreferredFileTypes(),
-        KindleFetchSettings:getPreferredBookTypes(),
-        scope
-    )
-    return cached ~= nil and cached.books ~= nil
+    return SearchCache:hasPage(self, query, page, scope)
 end
 
--- search from the given page of Library Genesis' results, returning the books found, the page to carry on from
--- (or nil once there are no more results), and how many results were read to find them: most may have been in
--- other languages or file types (unknown, so nil, for books saved from an earlier search). scope narrows it down to
--- one of the books' fields, where given (see SCOPES)
-function LlgiSearch:search(query, page, scope)
-    local languages = KindleFetchSettings:getPreferredLanguages()
-    local file_types = KindleFetchSettings:getPreferredFileTypes()
-    local book_types = KindleFetchSettings:getPreferredBookTypes()
-
-    -- check cache first (ignoring results cached by older versions, which were just a list of books)
-    LogUtil.info(
-        string.format(
-            "searching for %q%s from page %d, in %s, as %s, from %s",
-            query,
-            scope and " by " .. scope or "",
-            page,
-            table.concat(languages, "/"),
-            table.concat(file_types, "/"),
-            table.concat(book_types, "/")
-        )
-    )
-    local cached = SearchCache:get(SOURCE, query, page, languages, file_types, book_types, scope)
-    if cached and cached.books then
-        LogUtil.info("showing", #cached.books, "books saved from an earlier search")
-        return cached.books, nil, cached.next_page
-    end
-
+-- the books on Library Genesis' pages of results from page on, as search returns them, reading pages until enough
+-- have been found
+local function searchPages(query, page, scope, languages, file_types, book_types)
     local books = {}
     -- Library Genesis can list the same file more than once, e.g. for each edition it's in
     local seen = {}
@@ -482,14 +450,17 @@ function LlgiSearch:search(query, page, scope)
             next_page and ", and more from page " .. next_page or ""
         )
     )
-    -- add new query result to cache before returning, unless empty as the page may have been an error
-    if #books > 0 then
-        SearchCache:set({
-            books = books,
-            next_page = next_page,
-        }, SOURCE, query, page, languages, file_types, book_types, scope)
-    end
     return books, nil, next_page, results_read
+end
+
+-- search from the given page of Library Genesis' results, returning the books found, the page to carry on from
+-- (or nil once there are no more results), and how many results were read to find them: most may have been in
+-- other languages or file types (unknown, so nil, for books saved from an earlier search). scope narrows it down to
+-- one of the books' fields, where given (see SCOPES)
+function LlgiSearch:search(query, page, scope)
+    return SearchCache:search(self, query, page, scope, function(languages, file_types, book_types)
+        return searchPages(query, page, scope, languages, file_types, book_types)
+    end)
 end
 
 -- the book's download link, from the first mirror whose download page has one, looked up on Wikipedia again

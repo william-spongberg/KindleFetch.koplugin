@@ -15,10 +15,11 @@ local ZlibSearch = {
     -- its download links each go to one of its servers, some of which can fail for a while, and asking it for the
     -- same book's link again the same day doesn't count as another download (see findDownloadLink)
     NEW_LINK_WHEN_SERVER_FAILS = true,
+    SOURCE = "zlib",
 }
 
 -- constants
-local SOURCE = "zlib"
+local SOURCE = ZlibSearch.SOURCE
 local RESULTS_PER_PAGE = 50
 -- how many times to ask for a link that goes to another server than one that failed, as each goes to one of them,
 -- picked at random
@@ -139,39 +140,11 @@ end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
 function ZlibSearch:isCached(query, page)
-    local cached = SearchCache:get(
-        SOURCE,
-        query,
-        page,
-        KindleFetchSettings:getPreferredLanguages(),
-        KindleFetchSettings:getPreferredFileTypes(),
-        {}
-    )
-    return cached ~= nil and cached.books ~= nil
+    return SearchCache:hasPage(self, query, page)
 end
 
--- search the given page of Z-Library's results, returning the books found, the page to carry on from (or nil once
--- there are no more results), and how many results were read to find them (as LlgiSearch:search does)
-function ZlibSearch:search(query, page)
-    local languages = KindleFetchSettings:getPreferredLanguages()
-    local file_types = KindleFetchSettings:getPreferredFileTypes()
-    LogUtil.info(
-        string.format(
-            "searching %s for %q from page %d, in %s, as %s",
-            self.NAME,
-            query,
-            page,
-            table.concat(languages, "/"),
-            table.concat(file_types, "/")
-        )
-    )
-
-    local cached = SearchCache:get(SOURCE, query, page, languages, file_types, {})
-    if cached and cached.books then
-        LogUtil.info("showing", #cached.books, "books saved from an earlier search")
-        return cached.books, nil, cached.next_page
-    end
-
+-- the books on a page of Z-Library's results, as search returns them
+local function fetchResults(query, page, languages, file_types)
     local data, err = ZlibAccount:request("/eapi/book/search", ZlibSearch.buildForm(query, page, languages, file_types))
     if not data then
         return nil, err
@@ -179,7 +152,7 @@ function ZlibSearch:search(query, page)
     local books, read = ZlibSearch.parseResults(data, file_types)
     if not books then
         LogUtil.warn("Z-Library's answer to a search had no books in it")
-        return nil, T(_("unexpected response from %1"), self.NAME)
+        return nil, T(_("unexpected response from %1"), ZlibSearch.NAME)
     end
     -- none of them could be read, as when Z-Library has changed what it answers with
     if read == 0 and #data.books > 0 then
@@ -195,21 +168,22 @@ function ZlibSearch:search(query, page)
         string.format(
             "page %d of %s's %s results: kept %d of its %d%s",
             page,
-            self.NAME,
+            ZlibSearch.NAME,
             tostring(tonumber(pagination.total_items) or "unknown"),
             #books,
             #data.books,
             next_page and "" or ", the last"
         )
     )
-    -- add new query result to cache before returning, unless empty as the page may have been an error
-    if #books > 0 then
-        SearchCache:set({
-            books = books,
-            next_page = next_page,
-        }, SOURCE, query, page, languages, file_types, {})
-    end
     return books, nil, next_page, read
+end
+
+-- search the given page of Z-Library's results, returning the books found, the page to carry on from (or nil once
+-- there are no more results), and how many results were read to find them (as LlgiSearch:search does)
+function ZlibSearch:search(query, page)
+    return SearchCache:search(self, query, page, nil, function(languages, file_types)
+        return fetchResults(query, page, languages, file_types)
+    end)
 end
 
 -- the book's download link, which Z-Library only gives the account a few of a day, so it's only asked for while
