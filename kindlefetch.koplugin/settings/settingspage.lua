@@ -111,8 +111,9 @@ local function fileTypeChoices()
     return choices
 end
 
--- a menu that fills the screen
+-- a menu that fills the screen (from the settings, or the results, see changeLanguages)
 function SettingsPage:newMenu(title, item_table, onClose)
+    local size = Screen:getSize()
     return Menu:new {
         title = title,
         item_table = item_table,
@@ -121,8 +122,8 @@ function SettingsPage:newMenu(title, item_table, onClose)
         -- with square corners: rounded ones aren't painted, and show what was on screen before, such as the top
         -- edge of KOReader's menu
         is_popout = false,
-        width = self.dimen.w,
-        height = self.dimen.h,
+        width = size.w,
+        height = size.h,
         onClose = onClose,
     }
 end
@@ -213,15 +214,15 @@ function SettingsPage:settingsItems()
 end
 
 function SettingsPage:showSettings()
-    self.dimen = Screen:getSize()
     self.menu = self:newMenu(_("Kindle Fetch Settings"), self:settingsItems())
     UIManager:show(self.menu)
 end
 
 -- show the settings as they are now, in the menu that's open and on the page it's on. closing the menu and
--- opening another for every change flashes the whole screen twice
+-- opening another for every change flashes the whole screen twice. (nothing once it has been closed, e.g. where the
+-- languages are changed from the results)
 function SettingsPage:refresh()
-    if self.menu then
+    if self.menu and UIManager:isWidgetShown(self.menu) then
         self.menu:switchItemTable(nil, self:settingsItems(), -1)
     end
 end
@@ -295,8 +296,9 @@ end
 -- a menu of choices to tick, each with its text and the code it's saved as, or a heading to go above the choices
 -- after it. the ticked codes are passed to save when the menu is closed, unless there are none, as nothing could
 -- then be found, which none_text says. (a change isn't otherwise said, as the settings show it, and each
--- notification refreshes the screen twice)
-function SettingsPage:tickSeveral(title, choices, ticked, save, none_text)
+-- notification refreshes the screen twice.) once it has closed, on_closed is called, where given, with whether
+-- what's ticked has changed
+function SettingsPage:tickSeveral(title, choices, ticked, save, none_text, on_closed)
     local this = self
     local selected = {}
     for __, code in ipairs(ticked) do
@@ -347,6 +349,13 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, none_text)
         end
         UIManager:close(menu)
         this:refresh()
+        if on_closed then
+            local changed = #result ~= #ticked
+            for __, code in ipairs(ticked) do
+                changed = changed or not selected[code]
+            end
+            on_closed(changed and #result > 0)
+        end
     end)
     if Menu.onHome then
         function menu:onHome()
@@ -357,7 +366,9 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, none_text)
     UIManager:show(menu)
 end
 
-function SettingsPage:changeLanguages()
+-- change the languages the books shown are in, from the settings or the results, calling on_closed, where given, with
+-- whether they've changed once they're chosen (see tickSeveral)
+function SettingsPage:changeLanguages(on_closed)
     self:tickSeveral(
         _("Preferred Languages"),
         KindleFetchSettings:getAvailableLanguages(),
@@ -365,11 +376,13 @@ function SettingsPage:changeLanguages()
         function(languages)
             saved(KindleFetchSettings:setPreferredLanguages(languages))
         end,
-        _("Select at least one language")
+        _("Select at least one language"),
+        on_closed
     )
 end
 
-function SettingsPage:changeFileTypes()
+-- as changeLanguages, for their file types
+function SettingsPage:changeFileTypes(on_closed)
     local choices = fileTypeChoices()
 
     self:tickSeveral(
@@ -379,11 +392,13 @@ function SettingsPage:changeFileTypes()
         function(file_types)
             saved(KindleFetchSettings:setPreferredFileTypes(file_types))
         end,
-        _("Select at least one file type")
+        _("Select at least one file type"),
+        on_closed
     )
 end
 
-function SettingsPage:changeBookTypes()
+-- as changeLanguages, for their book types (on Library Genesis)
+function SettingsPage:changeBookTypes(on_closed)
     self:tickSeveral(
         _("Preferred Book Types"),
         KindleFetchSettings:getAvailableBookTypes(),
@@ -391,7 +406,8 @@ function SettingsPage:changeBookTypes()
         function(book_types)
             saved(KindleFetchSettings:setPreferredBookTypes(book_types))
         end,
-        _("Select at least one book type")
+        _("Select at least one book type"),
+        on_closed
     )
 end
 

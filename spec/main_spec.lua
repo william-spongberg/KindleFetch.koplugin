@@ -13,6 +13,9 @@ describe("KindleFetch", function()
     local can_cancel, trap_widgets
     -- pages of results saved from earlier searches, as "query page"
     local saved
+    -- the settings' menus for choosing languages, file types and book types that were opened, and what each calls once
+    -- closed
+    local choosers
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
     local opened
@@ -194,10 +197,19 @@ describe("KindleFetch", function()
                 return plugin_dir
             end,
         })
+        choosers = {}
+        local function chooser(name)
+            return function(_, on_closed)
+                table.insert(choosers, { name = name, on_closed = on_closed })
+            end
+        end
         helper.stub("settings.settingspage", {
             showSettings = function()
                 settings_shown = settings_shown + 1
             end,
+            changeLanguages = chooser("languages"),
+            changeFileTypes = chooser("file types"),
+            changeBookTypes = chooser("book types"),
         })
         can_cancel, trap_widgets = true, {}
         local trap_widget
@@ -1219,10 +1231,74 @@ describe("KindleFetch", function()
         it("says when nothing was found", function()
             search(openUI(), "dune")
 
-            assert.are.equal("No books found", helper.lastShown().text)
-            assert.is_nil(helper.lastShown().ok_callback)
+            local explanation = helper.lastShown()
+            assert.are.equal("Library Genesis found no books for “dune”.", explanation.text)
+            assert.is_true(explanation.no_ok_button)
+            assert.are.equal("Close", explanation.cancel_text)
             assert.are.equal(0, #menus)
             assert.are.equal(0, #helper.state.notifications)
+        end)
+
+        describe("offering the other sites", function()
+            local function texts(row)
+                local result = {}
+                for _, b in ipairs(row) do
+                    table.insert(result, b.text)
+                end
+                return result
+            end
+
+            it("searches another site for the same thing when nothing was found", function()
+                local plugin = openUI()
+                search(plugin, "dune")
+                local first_box = plugin.search_box
+                local explanation = helper.lastShown()
+                assert.are.same({ "Search Internet Archive", "Search Z-Library" }, texts(explanation.other_buttons[1]))
+
+                explanation.other_buttons[1][1].callback()
+                -- once the message has closed
+                assert.are.same({}, archive_searches)
+                helper.tick()
+                assert.is_true(helper.wasClosed(first_box))
+                assert.are.equal("Search Internet Archive", plugin.search_box.title)
+                assert.are.equal("dune", plugin.search_box.input)
+                assert.are.same({ { "dune", 1 } }, archive_searches)
+            end)
+
+            -- as it can only be searched with an account
+            it("only offers Z-Library once logged in", function()
+                zlib_logged_in = false
+                search(openUI(), "dune")
+                assert.are.same({ "Search Internet Archive" }, texts(helper.lastShown().other_buttons[1]))
+            end)
+
+            it("offers them when a search fails", function()
+                search_results[1] = { nil, "all Library Genesis mirrors failed" }
+                search(openUI(), "dune")
+
+                local failure = helper.lastShown()
+                assert.are.equal("Search failed: all Library Genesis mirrors failed", failure.text)
+                assert.are.equal("notice-warning", failure.icon)
+                assert.are.same({ "Search Internet Archive", "Search Z-Library" }, texts(failure.other_buttons[1]))
+            end)
+
+            -- which they'd fail for too
+            it("doesn't offer them when the device isn't connected", function()
+                search_results[1] = { nil, "no internet connection" }
+                search(openUI(), "dune")
+
+                assert.are.equal("Search failed: no internet connection", helper.lastError())
+                assert.is_nil(helper.lastShown().other_buttons)
+            end)
+
+            it("offers them when the site listed results, but none in the languages and file types chosen", function()
+                search_results[1] = { {}, nil, 2, 37 }
+                search(openUI(), "emma", "archive")
+
+                local other_buttons = helper.lastShown().other_buttons
+                assert.are.same({ "Keep searching" }, texts(other_buttons[1]))
+                assert.are.same({ "Search Library Genesis", "Search Z-Library" }, texts(other_buttons[2]))
+            end)
         end)
 
         -- which was said to have failed, rather than offering the settings
@@ -1255,8 +1331,9 @@ describe("KindleFetch", function()
                 )
                 assert.are.equal("Settings", explanation.ok_text)
                 assert.are.equal("Close", explanation.cancel_text)
-                -- there are no more results to look through
-                assert.is_nil(explanation.other_buttons)
+                -- there are no more results to look through, just the other sites
+                assert.are.equal(1, #explanation.other_buttons)
+                assert.are.equal("Search Internet Archive", explanation.other_buttons[1][1].text)
                 assert.are.equal(0, #menus)
 
                 explanation.ok_callback()
@@ -1302,6 +1379,58 @@ describe("KindleFetch", function()
                 helper.stubs.network.when_connected()
                 assert.are.same({ { "dune", 1 }, { "dune", 6 } }, searches)
             end)
+        end)
+    end)
+
+    describe("changing what the books found can be in, from the results", function()
+        local plugin
+
+        before_each(function()
+            search_results[1] = { { book("1984"), book("Animal Farm") } }
+            plugin = openUI()
+            search(plugin, "orwell")
+            menus[1]:onLeftButtonTap()
+        end)
+
+        it("offers the languages, file types and book types", function()
+            local results_menu = helper.lastShown()
+            button(results_menu, "Languages…").callback()
+            assert.is_true(helper.wasClosed(results_menu))
+            assert.are.equal("languages", choosers[1].name)
+
+            menus[1]:onLeftButtonTap()
+            button(helper.lastShown(), "File types…").callback()
+            menus[1]:onLeftButtonTap()
+            button(helper.lastShown(), "Book types…").callback()
+            assert.are.equal("file types", choosers[2].name)
+            assert.are.equal("book types", choosers[3].name)
+        end)
+
+        it("searches again once they've changed, in place of the results", function()
+            button(helper.lastShown(), "Languages…").callback()
+            search_results[1] = { { book("Nineteen Eighty-Four") } }
+            choosers[1].on_closed(true)
+
+            assert.is_true(helper.wasClosed(menus[1]))
+            assert.are.same({ { "orwell", 1 }, { "orwell", 1 } }, searches)
+            assert.are.same({ "Nineteen Eighty-Four" }, itemTexts(menus[2]))
+        end)
+
+        it("leaves the results as they are when nothing has changed", function()
+            button(helper.lastShown(), "File types…").callback()
+            choosers[1].on_closed(false)
+
+            assert.is_false(helper.wasClosed(menus[1]))
+            assert.are.equal(1, #searches)
+        end)
+
+        -- which only Library Genesis sorts its books into
+        it("leaves book types out for the other sites", function()
+            search_results[1] = { { book("Emma") } }
+            search(plugin, "emma", "archive")
+            menus[2]:onLeftButtonTap()
+            assert.is_false(pcall(button, helper.lastShown(), "Book types…"))
+            assert.is_true(pcall(button, helper.lastShown(), "Languages…"))
         end)
     end)
 
@@ -1365,7 +1494,7 @@ describe("KindleFetch", function()
             menus[1]:onLeftButtonTap()
             local results_menu = helper.lastShown()
             -- there's nothing to show again yet
-            assert.are.equal(1, #results_menu.buttons)
+            assert.is_false(pcall(button, results_menu, "Show all 3 books"))
 
             button(results_menu, "Look through the books found…").callback()
             assert.is_true(helper.wasClosed(results_menu))

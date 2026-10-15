@@ -16,7 +16,8 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
   - Library Genesis' mirrors and Z-Library's addresses (1 week expiry by default)
   - Book covers (500 entries max, the oldest removed to make room)
 - **Preferences**: Filter results by preferred languages, file types, and book types (on Library Genesis)
-- **Looking Through Results**: Show only the books found with some text in their title, authors or file type, without searching again
+- **Looking Through Results**: Show only the books found with some text in their title, authors or file type, without searching again, or change the languages, file types and book types they can be in from the menu at the top of the results, searching again with them
+- **Other Sites**: When a search finds nothing, or fails, offers to search the other sites for the same thing (Z-Library once logged in)
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders until each one arrives; tap a cover in the download prompt to see it full size
 - **Download Progress**: Visual download progress bar with real-time file size information, saying what it's waiting for until the book starts to arrive, and when the download has stalled
 - **Background Downloads**: Downloads run in the background using curl, or where there's no curl that can (such as on a Kobo, which may have none at all), KOReader's own HTTP in a process of its own, with non-blocking UI updates; hide a download, and see its progress again from Kindle Fetch's Downloads entry or by choosing its book again; downloads are cancelled when KOReader closes, including when the device is powered off or restarted, or its storage is shared over USB

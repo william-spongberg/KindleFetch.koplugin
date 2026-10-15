@@ -360,6 +360,19 @@ local function createStubs(state)
         close = function(_, widget)
             table.insert(state.closed, widget)
         end,
+        isWidgetShown = function(_, widget)
+            for _, shown in ipairs(state.shown) do
+                if shown == widget then
+                    for _, closed in ipairs(state.closed) do
+                        if closed == widget then
+                            return false
+                        end
+                    end
+                    return true
+                end
+            end
+            return false
+        end,
         -- every refresh asked for is kept, as its type and the region of the screen it covers (none for all of it)
         setDirty = function(_, _, refresh, region)
             if type(refresh) == "function" then
@@ -436,8 +449,9 @@ local function createStubs(state)
     stubs.inputdialog = {
         new = function(_, o)
             o = o or {}
+            -- what's been typed, or what it was opened with
             o.getInputText = function(self)
-                return self.input_text or ""
+                return self.input_text or self.input or ""
             end
             o.setInputText = function(self, text)
                 self.input_text = text

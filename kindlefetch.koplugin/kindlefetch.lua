@@ -42,6 +42,8 @@ local update_check_scheduled = false
 local version_checked = false
 -- and only check for updates automatically once a day, in seconds
 local UPDATE_CHECK_INTERVAL = 24 * 60 * 60
+-- the sites, in the order Kindle Fetch's menu lists them
+local SOURCES = { "libgen", "archive", "zlib" }
 
 local function updateCheckDue()
     local last_check = KindleFetchSettings:getLastUpdateCheck()
@@ -382,12 +384,13 @@ local function needsLogin(source, on_logged_in)
     return true
 end
 
--- open the search box, for searching the site source names (see Sources), once logged into it where it needs that
-function KindleFetch:setupUI(source)
+-- open the search box, for searching the site source names (see Sources), once logged into it where it needs that,
+-- searching for query straight away, where given (e.g. the search another site found nothing for, see otherSites)
+function KindleFetch:setupUI(source, query)
     -- grab self reference for callbacks
     local this = self
     local function openOnceLoggedIn()
-        this:setupUI(source)
+        this:setupUI(source, query)
     end
     if needsLogin(source, openOnceLoggedIn) then
         return
@@ -396,6 +399,7 @@ function KindleFetch:setupUI(source)
 
     self.search_box = InputDialog:new {
         title = T(_("Search %1"), Sources[source].NAME),
+        input = query,
         input_type = "text",
         buttons = {
             {
@@ -425,6 +429,31 @@ function KindleFetch:setupUI(source)
         },
     }
     UIManager:show(self.search_box)
+    if query then
+        self:performSearch()
+    end
+end
+
+-- buttons for searching the other sites for query, from what says this one found nothing or failed: Z-Library only
+-- once logged in, as it can only be searched with an account. each closes the search box and results for this one
+function KindleFetch:otherSites(query)
+    local buttons = {}
+    for __, source in ipairs(SOURCES) do
+        if source ~= self.source and (not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn()) then
+            table.insert(buttons, {
+                text = T(_("Search %1"), Sources[source].NAME),
+                callback = function()
+                    -- once what it's in has closed
+                    Guard.nextTick("searching another site", function()
+                        LogUtil.info(string.format("searching %s for %q instead", Sources[source].NAME, query))
+                        self:closeSearch()
+                        self:setupUI(source, query)
+                    end)
+                end,
+            })
+        end
+    end
+    return buttons
 end
 
 function KindleFetch:performSearch()
@@ -497,7 +526,7 @@ function KindleFetch:searchFrom(query, page)
         if err or not books then
             err = err or "search failed"
             LogUtil.warn(string.format("search for %q failed: %s", query, err))
-            NotifyUtil.error(T(_("Search failed: %1"), err))
+            self:explainFailure(query, err)
             return
         end
         if #books == 0 then
@@ -527,16 +556,39 @@ function KindleFetch:rememberSearch(query)
     end
 end
 
+-- say the search failed, and why, offering to search the other sites instead (see otherSites), unless the device
+-- isn't connected, which they'd fail for too
+function KindleFetch:explainFailure(query, err)
+    local text = T(_("Search failed: %1"), err)
+    if err == Errors.NO_CONNECTION then
+        NotifyUtil.error(text)
+        return
+    end
+    UIManager:show(ConfirmBox:new {
+        text = text,
+        icon = "notice-warning",
+        no_ok_button = true,
+        cancel_text = _("Close"),
+        other_buttons = { self:otherSites(query) },
+    })
+end
+
 -- say that no books were found, and why when it's known: the site may have listed plenty, all in other languages or
--- file types than those chosen in the settings
+-- file types than those chosen in the settings. the other sites are offered too (see otherSites)
 function KindleFetch:explainNoBooks(query, results_read, next_page)
+    local name = Sources[self.source].NAME
     if results_read == 0 then
-        NotifyUtil.message(_("No books found"))
+        UIManager:show(ConfirmBox:new {
+            text = T(_("%1 found no books for “%2”."), name, query),
+            icon = "notice-info",
+            no_ok_button = true,
+            cancel_text = _("Close"),
+            other_buttons = { self:otherSites(query) },
+        })
         return
     end
 
     -- (none at all for a site that has none of the file types chosen)
-    local name = Sources[self.source].NAME
     local text = results_read
             and T(
                 _("%1 listed %2 results, but none in the languages and file types chosen in Kindle Fetch's settings."),
@@ -544,6 +596,18 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
                 results_read
             )
         or T(_("%1 doesn't have books in any of the file types chosen in Kindle Fetch's settings."), name)
+    local other_buttons = { self:otherSites(query) }
+    -- there are more results to look through
+    if next_page then
+        table.insert(other_buttons, 1, {
+            {
+                text = _("Keep searching"),
+                callback = function()
+                    self:searchOnline(query, next_page)
+                end,
+            },
+        })
+    end
     UIManager:show(ConfirmBox:new {
         text = text,
         ok_text = _("Settings"),
@@ -551,17 +615,7 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
             SettingsPage:showSettings()
         end,
         cancel_text = _("Close"),
-        -- there are more results to look through
-        other_buttons = next_page and {
-            {
-                {
-                    text = _("Keep searching"),
-                    callback = function()
-                        self:searchOnline(query, next_page)
-                    end,
-                },
-            },
-        },
+        other_buttons = other_buttons,
     })
 end
 
@@ -796,10 +850,45 @@ function KindleFetch:showResultsMenu()
             },
         })
     end
+    -- narrowing the search down, or widening it, searching again (see changeChoices)
+    local changes = {
+        { text = _("Languages…"), change = SettingsPage.changeLanguages },
+        { text = _("File types…"), change = SettingsPage.changeFileTypes },
+    }
+    if Sources[self.source].HAS_BOOK_TYPES then
+        table.insert(changes, { text = _("Book types…"), change = SettingsPage.changeBookTypes })
+    end
+    local row = {}
+    for __, choice in ipairs(changes) do
+        table.insert(row, {
+            text = choice.text,
+            callback = function()
+                UIManager:close(dialog)
+                this:changeChoices(choice.change)
+            end,
+        })
+    end
+    table.insert(buttons, row)
     dialog = ButtonDialog:new {
         buttons = buttons,
     }
     UIManager:show(dialog)
+end
+
+-- change which languages, file types or book types the books found can be in, from the results, with change (e.g.
+-- SettingsPage.changeLanguages), searching again in place of the results once they've changed
+function KindleFetch:changeChoices(change)
+    local query = self.current_search_query
+    change(SettingsPage, function(changed)
+        if not changed then
+            return
+        end
+        LogUtil.info(string.format("searching for %q again with the new choices", query))
+        if self.books_menu then
+            UIManager:close(self.books_menu)
+        end
+        self:searchOnline(query, 1)
+    end)
 end
 
 local function buildDownloadPath(book)
