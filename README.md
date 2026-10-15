@@ -2,15 +2,15 @@
 
 <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/stars/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github star tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/downloads/william-spongberg/KindleFetch.koplugin/total.svg" height="25px" alt="Github downloads tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/v/release/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github release version tracker"></a>
 
-Download books from Library Genesis, Internet Archive and Z-Library directly to your Kindle (or any e-reader running KOReader), entirely within the KOReader app.
+Download books from Library Genesis, Internet Archive, Project Gutenberg and Z-Library directly to your Kindle (or any e-reader running KOReader), entirely within the KOReader app.
 
 ## Overview
 
-KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KOReader, allowing you to search for and download books without leaving your e-reader. The plugin handles the entire workflow - from search queries to file downloads - with an intuitive interface and robust error handling.
+KindleFetch integrates Library Genesis, Internet Archive, Project Gutenberg and Z-Library into KOReader, allowing you to search for and download books without leaving your e-reader. The plugin handles the entire workflow - from search queries to file downloads - with an intuitive interface and robust error handling.
 
 ## Features
 
-- **Three sites, searched at once**: Library Genesis, Internet Archive and Z-Library (with your account), each site's books shown as soon as it finds them
+- **Four sites, searched at once**: Library Genesis, Internet Archive, Project Gutenberg and Z-Library (with your account), each site's books shown as soon as it finds them
 - **Narrower searches**: search only titles, authors or ISBNs (Library Genesis and Internet Archive)
 - **Filters**: show only books in the languages, file types and book types you choose, and look through the results for a title or author
 - **Search from your books**: find more by a book's author, or search for text you've highlighted
@@ -49,6 +49,8 @@ Z-Library can only be searched with an account: the first time it's ticked, Kind
 Internet Archive only has the books that anyone can download, rather than borrow, which Kindle Fetch can't do: mostly older books, many of them scans, whose EPUBs were made by reading the scanned pages, which can leave mistakes in them. Its search doesn't say how big each book is, so the size shows once the download starts, and a large one can be cancelled straight away.
 
 <img width="350" alt="Searching Internet Archive, then downloading and reading a book from it" src="docs/gifs/internet-archive.gif" />
+
+Project Gutenberg has over 75,000 free ebooks, mostly older books whose US copyright has expired, as EPUB, MOBI and TXT. Its search can't be narrowed down to the books' titles or authors.
 
 <img width="350" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" /> <img width="350" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
@@ -159,7 +161,7 @@ To put the old curl back, run `mntroot rw`, then `cp /usr/bin/curl.system.bak /u
 
 ### Anything else
 
-Kindle Fetch → Diagnostics shows what's needed to work out what went wrong: the versions of Kindle Fetch, KOReader and curl, the device, the settings, the mirrors, and what Kindle Fetch has logged since KOReader started. Tap Test connection to see which of the sites (Wikipedia, each of Library Genesis' mirrors, Internet Archive and Z-Library) the device can reach, then Copy or Save (to `kindlefetch-diagnostics.txt` in KOReader's folder) to attach it to an [issue](https://github.com/william-spongberg/KindleFetch.koplugin/issues). It has nothing in it that would let anyone into your Z-Library account.
+Kindle Fetch → Diagnostics shows what's needed to work out what went wrong: the versions of Kindle Fetch, KOReader and curl, the device, the settings, the mirrors, and what Kindle Fetch has logged since KOReader started. Tap Test connection to see which of the sites (Wikipedia, each of Library Genesis' mirrors, Internet Archive, Project Gutenberg and Z-Library) the device can reach, then Copy or Save (to `kindlefetch-diagnostics.txt` in KOReader's folder) to attach it to an [issue](https://github.com/william-spongberg/KindleFetch.koplugin/issues). It has nothing in it that would let anyone into your Z-Library account.
 
 <img width="350" alt="Kindle Fetch's diagnostics" src="docs/screenshots/21-diagnostics.png" />
 
@@ -184,6 +186,7 @@ kindlefetch.koplugin/
 │   ├── multisearch.lua        # Searches the sites ticked at once, each in a coroutine of its own, passing on each one's books as soon as it has found them
 │   ├── lglisearch.lua         # Searches Library Genesis and finds its download links; parses HTML, filters by preferences and caches results
 │   ├── iasearch.lua           # Searches Internet Archive's books that anyone can download, and finds their files, with its search API
+│   ├── gutenbergsearch.lua    # Searches Project Gutenberg's free ebooks with its catalogue's search, and finds their files in the catalogue
 │   ├── zlibaccount.lua        # Logs in to Z-Library, keeping the key it logs in with rather than the password, and asks its API as the account
 │   ├── zlibsearch.lua         # Searches Z-Library and finds its download links with the API its app uses, while the account can download more today
 │   └── urlapi.lua             # Scrapes Wikipedia to discover the current Library Genesis mirrors and Z-Library addresses
@@ -239,7 +242,7 @@ kindlefetch.koplugin/
    - Book cover loading can be toggled on/off (for efficiency)
    - All settings are persisted and applied to future searches
 
-2. **Search Phase** (`MultiSearch`, `LlgiSearch`, `IaSearch`, `ZlibSearch`)
+2. **Search Phase** (`MultiSearch`, `LlgiSearch`, `IaSearch`, `GutenbergSearch`, `ZlibSearch`)
    - User enters a search query via InputDialog, or chooses one of the last 10 from its Recent button
    - The sites ticked in the search box (`MultiSearch`) are searched at once, each in a coroutine of its own, so each one's books are shown as soon as it has found them, with the sites still being searched listed at the end. Where pages are fetched with KOReader's own HTTP, which holds KOReader up, they're searched one after another instead, with what has been found shown in between. A site that fails is said to have over the books the others found, Load more carries on from each site that has more, and Cancel calls them all off
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
@@ -252,6 +255,7 @@ kindlefetch.koplugin/
    - When Library Genesis lists results but none are in the preferred languages and file types, the plugin says how many it listed, and offers the settings or to keep searching through the rest
    - Z-Library (`ZlibSearch`) is searched with the API its own app uses, as the account logged into, in the preferred languages and file types, 50 books at a time. As it moves between addresses as they're taken down, they're looked up on its Wikipedia page, like Library Genesis' mirrors (kept for a week by default), and the next is asked when one doesn't answer
    - Internet Archive (`IaSearch`) is searched with its search API for the books with each word searched for in their title or author's name, in the preferred languages (or no known language) and the formats of the preferred file types, that anyone can download, the most downloaded first, 50 at a time. Each is given the first of the preferred file types it's in, as most are in several
+   - Project Gutenberg (`GutenbergSearch`) is searched with its catalogue's search (its OPDS feed), 25 books at a time, in the one language chosen, where only one is. Otherwise the books are kept to the languages chosen by the language the catalogue adds after the titles of those not in English. Each is given the first of the preferred file types of EPUB, MOBI and TXT, and once it's chosen, its file in that type is looked up in the catalogue, with how big it is, which what arrives is checked against
 
 3. **Cover Loading**
    - Covers for the page of results showing are downloaded in the background, in parallel using curl's `--parallel` flag, with placeholders shown until they arrive. A connection is opened for each cover at once (with curl 7.68 or later), rather than curl waiting to see whether they can share one, which Library Genesis doesn't allow, so a page of covers arrives in about a third of the time
@@ -304,7 +308,7 @@ MIT
 
 ## Disclaimer
 
-This plugin facilitates downloading books from Library Genesis, Internet Archive and Z-Library. Ensure you have the legal right to download any content and respect copyright laws in your jurisdiction. The authors assume no liability for misuse.
+This plugin facilitates downloading books from Library Genesis, Internet Archive, Project Gutenberg and Z-Library. Ensure you have the legal right to download any content and respect copyright laws in your jurisdiction. The authors assume no liability for misuse.
 
 ## Contributing
 
