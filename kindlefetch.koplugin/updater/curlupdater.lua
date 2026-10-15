@@ -3,6 +3,7 @@ local UIManager = require("ui/uimanager")
 local InputDialog = require("ui/widget/inputdialog")
 local InfoMessage = require("ui/widget/infomessage")
 local CurlUtil = require("util.curlutil")
+local FileUtil = require("util.fileutil")
 local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
@@ -10,11 +11,17 @@ local VersionUtil = require("util.versionutil")
 local PathUtil = require("util.pathutil")
 local KindleFetchSettings = require("settings.settings")
 local sha2 = require("ffi/sha2")
+local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- constants
 local MIN_VERSION = CurlUtil.MIN_VERSION
 local CURL_REPO_URL = "https://github.com/moparisthebest/static-curl"
+-- the Kindle's own curl, which is kept as BACKUP_CURL to put back by hand (see the README), and NEW_CURL, where the new
+-- one is copied to before it replaces the old one, once it's all there and runs, so a curl that runs is always there
+local SYSTEM_CURL = "/usr/bin/curl"
+local BACKUP_CURL = "/usr/bin/curl.system.bak"
+local NEW_CURL = "/usr/bin/curl.new"
 
 local CurlUpdater = {
     -- the SHA-256 of that release's curl-armhf, as GitHub lists it, so nothing else is installed as the Kindle's
@@ -43,13 +50,81 @@ local function runVersion(path)
     return said and said:match("^curl%s+([%d%.]+)"), said
 end
 
--- remount root as read-only, returning false if it could not be
+-- run a step of installing curl, returning true, or nil and what went wrong (the command's own words, e.g. "cp: write
+-- error: No space left on device"), which is logged along with the step
+local function run(step, cmd)
+    local pipe = io.popen(string.format('(%s) 2>&1; echo "exit $?"', cmd))
+    local output = pipe and pipe:read("*a") or ""
+    if pipe then
+        pipe:close()
+    end
+    local said, exit_code = output:match("^(.-)%s*exit (%d+)%s*$")
+    if exit_code == "0" then
+        return true
+    end
+    said = said ~= "" and said or "exit code " .. tostring(exit_code)
+    LogUtil.warn("could not", step .. ":", said)
+    return nil, said
+end
+
+-- remount root as read-only, returning true, or nil and what went wrong
 local function remountReadOnly()
     LogUtil.debug("remounting rootfs as read-only")
-    if os.execute("mntroot ro 2>/dev/null") ~= 0 then
-        LogUtil.warn("failed to remount rootfs as read-only")
-        NotifyUtil.error("Failed to remount root as read-only")
-        return false
+    return run("make the root file system read-only again", "mntroot ro")
+end
+
+-- copy the new curl into place as the Kindle's, keeping its own (once) to put back by hand. returns true, or nil and
+-- what went wrong, leaving the Kindle's own curl as it was
+local function install(curl_path)
+    -- copied whole before it's kept, as a backup cut short by the storage filling up was taken to be the Kindle's curl
+    if not FileUtil.isValidFile(BACKUP_CURL) then
+        LogUtil.debug("backing up system curl")
+        local ok, err = run(
+            "back up the Kindle's own curl",
+            string.format(
+                "cp %s %s && mv %s %s",
+                CurlUtil.shellQuote(SYSTEM_CURL),
+                CurlUtil.shellQuote(BACKUP_CURL .. ".new"),
+                CurlUtil.shellQuote(BACKUP_CURL .. ".new"),
+                CurlUtil.shellQuote(BACKUP_CURL)
+            )
+        )
+        if not ok then
+            run("remove the backup cut short", "rm -f " .. CurlUtil.shellQuote(BACKUP_CURL .. ".new"))
+            return nil, T(_("the Kindle's own curl couldn't be backed up (%1)"), err)
+        end
+    end
+
+    -- next to the old one, which is only replaced once the new one is all there and runs: copying over it directly
+    -- left it cut short, and nothing would run, when the storage filled up
+    LogUtil.debug("copying static curl to", NEW_CURL)
+    local ok, err = run(
+        "copy the new curl into place",
+        string.format("cp %s %s", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(NEW_CURL))
+    )
+    if not ok then
+        run("remove the new curl cut short", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
+        return nil, T(_("the new curl couldn't be copied into place (%1)"), err)
+    end
+    if not run("set the new curl's permissions", "chmod 755 " .. CurlUtil.shellQuote(NEW_CURL)) then
+        LogUtil.warn("carrying on without setting the new curl's permissions")
+    end
+
+    local installed_version, said = runVersion(NEW_CURL)
+    if installed_version ~= MIN_VERSION then
+        LogUtil.warn("the new curl doesn't run on this Kindle, saying", said, "so keeping the old one")
+        run("remove the new curl", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
+        return nil, _("the new curl doesn't run on this Kindle, so the old one has been kept")
+    end
+
+    -- in one go, so there's always a curl there
+    ok, err = run(
+        "replace the old curl",
+        string.format("mv %s %s", CurlUtil.shellQuote(NEW_CURL), CurlUtil.shellQuote(SYSTEM_CURL))
+    )
+    if not ok then
+        run("remove the new curl", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
+        return nil, T(_("the old curl couldn't be replaced (%1)"), err)
     end
     return true
 end
@@ -57,6 +132,7 @@ end
 -- update curl using static release from moparisthebest/static-curl
 -- basically adds safe guards around the sh script given here:
 -- https://github.com/justrals/KindleFetch/issues/40#issuecomment-4009774337
+-- returns true, or nil and what went wrong, leaving the Kindle's own curl as it was
 local function updateCurl()
     LogUtil.info("installing static curl " .. MIN_VERSION)
 
@@ -68,110 +144,51 @@ local function updateCurl()
 
     LogUtil.debug("downloading static curl", download_url)
     local message = InfoMessage:new {
-        text = string.format(_("Downloading curl %s..."), MIN_VERSION),
+        text = T(_("Downloading curl %1..."), MIN_VERSION),
     }
     UIManager:show(message)
     UIManager:forceRePaint()
     local success, err = HttpUtil.downloadFile(download_url, curl_path)
     -- it's run as root once installed, so only the build that was released, not anything sent in its place
     if success and sha256(curl_path) ~= CurlUpdater.SHA256 then
-        os.remove(curl_path)
-        success, err = false, "what downloaded isn't the curl " .. MIN_VERSION .. " that was released"
+        success, err = nil, T(_("what downloaded isn't the curl %1 that was released"), MIN_VERSION)
     end
     UIManager:close(message)
     if not success then
         LogUtil.warn("could not download static curl from", download_url, "error:", err)
-        NotifyUtil.error("Failed to download curl update: " .. tostring(err))
-        return false
+        FileUtil.removeFile(curl_path)
+        return nil, T(_("curl couldn't be downloaded (%1)"), err)
     end
 
-    -- make it executable
-    local chmod_cmd = string.format("chmod +x %s", CurlUtil.shellQuote(curl_path))
-    if os.execute(chmod_cmd) ~= 0 then
-        os.remove(curl_path) -- remove downloaded file
-        LogUtil.warn("could not make", curl_path, "executable")
-        NotifyUtil.error("Failed to set file permissions")
-        return false
+    local ok
+    ok, err = run("make the new curl executable", "chmod +x " .. CurlUtil.shellQuote(curl_path))
+    if not ok then
+        FileUtil.removeFile(curl_path)
+        return nil, T(_("the new curl couldn't be made executable (%1)"), err)
     end
 
-    -- backup system curl
-    local system_curl = "/usr/bin/curl"
-    local backup_curl = "/usr/bin/curl.system.bak"
-
-    -- change perms to rw
     LogUtil.debug("remounting rootfs as read-write")
-    if os.execute("mntroot rw 2>/dev/null") ~= 0 then
-        LogUtil.warn("failed to remount rootfs as read-write")
-        NotifyUtil.error("Failed to remount root as read-write")
-        return false
+    ok, err = run("make the root file system writable", "mntroot rw")
+    if not ok then
+        FileUtil.removeFile(curl_path)
+        return nil, T(_("the Kindle's system files couldn't be made writable (%1)"), err)
     end
 
-    -- backup original curl if not already backed up
-    if os.execute(string.format("test -f %s", CurlUtil.shellQuote(backup_curl))) ~= 0 then
-        LogUtil.debug("backing up system curl")
-        if
-            os.execute(
-                string.format(
-                    "cp %s %s 2>/dev/null",
-                    CurlUtil.shellQuote(system_curl),
-                    CurlUtil.shellQuote(backup_curl)
-                )
-            ) ~= 0
-        then
-            LogUtil.warn("could not back up", system_curl, "to", backup_curl)
-            NotifyUtil.error("Failed to create curl backup")
-            remountReadOnly()
-            return false
-        end
+    local installed, install_err = install(curl_path)
+    -- once it has, whether or not it installed: a root file system left writable is only said in crash.log, as
+    -- a curl that installed has
+    local remounted, remount_err = remountReadOnly()
+    FileUtil.removeFile(curl_path)
+    -- whichever is there now
+    CurlUtil.forgetVersion()
+    if not installed then
+        return nil, install_err
     end
-
-    -- install new curl
-    LogUtil.debug("installing static curl to " .. system_curl)
-    if
-        os.execute(
-            string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(system_curl))
-        ) ~= 0
-    then
-        LogUtil.warn("could not copy", curl_path, "to", system_curl)
-        NotifyUtil.error("Failed to install new curl update")
-        remountReadOnly()
-        return false
-    end
-
-    -- set permissions
-    if os.execute(string.format("chmod 755 %s", CurlUtil.shellQuote(system_curl))) ~= 0 then
-        LogUtil.warn("failed to set curl permissions (continuing anyway)")
-    end
-
-    -- check it runs on this Kindle, putting the old one back if not, so there's still a curl that does
-    local installed_version, said = runVersion(system_curl)
-    if installed_version ~= MIN_VERSION then
-        LogUtil.warn("the new curl doesn't run on this Kindle, saying", said, "so putting the old one back")
-        local restored = os.execute(
-            string.format("cp %s %s 2>/dev/null", CurlUtil.shellQuote(backup_curl), CurlUtil.shellQuote(system_curl))
-        ) == 0
-        remountReadOnly()
-        -- whichever is there now
-        CurlUtil.forgetVersion()
-        if restored then
-            NotifyUtil.error("The new curl doesn't run on this Kindle, so the old one has been put back")
-        else
-            LogUtil.err("could not put the old curl back from", backup_curl)
-            NotifyUtil.error(
-                "The new curl doesn't run on this Kindle, and the old one couldn't be put back from " .. backup_curl
-            )
-        end
-        return false
-    end
-
-    if not remountReadOnly() then
-        return false
+    if not remounted then
+        LogUtil.warn("installed static curl, but the root file system is still writable:", remount_err)
     end
 
     LogUtil.info("installed static curl " .. MIN_VERSION)
-    -- so searches use the new curl straight away, rather than once KOReader has restarted
-    CurlUtil.forgetVersion()
-    NotifyUtil.info("Updated curl to v" .. MIN_VERSION)
     -- ask again if it's ever out of date again, e.g. once a Kindle update puts the old one back
     KindleFetchSettings:setCurlUpdateDeclined(false)
     return true
@@ -179,9 +196,11 @@ end
 
 -- prompt for curl update
 local function promptCurlUpdate(current_version, min_version)
-    local message = string.format(
-        "curl v%s is installed.\nMinimum required: v%s\n\nUntil curl is updated, searches are slower and can't be "
-            .. "called off, and books and their covers may not download.\n\nUpdate curl now?",
+    local message = T(
+        _(
+            "curl v%1 is installed.\nMinimum required: v%2\n\nUntil curl is updated, searches are slower and can't be "
+                .. "called off, and books and their covers may not download.\n\nUpdate curl now?"
+        ),
         current_version,
         min_version
     )
@@ -207,7 +226,12 @@ local function promptCurlUpdate(current_version, min_version)
                     text = _("Update"),
                     callback = function()
                         UIManager:close(confirm_dialog)
-                        updateCurl()
+                        local ok, err = updateCurl()
+                        if ok then
+                            NotifyUtil.info(T(_("Updated curl to v%1"), MIN_VERSION))
+                        else
+                            NotifyUtil.error(T(_("Updating curl failed: %1"), err))
+                        end
                     end,
                 },
             },
