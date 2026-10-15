@@ -934,14 +934,19 @@ function KindleFetch:loadMoreBooks()
     end)
 end
 
-function KindleFetch:openBook(filepath)
-    -- close the results and the search box behind them too, which would otherwise show again once the book is closed
+-- close the results and the search box behind them, which would otherwise show again over what's gone to from them
+function KindleFetch:closeSearch()
     if self.books_menu then
         UIManager:close(self.books_menu)
     end
     if self.search_box then
         UIManager:close(self.search_box)
     end
+end
+
+function KindleFetch:openBook(filepath)
+    -- (which would otherwise show again once the book is closed)
+    self:closeSearch()
 
     -- open it from whichever of a book or the file manager is open by now, rather than from self.ui, as the one
     -- the download was started from may have closed since (e.g. while the download was hidden)
@@ -958,6 +963,41 @@ function KindleFetch:openBook(filepath)
     end
 end
 
+-- the buttons KOReader's file browser has for a book, for the one just downloaded, where this KOReader has them:
+-- showing its folder, adding it to collections, and its information, each closing the dialog they're in with close
+-- first. they go to whichever of a book or the file manager is open by then, as KOReader's own do
+function KindleFetch:bookButtons(filepath, close)
+    local filemanagerutil = require("apps/filemanager/filemanagerutil")
+    local ui = require("apps/reader/readerui").instance or require("apps/filemanager/filemanager").instance
+    local row = {}
+    if not ui then
+        return row
+    end
+    if filemanagerutil.genShowFolderButton then
+        table.insert(
+            row,
+            filemanagerutil.genShowFolderButton(filepath, function()
+                close()
+                -- which would otherwise hide the folder
+                self:closeSearch()
+            end)
+        )
+    end
+    if ui.collections and ui.collections.genAddToCollectionButton then
+        table.insert(row, ui.collections:genAddToCollectionButton(filepath, close))
+    end
+    local genBookInformationButton = filemanagerutil.genBookInformationButton
+    if genBookInformationButton and ui.bookinfo then
+        -- before KOReader v2024.04, it was given close where it's now given the book's details
+        if debug.getinfo(genBookInformationButton, "u").nparams < 4 then
+            table.insert(row, genBookInformationButton(filepath, close))
+        else
+            table.insert(row, genBookInformationButton(filepath, nil, close))
+        end
+    end
+    return row
+end
+
 function KindleFetch:downloadBook(book)
     local filepath = buildDownloadPath(book)
     Downloader:downloadBook(book, filepath, function(ok, err, saved_filepath)
@@ -968,10 +1008,37 @@ function KindleFetch:downloadBook(book)
             if self.books_menu and not self.books_menu.closed then
                 self.books_menu:updateItems()
             end
+            -- and listed in the file browser, which didn't show it until it was left and gone back to
+            local FileManager = require("apps/filemanager/filemanager")
+            if FileManager.instance then
+                FileManager.instance:onRefresh()
+            end
             -- ask on the next tick, once the download progress has closed
             Guard.nextTick("offering to read the downloaded book", function()
                 -- centred, with the title in bold on a line of its own, so it stands out from the question
                 local dialog
+                local function close()
+                    UIManager:close(dialog)
+                end
+                local buttons = {
+                    {
+                        -- as the book has downloaded, and nothing is called off
+                        { text = _("Not now"), id = "close", callback = close },
+                        {
+                            text = _("Read now"),
+                            id = "read",
+                            callback = function()
+                                close()
+                                self:openBook(saved_filepath)
+                            end,
+                        },
+                    },
+                }
+                -- and beneath them, what KOReader's file browser has for it (none, where it's too old to have them)
+                local book_buttons = self:bookButtons(saved_filepath, close)
+                if #book_buttons > 0 then
+                    table.insert(buttons, book_buttons)
+                end
                 dialog = ButtonDialog:new {
                     title = string.format(
                         "%s%s\n%s%s%s\n\n%s",
@@ -983,26 +1050,7 @@ function KindleFetch:downloadBook(book)
                         _("Would you like to read it now?")
                     ),
                     title_align = "center",
-                    buttons = {
-                        {
-                            {
-                                -- as the book has downloaded, and nothing is called off
-                                text = _("Not now"),
-                                id = "close",
-                                callback = function()
-                                    UIManager:close(dialog)
-                                end,
-                            },
-                            {
-                                text = _("Read now"),
-                                id = "read",
-                                callback = function()
-                                    UIManager:close(dialog)
-                                    self:openBook(saved_filepath)
-                                end,
-                            },
-                        },
-                    },
+                    buttons = buttons,
                 }
                 UIManager:show(dialog)
             end)
