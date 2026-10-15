@@ -1088,6 +1088,22 @@ describe("KindleFetch", function()
                 assert.are.same({ { "dune", 1 }, { "dune", 6 } }, searches)
                 assert.are.same({ "Dune", "Load more" }, itemTexts(menus[1]))
             end)
+
+            -- which searched straight away, as Wi-Fi may have gone off since
+            it("turns on Wi-Fi before searching on, when it's off", function()
+                search_results[1] = { {}, nil, 6, 500 }
+                search_results[6] = { { book("Dune") } }
+                search(openUI(), "dune")
+                helper.stubs.network.connected = false
+
+                helper.lastShown().other_buttons[1][1].callback()
+                assert.are.equal("turn wifi on", helper.stubs.network.prompted)
+                assert.are.same({ { "dune", 1 } }, searches)
+
+                helper.stubs.network.connected = true
+                helper.stubs.network.when_connected()
+                assert.are.same({ { "dune", 1 }, { "dune", 6 } }, searches)
+            end)
         end)
     end)
 

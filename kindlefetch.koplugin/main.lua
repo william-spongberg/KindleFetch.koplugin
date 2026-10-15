@@ -492,12 +492,24 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
                 {
                     text = _("Keep searching"),
                     callback = function()
-                        self:searchFrom(query, next_page)
+                        self:searchOnline(query, next_page)
                     end,
                 },
             },
         },
     })
+end
+
+-- search from a page of results (see searchFrom), turning on Wi-Fi first if need be, as KOReader is set up to, unless
+-- the page is saved from an earlier search
+function KindleFetch:searchOnline(query, page)
+    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, page) then
+        NetworkMgr:runWhenConnected(function()
+            self:searchFrom(query, page)
+        end)
+        return
+    end
+    self:searchFrom(query, page)
 end
 
 function KindleFetch:search(query, page)
