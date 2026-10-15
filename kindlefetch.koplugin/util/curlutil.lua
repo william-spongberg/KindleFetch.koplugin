@@ -280,13 +280,14 @@ end
 -- the size of the file a site is sending, from the headers of its responses (one after another when redirected,
 -- or when curl has carried on from where a download stopped)
 function CurlUtil.parseContentLength(headers)
-    -- from the last response that says, i.e. the file's rather than a redirect's
+    -- from the last response that sent something, i.e. the file's, rather than a redirect's before it (or nil when
+    -- the file's doesn't say, rather than the redirect's size)
     local file_size = nil
     for block in headers:gmatch("HTTP[/%d%.]+.-\r?\n\r?\n") do
-        -- the whole file's size, when only the rest of it was sent
-        local size = block:match("[Cc]ontent%-[Rr]ange:%s*bytes%s+%d+%-%d+/(%d+)")
-            or block:match("[Cc]ontent%-[Ll]ength:%s*(%d+)")
-        if size then
+        if block:match("^HTTP[/%d%.]+ 2%d%d") then
+            -- the whole file's size, when only the rest of it was sent
+            local size = block:match("[Cc]ontent%-[Rr]ange:%s*bytes%s+%d+%-%d+/(%d+)")
+                or block:match("[Cc]ontent%-[Ll]ength:%s*(%d+)")
             file_size = tonumber(size)
         end
     end
