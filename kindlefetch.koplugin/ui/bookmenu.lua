@@ -27,8 +27,9 @@ local _ = require("gettext")
 -- constants
 local COVER_SIZE = Screen:scaleBySize(100)
 
-local function formatBookDetails(book)
-    return StringUtil.joinDetails(book.year, book.language, book.book_type, book.file_type, book.file_size)
+-- its year, language, type, format and size, and the site it was found on, where given
+local function formatBookDetails(book, site)
+    return StringUtil.joinDetails(book.year, book.language, book.book_type, book.file_type, book.file_size, site)
 end
 
 local BookMenuItem = InputContainer:extend {}
@@ -66,7 +67,8 @@ function BookMenuItem:onTapSelect(arg, ges)
     return true
 end
 
--- is_downloaded is optionally called with each book shown, saying whether it's in the download folder already
+-- is_downloaded is optionally called with each book shown, saying whether it's in the download folder already, and
+-- source_name with the name of the site it was found on, to show among its details, where books from several are
 local BookMenu = Menu:extend {}
 
 -- whether KOReader's menu has what laying the books out with their covers builds on (see setupItemHeights and
@@ -128,7 +130,7 @@ function BookMenu:createBookItemWidget(book)
 
     -- book details (year, language, type, format, size), then whether it's in the download folder already (see
     -- is_downloaded), in bold
-    local details = formatBookDetails(book)
+    local details = formatBookDetails(book, self.source_name and self.source_name(book))
     if self.is_downloaded and self.is_downloaded(book) then
         details = string.format(
             "%s%s%s%s%s",

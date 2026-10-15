@@ -47,6 +47,36 @@ describe("Internet Archive", function()
         H.shot("archive-search-results")
     end)
 
+    -- at once, its books showing as soon as it has found them, rather than once Library Genesis has answered, which can
+    -- take a minute or more, as when its mirrors take the connection but never answer
+    it("is searched at once with Library Genesis, its books shown as soon as they're found", function()
+        local plugin = H.startSearch(H.BOOK_QUERY, { "Library Genesis", "Internet Archive" })
+        local menu = H.waitFor("Internet Archive's books", 60, function()
+            assert(not H.errorShown(), H.errorShown())
+            return plugin.books_menu and H.isShown(plugin.books_menu) and plugin.books_menu
+        end)
+        local from_archive = 0
+        for _, book in ipairs(H.books(menu)) do
+            from_archive = from_archive + (book.source == "archive" and 1 or 0)
+        end
+        assert(from_archive > 0, "none of the books are from Internet Archive")
+        -- each with the site it was found on, as several were searched
+        assert(menu.source_name, "the books don't say which site they're from")
+        if not plugin.search:isDone() then
+            local last = menu.item_table[#menu.item_table]
+            H.eq("Still searching Library Genesis…", last.text, "the end of the list")
+            H.shot("archive-searched-with-libgen")
+        end
+
+        -- then Library Genesis' books are added, or it says why it couldn't be searched, over the books found
+        H.waitFor("Library Genesis' search to finish", 240, function()
+            return plugin.search:isDone()
+        end)
+        H.pump()
+        local last = menu.item_table[#menu.item_table]
+        assert(not last.still_searching, "still says it's searching once it has finished")
+    end)
+
     it("downloads a book and opens it", function()
         local menu = H.search(H.BOOK_QUERY, "Internet Archive")
         local book

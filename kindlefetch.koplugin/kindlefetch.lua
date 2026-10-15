@@ -3,7 +3,6 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
-local Trapper = require("ui/trapper")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local Device = require("device")
 local Screen = Device.screen
@@ -15,6 +14,7 @@ local util = require("util")
 local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
 local Sources = require("api.sources")
+local MultiSearch = require("api.multisearch")
 local Downloader = require("api.downloader")
 local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
@@ -43,7 +43,6 @@ local version_checked = false
 -- and only check for updates automatically once a day, in seconds
 local UPDATE_CHECK_INTERVAL = 24 * 60 * 60
 -- the sites, in the order Kindle Fetch's menu lists them
-local SOURCES = { "libgen", "archive", "zlib" }
 -- the most of what's highlighted in a book that's searched for (see searchFor), as a whole paragraph can't be
 local MAX_QUERY_LENGTH = 100
 -- the plugin made for whichever of the file manager or a book was opened last, which what's added to KOReader's own
@@ -144,16 +143,17 @@ function KindleFetch:onNetworkConnected()
 end
 
 -- sent by the dispatcher actions, e.g. when a gesture is assigned to one
+-- (the search box, for the sites ticked in it last, or for one site, from the gestures for each there were before)
 function KindleFetch:onKindleFetch()
-    self:setupUI("libgen")
+    self:setupUI()
     return true
 end
 function KindleFetch:onKindleFetchArchive()
-    self:setupUI("archive")
+    self:setupUI(nil, nil, { "archive" })
     return true
 end
 function KindleFetch:onKindleFetchZlib()
-    self:setupUI("zlib")
+    self:setupUI(nil, nil, { "zlib" })
     return true
 end
 
@@ -265,21 +265,10 @@ function KindleFetch:addToMainMenu(menu_items)
         sorting_hint = "search",
         sub_item_table = {
             {
-                text = T(_("Search %1"), Sources.libgen.NAME),
+                -- the sites ticked in it (see chooseSites)
+                text = _("Search"),
                 callback = function()
-                    self:setupUI("libgen")
-                end,
-            },
-            {
-                text = T(_("Search %1"), Sources.archive.NAME),
-                callback = function()
-                    self:setupUI("archive")
-                end,
-            },
-            {
-                text = T(_("Search %1"), Sources.zlib.NAME),
-                callback = function()
-                    self:setupUI("zlib")
+                    self:setupUI()
                 end,
             },
             {
@@ -318,9 +307,9 @@ function KindleFetch:addToMainMenu(menu_items)
         },
     }
 
-    -- in a book, more by its author, where it's known (see searchFor), after the sites
+    -- in a book, more by its author, where it's known (see searchFor), after Search
     if self.ui.document then
-        table.insert(menu_items.kindlefetch.sub_item_table, 4, {
+        table.insert(menu_items.kindlefetch.sub_item_table, 2, {
             text_func = function()
                 local author = firstAuthor(self.ui.doc_props)
                 return author and T(_("More by %1"), author) or _("More by this author")
@@ -411,32 +400,111 @@ local function scopeName(scope)
     return ({ title = _("Title"), author = _("Author"), isbn = _("ISBN") })[scope] or _("All")
 end
 
--- whether the site can narrow a search down to scope (see SCOPES in Sources)
-local function canNarrow(source, scope)
-    for __, site_scope in ipairs(Sources[source].SCOPES or {}) do
-        if site_scope == scope then
+-- whether source is among the sites in sources
+local function isTicked(sources, source)
+    for __, ticked in ipairs(sources) do
+        if ticked == source then
             return true
         end
     end
     return false
 end
 
--- open the search box, for searching the site source names (see Sources), once logged into it where it needs that,
--- searching for query straight away, where given (e.g. the search another site found nothing for, see otherSites),
--- and narrowed down to scope (e.g. only the books' authors, see SCOPES in Sources), where given and the site can
-function KindleFetch:setupUI(source, query, scope)
+-- the sites' names, as they're said together, e.g. "Library Genesis and Internet Archive"
+local function sitesName(sources)
+    local names = {}
+    for __, source in ipairs(sources) do
+        table.insert(names, Sources[source].NAME)
+    end
+    if #names <= 1 then
+        return names[1] or ""
+    end
+    local last = table.remove(names)
+    return T(_("%1 and %2"), table.concat(names, ", "), last)
+end
+
+-- the sites in pages (see MultiSearch.start), in the order they're offered
+local function sourcesOf(pages)
+    local sources = {}
+    for __, source in ipairs(MultiSearch.SOURCES) do
+        if pages[source] then
+            table.insert(sources, source)
+        end
+    end
+    return sources
+end
+
+-- the first page of each site's results, to search from (see MultiSearch.start)
+local function firstPages(sources)
+    local pages = {}
+    for __, source in ipairs(sources) do
+        pages[source] = 1
+    end
+    return pages
+end
+
+-- what the search box's Sites button says: the sites ticked, or that they all are
+local function sitesText(sources)
+    if #sources == #MultiSearch.SOURCES then
+        return _("Sites: All")
+    end
+    return T(_("Sites: %1"), sitesName(sources))
+end
+
+-- say what went wrong for each site that failed (failures, each its source and err) in one (e.g. "Search failed: %1"),
+-- with the error alone, where only the one site was searched, otherwise several (e.g. "Search failed:\n%1"), with each
+-- site's name and error on a line of their own
+local function describeFailures(one, several, failures, sites_searched)
+    if sites_searched == 1 then
+        return T(one, failures[1].err)
+    end
+    local lines = {}
+    for __, failure in ipairs(failures) do
+        table.insert(lines, T(_("%1: %2"), Sources[failure.source].NAME, failure.err))
+    end
+    return T(several, table.concat(lines, "\n"))
+end
+
+-- open the search box, for searching the sites ticked in it: sources, where given (e.g. the site a gesture is for),
+-- otherwise those ticked last (see KindleFetchSettings:getSearchSources). with query in it, where given, narrowed down
+-- to scope (e.g. only the books' authors, see SCOPES in Sources) where given, on the sites that can be, and searching
+-- straight away when search_now is set, e.g. another site for what one found nothing for (see otherSites)
+function KindleFetch:setupUI(query, scope, sources, search_now)
     -- grab self reference for callbacks
     local this = self
-    local function openOnceLoggedIn()
-        this:setupUI(source, query, scope)
+    local chosen = sources or KindleFetchSettings:getSearchSources()
+    self.sources = {}
+    for __, source in ipairs(MultiSearch.SOURCES) do
+        if isTicked(chosen, source) then
+            table.insert(self.sources, source)
+        end
     end
-    if needsLogin(source, openOnceLoggedIn) then
-        return
+    if #self.sources == 0 then
+        self.sources = { MultiSearch.SOURCES[1] }
     end
-    self.source = source
-    self.scope = canNarrow(source, scope) and scope or nil
+    self.scope = scope
 
     local buttons = {
+        -- which sites to search (see chooseSites)
+        {
+            {
+                text = sitesText(self.sources),
+                id = "sites",
+                callback = function()
+                    this:chooseSites()
+                end,
+            },
+        },
+        -- what the search is narrowed down to, on the sites that can be (see chooseScope)
+        {
+            {
+                text = T(_("Search in: %1"), scopeName(self.scope)),
+                id = "scope",
+                callback = function()
+                    this:chooseScope()
+                end,
+            },
+        },
         {
             {
                 text = "Cancel",
@@ -462,39 +530,103 @@ function KindleFetch:setupUI(source, query, scope)
             },
         },
     }
-    -- where the site can narrow a search down (see chooseScope)
-    if Sources[source].SCOPES then
-        table.insert(buttons, 1, {
-            {
-                text = T(_("Search in: %1"), scopeName(self.scope)),
-                id = "scope",
-                callback = function()
-                    this:chooseScope()
-                end,
-            },
-        })
-    end
     self.search_box = InputDialog:new {
-        title = T(_("Search %1"), Sources[source].NAME),
+        title = _("Search for books"),
         input = query,
         input_type = "text",
         buttons = buttons,
     }
     UIManager:show(self.search_box)
-    if query then
+    if query and search_now then
         self:performSearch()
     end
 end
 
+-- tick or untick which sites the search box searches, which it searches from then on (see
+-- KindleFetchSettings:getSearchSources). Z-Library is logged into before it's ticked, as it can only be searched with
+-- an account, and at least one site stays ticked
+function KindleFetch:chooseSites()
+    local this = self
+    local dialog
+    local function label(source)
+        local text = (isTicked(this.sources, source) and "✓ " or "") .. Sources[source].NAME
+        if Sources[source].NEEDS_LOGIN and not ZlibAccount:isLoggedIn() then
+            return T(_("%1 (log in)"), text)
+        end
+        return text
+    end
+    local function tick(source, ticked)
+        local sources = {}
+        for __, site in ipairs(MultiSearch.SOURCES) do
+            if site == source and ticked or site ~= source and isTicked(this.sources, site) then
+                table.insert(sources, site)
+            end
+        end
+        this.sources = sources
+        LogUtil.info("searching", table.concat(sources, ", "), "from now on")
+        local saved, err = KindleFetchSettings:setSearchSources(sources)
+        if not saved then
+            NotifyUtil.error(err)
+        end
+        local sites_button = this.search_box and this.search_box.button_table:getButtonById("sites")
+        if sites_button then
+            sites_button:setText(sitesText(sources), sites_button.width)
+            UIManager:setDirty(this.search_box, "ui")
+        end
+    end
+
+    local rows = {}
+    for __, source in ipairs(MultiSearch.SOURCES) do
+        table.insert(rows, {
+            {
+                text = label(source),
+                id = source,
+                callback = function()
+                    local ticked = isTicked(this.sources, source)
+                    if ticked and #this.sources == 1 then
+                        NotifyUtil.info(_("Choose at least one site to search"))
+                        return
+                    end
+                    if
+                        not ticked
+                        and needsLogin(source, function()
+                            tick(source, true)
+                        end)
+                    then
+                        UIManager:close(dialog)
+                        return
+                    end
+                    tick(source, not ticked)
+                    local button = dialog.buttontable:getButtonById(source)
+                    button:setText(label(source), button.width)
+                    UIManager:setDirty(dialog, "ui")
+                end,
+            },
+        })
+    end
+    dialog = ButtonDialog:new {
+        title = _("Search on"),
+        title_align = "center",
+        buttons = rows,
+    }
+    UIManager:show(dialog)
+end
+
 -- choose what the search is narrowed down to (see SCOPES in Sources), e.g. only the books' authors, or all a site
--- searches, for the search box that's open
+-- searches, for the search box that's open: whatever any site can be narrowed down to, as those that can't search
+-- everything
 function KindleFetch:chooseScope()
     local this = self
     local dialog
     local row = {}
-    local scopes = { false }
-    for __, scope in ipairs(Sources[self.source].SCOPES) do
-        table.insert(scopes, scope)
+    local scopes, offered = { false }, {}
+    for __, source in ipairs(MultiSearch.SOURCES) do
+        for __, scope in ipairs(Sources[source].SCOPES or {}) do
+            if not offered[scope] then
+                offered[scope] = true
+                table.insert(scopes, scope)
+            end
+        end
     end
     for __, scope in ipairs(scopes) do
         scope = scope or nil
@@ -533,9 +665,9 @@ function KindleFetch:addToHighlightDialog()
     end)
 end
 
--- search for query, e.g. more by a book's author, or what's highlighted in one, on whichever site is chosen (Z-Library
--- only once logged in, as for otherSites): on one line, and only the start of it when it's long (see MAX_QUERY_LENGTH).
--- narrowed down to scope (e.g. the books' authors), where given and the site can (see setupUI)
+-- open the search box with query in it, e.g. more by a book's author, or what's highlighted in one, to search the sites
+-- ticked in it for: on one line, and only the start of it when it's long (see MAX_QUERY_LENGTH). narrowed down to scope
+-- (e.g. the books' authors), where given and the sites can be (see setupUI)
 function KindleFetch:searchFor(query, scope)
     query = StringUtil.trim(query or ""):gsub("%s+", " ")
     if #query > MAX_QUERY_LENGTH then
@@ -550,45 +682,17 @@ function KindleFetch:searchFor(query, scope)
     if query == "" then
         return
     end
-
-    local dialog
-    local row = {}
-    for __, source in ipairs(SOURCES) do
-        if not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn() then
-            table.insert(row, {
-                text = Sources[source].NAME,
-                callback = function()
-                    UIManager:close(dialog)
-                    LogUtil.info(string.format("searching %s for %q, from a book", Sources[source].NAME, query))
-                    self:setupUI(source, query, scope)
-                end,
-            })
-        end
-    end
-    dialog = ButtonDialog:new {
-        title = T(_("Search for “%1” on"), query),
-        title_align = "center",
-        buttons = {
-            row,
-            {
-                {
-                    text = _("Cancel"),
-                    callback = function()
-                        UIManager:close(dialog)
-                    end,
-                },
-            },
-        },
-    }
-    UIManager:show(dialog)
+    LogUtil.info(string.format("searching for %q, from a book", query))
+    self:setupUI(query, scope)
 end
 
--- buttons for searching the other sites for query, from what says this one found nothing or failed: Z-Library only
--- once logged in, as it can only be searched with an account. each closes the search box and results for this one
+-- buttons for searching the sites that weren't searched for query, from what says those that were found nothing or
+-- failed: Z-Library only once logged in, as it can only be searched with an account. each closes the search box and
+-- results for these
 function KindleFetch:otherSites(query)
     local buttons = {}
-    for __, source in ipairs(SOURCES) do
-        if source ~= self.source and (not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn()) then
+    for __, source in ipairs(MultiSearch.SOURCES) do
+        if not isTicked(self.sources, source) and (not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn()) then
             table.insert(buttons, {
                 text = T(_("Search %1"), Sources[source].NAME),
                 callback = function()
@@ -597,8 +701,8 @@ function KindleFetch:otherSites(query)
                         LogUtil.info(string.format("searching %s for %q instead", Sources[source].NAME, query))
                         local scope = self.scope
                         self:closeSearch()
-                        -- narrowed down as this one was, where it can be
-                        self:setupUI(source, query, scope)
+                        -- narrowed down as these were, where it can be
+                        self:setupUI(query, scope, { source }, true)
                     end)
                 end,
             })
@@ -619,11 +723,15 @@ function KindleFetch:performSearch()
         return
     end
 
-    -- nothing can be found with every language, file type or book type (where the site has them) turned off. said
-    -- like the other things the search box needs first, each in a sentence of its own, to be translated whole
+    -- nothing can be found with every language, file type or book type (where a site ticked has them) turned off.
+    -- said like the other things the search box needs first, each in a sentence of its own, to be translated whole
+    local has_book_types = false
+    for __, source in ipairs(self.sources) do
+        has_book_types = has_book_types or Sources[source].HAS_BOOK_TYPES == true
+    end
     local turned_off = #KindleFetchSettings:getPreferredLanguages() == 0 and "language"
         or #KindleFetchSettings:getPreferredFileTypes() == 0 and "file type"
-        or Sources[self.source].HAS_BOOK_TYPES and #KindleFetchSettings:getPreferredBookTypes() == 0 and "book type"
+        or has_book_types and #KindleFetchSettings:getPreferredBookTypes() == 0 and "book type"
     if turned_off then
         LogUtil.warn("every", turned_off, "is turned off, so there's nothing to search for")
         NotifyUtil.info(({
@@ -638,56 +746,125 @@ function KindleFetch:performSearch()
     local function searchOnceLoggedIn()
         self:performSearch()
     end
-    if needsLogin(self.source, searchOnceLoggedIn) then
-        return
+    for __, source in ipairs(self.sources) do
+        if needsLogin(source, searchOnceLoggedIn) then
+            return
+        end
     end
 
-    if not self:canSearchNow(query, 1, function()
+    local pages = firstPages(self.sources)
+    if not self:canSearchNow(query, pages, function()
         self:performSearch()
     end) then
         return
     end
 
     LogUtil.debug("starting search for", query)
-    self:searchFrom(query, 1)
+    self:searchFrom(query, pages)
 end
 
--- search from a page of the site's results, and show the books found
-function KindleFetch:searchFrom(query, page)
+-- search the sites in pages from those pages of their results (see MultiSearch.start), showing the books as soon as any
+-- site has found some, and adding each other site's as it finds them. once they've all finished without any, says why:
+-- what went wrong, or that none were found (see explainFailure and explainNoBooks)
+function KindleFetch:searchFrom(query, pages)
     self.current_search_query = query
+    self.books = nil
+    self.next_pages = {}
+    local sources = sourcesOf(pages)
+    -- whose books are each shown with the site they were found on
+    self.several_sites = #sources > 1
+    -- what went wrong for the sites that failed, before any books were showing to say so over, how many results the
+    -- others read to find none, the sites that have none of the file types chosen, and whether it was called off
+    local failures, results_read, no_file_types = {}, 0, {}
+    local read_any, called_off = false, false
     -- saying what's being searched for, as the search box is behind it, on a line of its own, so the message covers
     -- the search box's own buttons however short the search
-    local waiting_text = T(_("Searching %1 for\n“%2”..."), Sources[self.source].NAME, query)
-    self:searchInBackground(query, page, waiting_text, function(books, err, next_page, results_read)
-        self.books = books
-        self.next_page = next_page
+    local waiting_text = T(_("Searching %1 for\n“%2”..."), sitesName(sources), query)
+    self:startSearch(query, pages, waiting_text, {
+        on_result = function(source, books, err, next_page, read)
+            local name = Sources[source].NAME
+            if err == HttpUtil.CANCELLED then
+                called_off = true
+                LogUtil.info(string.format("search of %s for %q was called off", name, query))
+                return
+            end
+            -- which can't be searched for on this site, as when no results are in them, so the settings are offered
+            if err == Errors.NO_FILE_TYPES then
+                LogUtil.warn(name, "has none of the file types chosen")
+                table.insert(no_file_types, source)
+                return
+            end
+            if err or not books then
+                err = err or "search failed"
+                LogUtil.warn(string.format("search of %s for %q failed: %s", name, query, err))
+                table.insert(failures, { source = source, err = err })
+                -- over the others' books, where they're showing
+                if self.books then
+                    self:sayFailed(failures)
+                end
+                return
+            end
+            read_any = true
+            results_read = results_read + (read or 0)
+            self.next_pages[source] = next_page
+            if #books == 0 then
+                LogUtil.info(
+                    string.format(
+                        "%s found no books for %q with the preferred languages, file types and book types",
+                        name,
+                        query
+                    )
+                )
+                return
+            end
+            self:addBooks(books)
+            self:sayFailed(failures)
+        end,
+        on_done = function()
+            if self.books then
+                self:finishBooks()
+                return
+            end
+            if called_off then
+                return
+            end
+            if #failures > 0 then
+                self:explainFailure(query, pages, failures)
+                return
+            end
+            if not read_any and #no_file_types > 0 then
+                self:explainNoBooks(query, no_file_types, nil, {})
+                return
+            end
+            self:explainNoBooks(query, sources, results_read, self.next_pages)
+        end,
+    })
+end
 
-        -- which can't be searched for on this site, as when no results are in them, so the settings are offered
-        if err == Errors.NO_FILE_TYPES then
-            LogUtil.warn(Sources[self.source].NAME, "has none of the file types chosen")
-            self:explainNoBooks(query, nil, nil)
-            return
-        end
+-- say over the books found which sites failed, and why, as each is found to have, emptying failures once it has
+function KindleFetch:sayFailed(failures)
+    for __, failure in ipairs(failures) do
+        NotifyUtil.error(T(_("Searching %1 failed: %2"), Sources[failure.source].NAME, failure.err))
+    end
+    for i = #failures, 1, -1 do
+        failures[i] = nil
+    end
+end
 
-        -- check for errors
-        if err or not books then
-            err = err or "search failed"
-            LogUtil.warn(string.format("search for %q failed: %s", query, err))
-            self:explainFailure(query, page, err)
-            return
-        end
-        if #books == 0 then
-            LogUtil.info(
-                string.format("no books found for %q with the preferred languages, file types and book types", query)
-            )
-            self:explainNoBooks(query, results_read or 0, next_page)
-            return
-        end
-
-        -- show books
-        self:rememberSearch(query)
-        self:showBooks(books)
-    end)
+-- add the books a site has found to those found so far, showing them once they're the first
+function KindleFetch:addBooks(books)
+    local first = self.books == nil
+    self.books = self.books or {}
+    for __, book in ipairs(books) do
+        table.insert(self.books, book)
+    end
+    if first then
+        self:closeWaitingMessage()
+        self:rememberSearch(self.current_search_query)
+        self:showBooks(self.books)
+    else
+        self:refreshBooks()
+    end
 end
 
 -- remember a search that found books, to search for again from Recent, rather than typos and searches that failed,
@@ -790,18 +967,29 @@ function KindleFetch:showFailure(text, err, retry, other_rows)
     })
 end
 
--- say the search for the page failed, and why, offering what fixes it (see fixes), and to search the other sites
--- instead (see otherSites), unless the device isn't connected, which they'd fail for too
-function KindleFetch:explainFailure(query, page, err)
-    self:showFailure(T(_("Search failed: %1"), err), err, function()
-        self:searchOnline(query, page)
+-- say the search failed, and why, for each site that did (failures, see describeFailures), offering what fixes it (see
+-- fixes, the first that something does, as it's the same for each site, e.g. turning Wi-Fi on), and to search the
+-- other sites instead (see otherSites), unless the device isn't connected, which they'd fail for too
+function KindleFetch:explainFailure(query, pages, failures)
+    local err = failures[1].err
+    for __, failure in ipairs(failures) do
+        if #self:fixes(failure.err, function() end) > 0 then
+            err = failure.err
+            break
+        end
+    end
+    local text = describeFailures(_("Search failed: %1"), _("Search failed:\n%1"), failures, #sourcesOf(pages))
+    self:showFailure(text, err, function()
+        self:searchOnline(query, pages)
     end, { err ~= Errors.NO_CONNECTION and self:otherSites(query) or {} })
 end
 
--- say that no books were found, and why when it's known: the site may have listed plenty, all in other languages or
--- file types than those chosen in the settings. the other sites are offered too (see otherSites)
-function KindleFetch:explainNoBooks(query, results_read, next_page)
-    local name = Sources[self.source].NAME
+-- say that the sites (sources) found no books, and why when it's known: they may have listed plenty (results_read), all
+-- in other languages or file types than those chosen in the settings, or have none of the file types chosen at all
+-- (results_read nil). offers to keep searching the sites in next_pages (see MultiSearch.start), where there are more
+-- results to look through, and the other sites (see otherSites)
+function KindleFetch:explainNoBooks(query, sources, results_read, next_pages)
+    local name = sitesName(sources)
     if results_read == 0 then
         UIManager:show(ConfirmBox:new {
             text = T(_("%1 found no books for “%2”."), name, query),
@@ -820,15 +1008,26 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
                 name,
                 results_read
             )
-        or T(_("%1 doesn't have books in any of the file types chosen in Kindle Fetch's settings."), name)
+        or T(
+            N_(
+                "%1 doesn't have books in any of the file types chosen in Kindle Fetch's settings.",
+                "%1 don't have books in any of the file types chosen in Kindle Fetch's settings.",
+                #sources
+            ),
+            name
+        )
     local other_buttons = { self:otherSites(query) }
     -- there are more results to look through
-    if next_page then
+    if next(next_pages) then
+        local pages = {}
+        for source, page in pairs(next_pages) do
+            pages[source] = page
+        end
         table.insert(other_buttons, 1, {
             {
                 text = _("Keep searching"),
                 callback = function()
-                    self:searchOnline(query, next_page)
+                    self:searchOnline(query, pages)
                 end,
             },
         })
@@ -844,71 +1043,92 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
     })
 end
 
--- whether a page of results can be searched for now: once connected, or when it's saved from an earlier search.
--- otherwise Wi-Fi is turned on (as KOReader is set up to), and retry is called once it's connected
-function KindleFetch:canSearchNow(query, page, retry)
-    if NetworkMgr:isConnected() or Sources[self.source]:isCached(query, page, self.scope) then
+-- whether the sites' pages of results (see MultiSearch.start) can be searched for now: once connected, or when they're
+-- all saved from an earlier search. otherwise Wi-Fi is turned on (as KOReader is set up to), and retry is called once
+-- it's connected
+function KindleFetch:canSearchNow(query, pages, retry)
+    if NetworkMgr:isConnected() or MultiSearch.isCached(query, pages, self.scope) then
         return true
     end
     NetworkMgr:runWhenConnected(retry)
     return false
 end
 
--- search from a page of results (see searchFrom), turning on Wi-Fi first if need be (see canSearchNow)
-function KindleFetch:searchOnline(query, page)
+-- search from the sites' pages of results (see searchFrom), turning on Wi-Fi first if need be (see canSearchNow)
+function KindleFetch:searchOnline(query, pages)
     local function search()
-        self:searchFrom(query, page)
+        self:searchFrom(query, pages)
     end
-    if self:canSearchNow(query, page, search) then
+    if self:canSearchNow(query, pages, search) then
         search()
     end
 end
 
--- search without holding up the rest of KOReader while the site answers, where that's possible (see
--- HttpUtil), showing waiting_text until it has. calls on_done with what search returned, unless the search was
--- called off before finding anything, with the message's Cancel button
-function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
-    -- results saved from an earlier search are there straight away
+-- search the sites in pages (see MultiSearch.start) without holding up the rest of KOReader while they answer, where
+-- that's possible (see HttpUtil), saying waiting_text until the first books have been found or they've all finished,
+-- with a Cancel that calls them all off, unless the pages are all saved from an earlier search, and are there straight
+-- away. handlers.on_result and on_done are called as MultiSearch's are, for this search only: one still going from
+-- before (e.g. loading more) is called off first, as only one search's books are shown at a time
+function KindleFetch:startSearch(query, pages, waiting_text, handlers)
+    if self.search then
+        self.search:cancel()
+    end
+    self:closeWaitingMessage()
+
     local message
-    local function closeMessage()
-        if message and not message.cancelled and not message.closed then
-            message.closed = true
-            UIManager:close(message)
-        end
+    if not MultiSearch.isCached(query, pages, self.scope) then
+        message = WaitingMessage.new(waiting_text)
+        UIManager:show(message)
+        -- so that a second tap on what started the search doesn't land on the message
+        Device.input:inhibitInputUntil(true)
+        UIManager:forceRePaint()
+        self.waiting_message = message
     end
 
-    -- an error is passed on rather than left to Trapper, which would lose it and leave the message up, including one
-    -- in showing what was found
-    Trapper:wrap(Guard.wrap(string.format("searching for %q", query), function()
-        if not Sources[self.source]:isCached(query, page, self.scope) then
-            message = WaitingMessage.new(waiting_text)
-            UIManager:show(message)
-            -- so that a second tap on what started the search doesn't land on the message
-            Device.input:inhibitInputUntil(true)
-            UIManager:forceRePaint()
+    local search
+    search = MultiSearch.start(query, pages, self.scope, {
+        -- e.g. which of Library Genesis' mirrors it's trying, beneath what's being searched for
+        on_status = function(status)
+            if message and not message.closed and not message.cancelled then
+                message:setStatus(status)
+            end
+        end,
+        on_result = function(...)
+            if self.search == search then
+                -- what goes wrong showing what was found says the search failed, as it would have before
+                Guard.call(string.format("showing what was found for %q", query), handlers.on_result, function(err)
+                    self:closeWaitingMessage()
+                    NotifyUtil.error(T(_("Search failed: %1"), err))
+                end, ...)
+            end
+        end,
+        on_done = function()
+            if message and not message.closed and not message.cancelled then
+                message.closed = true
+                UIManager:close(message)
+            end
+            if self.search == search then
+                handlers.on_done()
+            end
+        end,
+    })
+    self.search = search
+    -- its Cancel calls off every site's search, as each waits with a stand-in of its own (see MultiSearch)
+    if message then
+        message.dismiss_callback = function()
+            search:cancel()
         end
+    end
+end
 
-        HttpUtil.setTrapWidget(message)
-        local source = Sources[self.source]
-        local ok, books, err, next_page, results_read =
-            Guard.pcall(string.format("search for %q", query), source.search, source, query, page, self.scope)
-        HttpUtil.setTrapWidget(nil)
-        closeMessage()
-        if not ok then
-            books, err, next_page = nil, Errors.UNEXPECTED, nil
-        end
-
-        if err == HttpUtil.CANCELLED then
-            LogUtil.info(string.format("search for %q was called off", query))
-            return
-        end
-        on_done(books, err, next_page, results_read)
-    end, function(err)
-        HttpUtil.setTrapWidget(nil)
-        closeMessage()
-        -- which says it failed, as it does for any other error
-        on_done(nil, err)
-    end))
+-- close the message saying the search is going on, once books have been found, or the search has finished
+function KindleFetch:closeWaitingMessage()
+    local message = self.waiting_message
+    self.waiting_message = nil
+    if message and not message.closed and not message.cancelled then
+        message.closed = true
+        UIManager:close(message)
+    end
 end
 
 -- whether the results show the books' covers: when they're turned on, and KOReader's menu can lay them out (see
@@ -936,6 +1156,9 @@ function KindleFetch:bookMenuItems(books)
 
     for __, book in ipairs(books) do
         local text = bookText(book)
+        if self.several_sites and Sources[book.source] then
+            text = StringUtil.joinDetails(text, Sources[book.source].NAME)
+        end
         if not filter or util.stringLower(text):find(filter, 1, true) then
             table.insert(menu_items, {
                 book = book,
@@ -951,8 +1174,19 @@ function KindleFetch:bookMenuItems(books)
         end
     end
 
-    -- the books loaded wouldn't be among those being looked through
-    if self.next_page and not self.filter then
+    -- the sites still being searched, whose books are added once they've found them (see searchFrom), or a way to
+    -- load more, where there's more (and the books loaded wouldn't be among those being looked through)
+    if self.search and not self.search:isDone() then
+        table.insert(menu_items, {
+            still_searching = true,
+            text = T(_("Still searching %1…"), sitesName(self.search:pendingSources())),
+            callback = function()
+                NotifyUtil.info(
+                    T(_("The books %1 finds are added here once it has."), sitesName(this.search:pendingSources()))
+                )
+            end,
+        })
+    elseif self:hasMore() and not self.filter then
         table.insert(menu_items, {
             text = _("Load more"),
             callback = function()
@@ -971,9 +1205,44 @@ function KindleFetch:booksTitle(shown)
     if self.filter then
         return T(_("%1 · %2 of %3 books"), self.current_search_query, shown or count, count)
     end
-    -- there may be more to load
-    local found = self.next_page and T(_("%1+ books"), count) or T(N_("1 book", "%1 books", count), count)
+    -- there may be more to load, or still to come
+    local more = self:hasMore() or self.search and not self.search:isDone()
+    local found = more and T(_("%1+ books"), count) or T(N_("1 book", "%1 books", count), count)
     return string.format("%s · %s", self.current_search_query, found)
+end
+
+-- whether any site has more results to load (see loadMoreBooks)
+function KindleFetch:hasMore()
+    return self.next_pages ~= nil and next(self.next_pages) ~= nil
+end
+
+-- list the books found again, as more have been, staying on the page that's showing, or turning to the one with the
+-- itemnumber'th book, where given, and loading the covers of the books on it
+function KindleFetch:refreshBooks(itemnumber)
+    local menu = self.books_menu
+    if not menu then
+        return
+    end
+    menu:switchItemTable(self:booksTitle(), self:bookMenuItems(self.books), itemnumber or -1)
+    if coversShown() then
+        LogUtil.debug("loading covers for page", menu.page)
+        menu:loadCoversForPage(menu.page)
+    end
+end
+
+-- once every site has finished, end the list with Load more where there's more, in place of the sites that were still
+-- being searched, or without it where there's no more, staying on the page that's showing. the list is left as it is
+-- where its end hasn't changed, as listing the books again would load the covers showing again
+function KindleFetch:finishBooks()
+    local menu = self.books_menu
+    if not menu then
+        return
+    end
+    local items, shown = self:bookMenuItems(self.books), menu.item_table
+    local last, was = items[#items], shown[#shown]
+    if #items ~= #shown or (last and last.text) ~= (was and was.text) then
+        menu:switchItemTable(self:booksTitle(), items, -1)
+    end
 end
 
 -- the number of books among menu items, leaving out Load more
@@ -1074,8 +1343,11 @@ function KindleFetch:showResultsMenu()
         { text = _("Languages…"), change = SettingsPage.changeLanguages },
         { text = _("File types…"), change = SettingsPage.changeFileTypes },
     }
-    if Sources[self.source].HAS_BOOK_TYPES then
-        table.insert(changes, { text = _("Book types…"), change = SettingsPage.changeBookTypes })
+    for __, source in ipairs(self.sources) do
+        if Sources[source].HAS_BOOK_TYPES then
+            table.insert(changes, { text = _("Book types…"), change = SettingsPage.changeBookTypes })
+            break
+        end
     end
     local row = {}
     for __, choice in ipairs(changes) do
@@ -1106,7 +1378,7 @@ function KindleFetch:changeChoices(change)
         if self.books_menu then
             UIManager:close(self.books_menu)
         end
-        self:searchOnline(query, 1)
+        self:searchOnline(query, firstPages(self.sources))
     end)
 end
 
@@ -1159,6 +1431,20 @@ function KindleFetch:showBooks(books)
         is_downloaded = function(book)
             return this:isDownloaded(book)
         end,
+        -- and which site each was found on, where several were searched
+        source_name = self.several_sites and function(book)
+            return Sources[book.source] and Sources[book.source].NAME
+        end or nil,
+        -- once it's closed, as with its X, the sites still being searched are called off, as their books would have
+        -- nowhere to go, and saying they failed would come out of nowhere
+        close_callback = function()
+            if this.books_menu == menu then
+                this.books_menu = nil
+            end
+            if this.search then
+                this.search:cancel()
+            end
+        end,
         onPageChange = Guard.wrap("loading covers", function(page)
             if coversShown() then
                 LogUtil.debug("loading covers for page", page)
@@ -1179,34 +1465,81 @@ function KindleFetch:showBooks(books)
     end
 end
 
+-- load the next page of each site's results that has more (see hasMore), adding the books to the list as each site
+-- finds them, turning to the first of them
 function KindleFetch:loadMoreBooks()
-    if not self.next_page then
+    if not self:hasMore() then
         NotifyUtil.message(_("No more books found"))
         return
     end
 
     local query = self.current_search_query
-    if not self:canSearchNow(query, self.next_page, function()
+    local pages = {}
+    for source, page in pairs(self.next_pages) do
+        pages[source] = page
+    end
+    if not self:canSearchNow(query, pages, function()
         self:loadMoreBooks()
     end) then
         return
     end
 
-    local waiting_text = _("Loading more books...")
-    self:searchInBackground(query, self.next_page, waiting_text, function(books, err, next_page, results_read)
-        -- (without books, as a search that didn't say why, rather than there being no more)
-        if err or not books then
-            err = err or "search failed"
-            LogUtil.warn(string.format("loading more books for %q failed: %s", query, err))
-            self:showFailure(T(_("Loading more books failed: %1"), err), err, function()
-                self:loadMoreBooks()
-            end)
-            return
-        end
-
-        self.next_page = next_page
-        if not books or #books == 0 then
-            if next_page then
+    -- the sites that failed, which keep their page to load more from again, and how many results the others read
+    local failures, results_read, found = {}, 0, 0
+    local first_new_book = #self.books + 1
+    self:startSearch(query, pages, _("Loading more books..."), {
+        on_result = function(source, books, err, next_page, read)
+            if err == HttpUtil.CANCELLED then
+                return
+            end
+            -- (without books, as a search that didn't say why, rather than there being no more)
+            if err or not books then
+                err = err or "search failed"
+                LogUtil.warn(
+                    string.format("loading more books from %s for %q failed: %s", Sources[source].NAME, query, err)
+                )
+                table.insert(failures, { source = source, err = err })
+                return
+            end
+            self.next_pages[source] = next_page
+            results_read = results_read + (read or 0)
+            if #books == 0 then
+                return
+            end
+            for __, book in ipairs(books) do
+                table.insert(self.books, book)
+            end
+            self:closeWaitingMessage()
+            -- turning to the page the first new books start on (the one that was showing), rather than going back to
+            -- the first, and staying there as more arrive
+            self:refreshBooks(found == 0 and first_new_book or nil)
+            found = found + #books
+        end,
+        on_done = function()
+            self:finishBooks()
+            if #failures > 0 then
+                if found == 0 then
+                    self:showFailure(
+                        describeFailures(
+                            _("Loading more books failed: %1"),
+                            _("Loading more books failed:\n%1"),
+                            failures,
+                            #sourcesOf(pages)
+                        ),
+                        failures[1].err,
+                        function()
+                            self:loadMoreBooks()
+                        end
+                    )
+                else
+                    self:sayFailed(failures)
+                end
+                return
+            end
+            if found > 0 then
+                return
+            end
+            if self:hasMore() then
                 -- there are more results to look through
                 NotifyUtil.message(
                     T(
@@ -1214,36 +1547,23 @@ function KindleFetch:loadMoreBooks()
                             "None of the next %1 results are in the languages and file types chosen. Load more to "
                                 .. "keep looking."
                         ),
-                        results_read or 0
+                        results_read
                     )
                 )
             else
-                -- take Load more off the end of the list, staying on the page that's showing
-                self.books_menu:switchItemTable(self:booksTitle(), self:bookMenuItems(self.books), -1)
                 NotifyUtil.message(_("No more books found"))
             end
-            return
-        end
-
-        -- append new books
-        local first_new_book = #self.books + 1
-        for __, book in ipairs(books) do
-            table.insert(self.books, book)
-        end
-
-        -- add them to the menu where Load more was, turning to the page they start on (the one that was showing)
-        -- rather than going back to the first
-        local menu = self.books_menu
-        menu:switchItemTable(self:booksTitle(), self:bookMenuItems(self.books), first_new_book)
-        if coversShown() then
-            LogUtil.debug("loading covers for page", menu.page)
-            menu:loadCoversForPage(menu.page)
-        end
-    end)
+        end,
+    })
 end
 
 -- close the results and the search box behind them, which would otherwise show again over what's gone to from them
 function KindleFetch:closeSearch()
+    -- and calls off the sites still being searched, whose books would have nowhere to go
+    if self.search then
+        self.search:cancel()
+    end
+    self:closeWaitingMessage()
     if self.books_menu then
         UIManager:close(self.books_menu)
     end

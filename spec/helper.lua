@@ -908,6 +908,25 @@ function helper.reset()
     function Button:disable()
         self.enabled = false
     end
+    -- its buttons, by their ids, whose text can be changed, as KOReader's
+    local ButtonDialog = package.loaded["ui/widget/buttondialog"]
+    function ButtonDialog:init()
+        local dialog = self
+        self.buttontable = {
+            getButtonById = function(_, id)
+                for _, row in ipairs(dialog.buttons or {}) do
+                    for _, b in ipairs(row) do
+                        if b.id == id then
+                            function b:setText(text)
+                                self.text = text
+                            end
+                            return b
+                        end
+                    end
+                end
+            end,
+        }
+    end
     -- the characters TextBoxWidget uses for bold text
     local TextBoxWidget = package.loaded["ui/widget/textboxwidget"]
     -- how many lines its text wraps over, at 10px a character as in getSize, and how tall each is

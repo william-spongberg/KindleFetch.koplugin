@@ -39,8 +39,9 @@ describe("Z-Library", function()
             and book.authors:lower():find("austen", 1, true) ~= nil
     end
 
-    it("logs in from its search menu entry, then finds books", function()
-        H.openMainMenu({ "Kindle Fetch", "Search Z-Library" })
+    -- where it's ticked in the search box
+    it("logs in to search it, then finds books", function()
+        local plugin, search_box = H.startSearch(H.BOOK_QUERY, "Z-Library")
         local dialog = H.waitFor("the login dialog", 10, function()
             return H.find(function(widget)
                 return widget.title == "Log in to Z-Library" and widget.input_fields
@@ -51,19 +52,14 @@ describe("Z-Library", function()
         H.shot("zlib-login")
         H.tapButton("Log in", dialog)
 
-        local plugin = H.plugin()
-        local search_box = H.waitFor("the search dialog", 60, function()
+        H.waitFor("logging in", 60, function()
             local failure = H.errorShown()
             if failure then
                 error(failure, 0)
             end
-            return plugin.search_box and H.isShown(plugin.search_box) and plugin.search_box
+            return ZlibAccount:isLoggedIn()
         end)
-        assert(ZlibAccount:isLoggedIn(), "not logged in")
-        H.eq("Search Z-Library", search_box.title, "search box")
-
-        search_box:setInputText(H.BOOK_QUERY)
-        H.tapButton("Search", search_box)
+        assert(H.isShown(search_box), "the search box has closed")
         local menu = H.waitFor("search results", 120, function()
             local failure = H.errorShown() or H.messageSaying("found no books for")
             if failure then
