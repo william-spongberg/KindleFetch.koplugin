@@ -109,6 +109,7 @@ function CurlUtil.isPidRunning(pid)
     return ok == 0
 end
 
+-- stop a download started in the background (see saveExitCode), whose shell passes the signal on to curl
 function CurlUtil.killPid(pid)
     if not pid then
         return
@@ -274,13 +275,16 @@ function CurlUtil.createExitFile()
     return exit_file
 end
 
+-- curl's exit code once it has finished, or nil while it's running, including while the shell is still writing it
+-- (see saveExitCode), when the file is there but empty
 function CurlUtil.getExitCode(exit_file)
     local exit_code_str = FileUtil.readFile(exit_file)
-    if not exit_code_str then
-        return nil -- file doesn't exist yet, process still running
+    local exit_code = exit_code_str and tonumber(exit_code_str)
+    if not exit_code then
+        return nil
     end
     FileUtil.removeFile(exit_file)
-    return tonumber(exit_code_str)
+    return exit_code
 end
 
 function CurlUtil.getProxyFlag(use_proxy)
@@ -447,9 +451,16 @@ function CurlUtil.isTransferComplete(results, filepath, exit_code)
     return exit_code == 0 and FileUtil.getSize(filepath) > 0
 end
 
+-- run cmd in a shell that saves its exit code to exit_file once it has finished. the shell's pid is the one a
+-- background download is followed and stopped by (see echoPid and killPid), so it passes being stopped on to cmd,
+-- which would otherwise carry on by itself, writing to its file, and waits for cmd to stop before saving its exit code
 function CurlUtil.saveExitCode(cmd, exit_file)
-    -- save exit code to exit_file
-    local command = string.format("(%s; echo $? > %s)", cmd, CurlUtil.shellQuote(exit_file))
+    local command = string.format(
+        "(trap 'kill $c 2>/dev/null' TERM; %s & c=$!; wait $c; s=$?; "
+            .. "if kill -0 $c 2>/dev/null; then wait $c; s=$?; fi; echo $s > %s)",
+        cmd,
+        CurlUtil.shellQuote(exit_file)
+    )
     command = string.format("%s >/dev/null 2>&1", command) -- do not print errors to terminal
 
     return command
