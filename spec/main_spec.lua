@@ -1030,6 +1030,95 @@ describe("KindleFetch", function()
         end)
     end)
 
+    describe("looking through the books found", function()
+        local plugin
+
+        before_each(function()
+            local orwell = book("1984")
+            orwell.authors = "George Orwell"
+            local huxley = book("Brave New World", "pdf")
+            huxley.authors = "Aldous Huxley"
+            local farm = book("Animal Farm")
+            farm.authors = "George Orwell"
+            search_results[1] = { { orwell, huxley, farm }, nil, 2 }
+            plugin = openUI()
+            search(plugin, "dystopia")
+        end)
+
+        -- KOReader's Go to letter, on tapping the page number, exited KOReader on a book without
+        it("lists each book with its title, authors and file type", function()
+            local items = menus[1].item_table
+            assert.are.equal("1984 · George Orwell · EPUB", items[1].text)
+            assert.are.equal("Brave New World · Aldous Huxley · PDF", items[2].text)
+            assert.are.equal("Load more", items[4].text)
+            for _, item in ipairs(items) do
+                assert.are.equal("string", type(item.text))
+            end
+        end)
+
+        it("shows only the books with the text in their title, authors or file type, from the page number", function()
+            -- KOReader's Search, on tapping the page number
+            menus[1].search_callback("orwell")
+            -- without Load more, as the books it would load wouldn't be among them
+            assert.are.same({ "1984", "Animal Farm" }, itemTexts(menus[1]))
+            assert.are.equal("dystopia · 2 of 3 books", menus[1].title)
+            assert.are.equal(1, menus[1].page)
+            assert.are.same({ 1, 1 }, menus[1].covers_loaded)
+            -- without searching again
+            assert.are.same({ { "dystopia", 1 } }, searches)
+
+            menus[1].search_callback(" PDF ")
+            assert.are.same({ "Brave New World" }, itemTexts(menus[1]))
+        end)
+
+        it("shows every book again, with Load more, once there's no text to look for", function()
+            menus[1].search_callback("orwell")
+            menus[1].search_callback("")
+            assert.are.same({ "1984", "Brave New World", "Animal Farm", "Load more" }, itemTexts(menus[1]))
+            assert.are.equal("dystopia · 3+ books", menus[1].title)
+        end)
+
+        it("says when none of the books have the text, leaving them as they were", function()
+            menus[1].search_callback("orwell")
+            menus[1].search_callback("tolkien")
+            assert.are.equal("None of the books found have “tolkien” in them.", helper.lastShown().text)
+            assert.are.same({ "1984", "Animal Farm" }, itemTexts(menus[1]))
+        end)
+
+        it("is offered from the menu at the top of the results, along with showing every book again", function()
+            assert.are.equal("appbar.menu", menus[1].title_bar_left_icon)
+            menus[1]:onLeftButtonTap()
+            local results_menu = helper.lastShown()
+            -- there's nothing to show again yet
+            assert.are.equal(1, #results_menu.buttons)
+
+            button(results_menu, "Look through the books found…").callback()
+            assert.is_true(helper.wasClosed(results_menu))
+            local dialog = helper.lastShown()
+            assert.is_true(dialog.keyboard_shown)
+            dialog.input_text = "huxley"
+            button(dialog, "Look through").callback()
+            assert.is_true(helper.wasClosed(dialog))
+            assert.are.same({ "Brave New World" }, itemTexts(menus[1]))
+
+            menus[1]:onLeftButtonTap()
+            -- with what's being looked for, to change it
+            button(helper.lastShown(), "Look through the books found…").callback()
+            assert.are.equal("huxley", helper.lastShown().input)
+            menus[1]:onLeftButtonTap()
+            button(helper.lastShown(), "Show all 3 books").callback()
+            assert.are.same({ "1984", "Brave New World", "Animal Farm", "Load more" }, itemTexts(menus[1]))
+        end)
+
+        it("starts afresh for the next search", function()
+            menus[1].search_callback("orwell")
+            search_results[1] = { { book("Dune") } }
+            search(plugin, "dune")
+            assert.are.same({ "Dune" }, itemTexts(menus[2]))
+            assert.are.equal("dune · 1 book", menus[2].title)
+        end)
+    end)
+
     describe("load more", function()
         local plugin
 

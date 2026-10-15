@@ -371,6 +371,9 @@ local function createStubs(state)
             o.onCloseKeyboard = function(self)
                 self.keyboard_closed = true
             end
+            o.onShowKeyboard = function(self)
+                self.keyboard_shown = true
+            end
             return o
         end,
     }
@@ -426,6 +429,10 @@ local function createStubs(state)
         end,
         getSafeFilename = function(name)
             return (name:gsub("/", "_"))
+        end,
+        -- KOReader's lowers the capitals of every alphabet, rather than only English's
+        stringLower = function(text)
+            return text and text:lower()
         end,
     }
 

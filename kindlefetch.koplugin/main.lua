@@ -523,21 +523,43 @@ function KindleFetch:searchInBackground(query, page, waiting_text, on_done)
     end)
 end
 
--- the books as entries for the menu of results, followed by a way to load more when there are more to load
+-- a book's title, authors and file type, which the results are looked through for (see filterBooks), as is each
+-- entry's text by KOReader's own Go to letter, which KOReader exited on for an entry without text
+local function bookText(book)
+    local parts = {}
+    local function add(part)
+        if part and part ~= "" then
+            table.insert(parts, part)
+        end
+    end
+    add(book.display_title or book.title)
+    add(book.authors)
+    add(book.file_type and book.file_type:upper())
+    return table.concat(parts, " · ")
+end
+
+-- the books as entries for the menu of results, followed by a way to load more when there are more to load. only
+-- those with the text looked for in them, when the results are being looked through (see filterBooks)
 function KindleFetch:bookMenuItems(books)
     local this = self
     local menu_items = {}
+    local filter = self.filter and util.stringLower(self.filter)
 
     for _, book in ipairs(books) do
-        table.insert(menu_items, {
-            book = book,
-            callback = function()
-                this:downloadBook(book)
-            end,
-        })
+        local text = bookText(book)
+        if not filter or util.stringLower(text):find(filter, 1, true) then
+            table.insert(menu_items, {
+                book = book,
+                text = text,
+                callback = function()
+                    this:downloadBook(book)
+                end,
+            })
+        end
     end
 
-    if self.next_page then
+    -- the books loaded wouldn't be among those being looked through
+    if self.next_page and not self.filter then
         table.insert(menu_items, {
             text = _("Load more"),
             callback = function()
@@ -549,13 +571,116 @@ function KindleFetch:bookMenuItems(books)
     return menu_items
 end
 
--- what was searched for and how many books have been found, for the top of the menu of results
-function KindleFetch:booksTitle()
+-- what was searched for and how many books have been found, for the top of the menu of results, and how many of them
+-- have the text being looked for in them
+function KindleFetch:booksTitle(shown)
     local count = #self.books
+    if self.filter then
+        return string.format(_("%s · %d of %d books"), self.current_search_query, shown or count, count)
+    end
     -- there may be more to load
     local found = count == 1 and not self.next_page and _("1 book")
         or string.format(_("%d%s books"), count, self.next_page and "+" or "")
     return string.format("%s · %s", self.current_search_query, found)
+end
+
+-- the number of books among menu items, leaving out Load more
+local function countBooks(menu_items)
+    local count = 0
+    for _, item in ipairs(menu_items) do
+        if item.book then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+-- show only the books found with text in their title, authors or file type, whatever its capitals, without searching
+-- again, or every book again when there's no text. the books shown stay as they are when none have it
+function KindleFetch:filterBooks(text)
+    text = StringUtil.trim(text)
+    local previous = self.filter
+    self.filter = text ~= "" and text or nil
+
+    local items = self:bookMenuItems(self.books)
+    local shown = countBooks(items)
+    if shown == 0 then
+        self.filter = previous
+        NotifyUtil.message(string.format(_("None of the books found have “%s” in them."), text))
+        return
+    end
+    LogUtil.info(string.format("showing %d of the %d books found, looking for %q", shown, #self.books, text))
+
+    local menu = self.books_menu
+    menu:switchItemTable(self:booksTitle(shown), items, 1)
+    if KindleFetchSettings:getShowBookCovers() then
+        menu:loadCoversForPage(1)
+    end
+end
+
+-- ask for text to look through the books found for (see filterBooks)
+function KindleFetch:askForFilter()
+    local this = self
+    local dialog
+    dialog = InputDialog:new {
+        title = _("Look through the books found for"),
+        input = self.filter or "",
+        input_hint = _("Title, author or file type"),
+        buttons = {
+            {
+                {
+                    text = _("Cancel"),
+                    id = "close",
+                    callback = function()
+                        UIManager:close(dialog)
+                    end,
+                },
+                {
+                    text = _("Look through"),
+                    is_enter_default = true,
+                    callback = function()
+                        local text = dialog:getInputText()
+                        UIManager:close(dialog)
+                        this:filterBooks(text)
+                    end,
+                },
+            },
+        },
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
+-- what can be done with the books found, from the menu at the top left of the results
+function KindleFetch:showResultsMenu()
+    local this = self
+    local dialog
+    local buttons = {
+        {
+            {
+                text = _("Look through the books found…"),
+                callback = function()
+                    UIManager:close(dialog)
+                    this:askForFilter()
+                end,
+            },
+        },
+    }
+    if self.filter then
+        table.insert(buttons, {
+            {
+                text = string.format(_("Show all %d books"), #self.books),
+                callback = function()
+                    UIManager:close(dialog)
+                    this:filterBooks("")
+                end,
+            },
+        })
+    end
+    dialog = ButtonDialog:new {
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
 end
 
 local function buildDownloadPath(book)
@@ -577,12 +702,22 @@ end
 function KindleFetch:showBooks(books)
     local this = self
     self.downloaded = nil
+    self.filter = nil
 
     local menu
     menu = BookMenu:new {
         title = self:booksTitle(),
         -- rather than cutting a long search short
         title_shrink_font_to_fit = true,
+        -- what can be done with the books found (see showResultsMenu)
+        title_bar_left_icon = "appbar.menu",
+        onLeftButtonTap = function()
+            this:showResultsMenu()
+        end,
+        -- the Search button KOReader offers on tapping the page number looks through the books found
+        search_callback = function(text)
+            this:filterBooks(text)
+        end,
         item_table = self:bookMenuItems(books),
         covers_fullscreen = true,
         is_borderless = true,
