@@ -523,9 +523,12 @@ function KindleFetchSettings:load()
         end
     end
 
-    local download_dir = self:getDownloadDir()
-    if FileUtil.isValidDirectory(download_dir) then
-        fill("download_dir", download_dir)
+    -- (keeping one that has gone missing, as it may be back, e.g. on an SD card that has been taken out)
+    if not StringUtil.assertValidString(settings_file:readSetting("download_dir")) then
+        local download_dir = self:getDownloadDir()
+        if FileUtil.isValidDirectory(download_dir) then
+            fill("download_dir", download_dir)
+        end
     end
     fill("show_book_covers", self:getShowBookCovers())
     fill("check_for_updates", self:getCheckForUpdates())
@@ -706,10 +709,15 @@ function KindleFetchSettings:setZlibAccount(account)
     return true
 end
 
--- download_dir
+-- download_dir, or the default while the folder saved can't be found (e.g. once deleted, or on an SD card that has
+-- been taken out), which is kept, as it may be back
 function KindleFetchSettings:getDownloadDir()
     local settings_file = getSettingsFile()
     local download_dir = settings_file:readSetting("download_dir")
+    if StringUtil.assertValidString(download_dir) and not FileUtil.isValidDirectory(download_dir) then
+        LogUtil.warn("the download folder", download_dir, "can't be found, so downloading to the default for now")
+        download_dir = nil
+    end
 
     if not StringUtil.assertValidString(download_dir) then
         download_dir = G_reader_settings:readSetting("home_dir") or ""
@@ -728,9 +736,12 @@ function KindleFetchSettings:getDownloadDir()
 
     return download_dir
 end
+-- returns true, or nil and why books can't be saved in the folder (see FileUtil.checkWritableDir)
 function KindleFetchSettings:setDownloadDir(path)
-    if not FileUtil.isValidDirectory(path) then
-        return false, "Invalid directory path"
+    local ok, err = FileUtil.checkWritableDir(path)
+    if not ok then
+        LogUtil.warn("not downloading to", path, "as", err)
+        return nil, err
     end
 
     local settings_file = getSettingsFile()

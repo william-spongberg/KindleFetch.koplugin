@@ -1,5 +1,7 @@
 local UIManager = require("ui/uimanager")
 local NetworkMgr = require("ui/network/manager")
+local Device = require("device")
+local PluginShare = require("pluginshare")
 local Trapper = require("ui/trapper")
 local ConfirmBox = require("ui/widget/confirmbox")
 local LogUtil = require("util.logutil")
@@ -17,6 +19,8 @@ local _ = require("gettext")
 -- downloads books from the site they were found on (see Sources), in the background
 local Downloader = {}
 Downloader.active_downloads = {}
+-- how many downloads have been started this session, to list them in the order they were (see getActiveDownloads)
+local downloads_started = 0
 
 -- constants
 local DOWNLOAD_POLL_INTERVAL = 0.5
@@ -28,10 +32,65 @@ local STALL_NOTICE_TIME = 10
 -- e.g. the device's storage being full: couldn't find it or connect to it, nothing arrived for a while, nothing came
 -- back, or the connection broke
 local SERVER_FAILURES = { [6] = true, [7] = true, [28] = true, [52] = true, [56] = true }
+-- how often a download that's waiting for Wi-Fi checks whether it's back, as KOReader doesn't say so on every device
+local RECONNECT_POLL_INTERVAL = 2
 
 local function hasProxy()
     local proxy_url = os.getenv("PROXY_URL")
     return proxy_url ~= nil and proxy_url ~= ""
+end
+
+-- keep the device from going to sleep while books are downloading, as that turns Wi-Fi off and stops them: no
+-- standby between taps (where KOReader has it), and no suspending once it hasn't been used for a while, by KOReader's
+-- AutoSuspend, or on a Kindle, its own screensaver. each is put back as it was once the last download is over (unless
+-- something else, such as AutoTurn or Keep alive, has changed it since, which is left to it)
+local awake
+local function keepAwake()
+    if awake then
+        return
+    end
+    awake = { pause_auto_suspend = PluginShare.pause_auto_suspend }
+    if UIManager.preventStandby then
+        UIManager:preventStandby()
+    end
+    PluginShare.pause_auto_suspend = true
+    if Device:isKindle() and not PluginShare.keepalive then
+        os.execute("lipc-set-prop com.lab126.powerd preventScreenSaver 1")
+        awake.screensaver_prevented = true
+    end
+    LogUtil.info("keeping the device awake while books download")
+end
+local function allowSleep()
+    if not awake then
+        return
+    end
+    if UIManager.allowStandby then
+        UIManager:allowStandby()
+    end
+    if PluginShare.pause_auto_suspend == true then
+        PluginShare.pause_auto_suspend = awake.pause_auto_suspend
+    end
+    if awake.screensaver_prevented and not PluginShare.keepalive then
+        os.execute("lipc-set-prop com.lab126.powerd preventScreenSaver 0")
+    end
+    awake = nil
+    LogUtil.info("letting the device sleep again, as no books are downloading")
+end
+
+-- follow a download from when it's started (see active_downloads), keeping the device awake while there are any
+function Downloader:track(id, download)
+    downloads_started = downloads_started + 1
+    download.order = downloads_started
+    self.active_downloads[id] = download
+    keepAwake()
+end
+
+-- stop following a download once it's over, letting the device sleep again once none are left
+function Downloader:untrack(id)
+    self.active_downloads[id] = nil
+    if next(self.active_downloads) == nil then
+        allowSleep()
+    end
 end
 
 -- start curl downloading the book in the background, as transfer says (see _startDownload), returning whether it
@@ -51,6 +110,53 @@ local function startCurl(transfer)
     return true
 end
 
+-- stop downloading the book while the device sleeps or Wi-Fi is off, rather than it failing for want of Wi-Fi as if
+-- the site had, keeping what has arrived to carry on from once it's back (see resumeTransfer)
+local function pauseTransfer(transfer, why)
+    if transfer.paused or not transfer.download_url or transfer.progress_widget.cancelled then
+        return
+    end
+    transfer.paused = true
+    -- (whose exit code isn't looked at)
+    CurlUtil.killPid(transfer.pid)
+    transfer.pid = nil
+    LogUtil.info(
+        string.format(
+            "pausing the download of %q at %d bytes, as %s",
+            transfer.book.title,
+            FileUtil.getSize(transfer.part_path),
+            why
+        )
+    )
+    transfer.progress_widget:update(transfer.progress_widget.percentage or 0, _("Waiting for Wi-Fi..."))
+end
+
+-- carry on downloading the book once the device is awake and connected again, from what had arrived, with the same
+-- link (rather than asking for another, which for Z-Library can count as another download). returns false when curl
+-- couldn't be started again, and the download has failed
+local function resumeTransfer(transfer)
+    if not transfer.paused then
+        return true
+    end
+    LogUtil.info(string.format("carrying on with the download of %q, now Wi-Fi is back", transfer.book.title))
+    transfer.paused = nil
+    transfer.resume = true
+    transfer.quiet_polls = 0
+    FileUtil.removeFile(transfer.exit_file)
+    local started, err = startCurl(transfer)
+    if not started then
+        LogUtil.warn("could not start curl to carry on with the download:", err)
+        FileUtil.removeFile(transfer.part_path)
+        transfer.on_finish(false, err)
+        return false
+    end
+    transfer.progress_widget:update(
+        transfer.progress_widget.percentage or 0,
+        string.format(_("Waiting for %s..."), Sources[transfer.book.source].NAME)
+    )
+    return true
+end
+
 -- check on curl downloading a book until it has finished, showing how far it has got. transfer is what's known
 -- about the download (see _startDownload), and its on_finish is called with whether the book downloaded, and what
 -- went wrong if it didn't
@@ -66,13 +172,33 @@ local function pollDownload(transfer)
         return
     end
 
+    -- waiting for Wi-Fi to come back (see pauseTransfer), which is checked for here too, as KOReader doesn't say so
+    -- on every device
+    if transfer.paused then
+        if not transfer.sleeping and NetworkMgr:isConnected() and not resumeTransfer(transfer) then
+            return
+        end
+        Guard.scheduleIn(
+            transfer.paused and RECONNECT_POLL_INTERVAL or DOWNLOAD_POLL_INTERVAL,
+            "checking on a download",
+            function()
+                pollDownload(transfer)
+            end,
+            transfer.abandon
+        )
+        return
+    end
+
     local bytes_downloaded = FileUtil.getSize(part_path)
-    -- when the latest of the book arrived, to tell when the download has stalled
+    -- how many checks have found nothing more of the book arrived, to tell when the download has stalled: counted,
+    -- rather than timed with the clock, which can be put back, or jump forward once the time is looked up
     if bytes_downloaded ~= transfer.last_size then
         transfer.last_size = bytes_downloaded
-        transfer.last_arrival = os.time()
+        transfer.quiet_polls = 0
+    else
+        transfer.quiet_polls = (transfer.quiet_polls or 0) + 1
     end
-    local stalled = bytes_downloaded > 0 and os.time() - transfer.last_arrival >= STALL_NOTICE_TIME
+    local stalled = bytes_downloaded > 0 and transfer.quiet_polls * DOWNLOAD_POLL_INTERVAL >= STALL_NOTICE_TIME
 
     -- curl notes down the headers it's sent, which say how big the book is, before the book starts to arrive
     if not transfer.total_size and bytes_downloaded > 0 then
@@ -159,6 +285,18 @@ local function pollDownload(transfer)
             )
         )
 
+        -- Wi-Fi went off, rather than the site failing (where KOReader didn't say so, see onNetworkDisconnected):
+        -- carry on from what has arrived once it's back, rather than trying again now, which can't work
+        if SERVER_FAILURES[exit_code] and not NetworkMgr:isConnected() then
+            -- (as curl has stopped, there's nothing to stop)
+            transfer.pid = nil
+            pauseTransfer(transfer, "Wi-Fi is off")
+            Guard.scheduleIn(RECONNECT_POLL_INTERVAL, "checking on a download", function()
+                pollDownload(transfer)
+            end, transfer.abandon)
+            return
+        end
+
         -- try again, from the beginning if the site wouldn't carry on from where the download stopped, otherwise
         -- through the proxy as a backup (carrying on from there)
         local retry
@@ -225,8 +363,9 @@ local function pollDownload(transfer)
     end, transfer.abandon)
 end
 
--- failed_url is the link the book failed to download from, when asking for another (see transfer.relink)
-function Downloader:_startDownload(book, filepath, callback, retrying, failed_url)
+-- failed_url is the link the book failed to download from, when asking for another (see transfer.relink), and hidden
+-- is whether its progress was hidden, when trying again, so it stays hidden rather than showing again
+function Downloader:_startDownload(book, filepath, callback, retrying, failed_url, hidden)
     local source = Sources[book.source]
     LogUtil.info(
         string.format(
@@ -256,7 +395,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         if transfer.pid then
             CurlUtil.killPid(transfer.pid)
         end
-    end)
+    end, hidden)
     transfer.progress_widget = progress_widget
 
     progress_widget:show()
@@ -265,30 +404,39 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     UIManager:forceRePaint()
 
     -- track this download
-    Downloader.active_downloads[book.id] = {
+    Downloader:track(book.id, {
         book = book,
         filepath = filepath,
         part_path = part_path,
         progress_widget = progress_widget,
         callback = callback,
         started = os.time(),
-    }
+    })
 
     -- look the link up without holding KOReader up (where pages are fetched with curl, see HttpUtil), as it can
-    -- mean trying several mirrors, and let Cancel call it off. an error is passed on, rather than left to Trapper,
+    -- mean trying several mirrors, and let Cancel call it off. where it holds KOReader up, Cancel and Hide can't be
+    -- tapped until it's over, as the taps would only arrive then. an error is passed on, rather than left to Trapper,
     -- which would leave the progress showing
+    local can_cancel = HttpUtil.canCancel()
+    if not can_cancel then
+        progress_widget:setCancellable(false)
+        UIManager:forceRePaint()
+    end
     HttpUtil.setTrapWidget(progress_widget)
     local looked_up, download_url, lookup_err, mirror_failed =
         Guard.pcall("looking up the download link", source.findDownloadLink, book, retrying, failed_url)
     HttpUtil.setTrapWidget(nil)
     progress_widget.dismiss_callback = nil
+    if not can_cancel then
+        progress_widget:setCancellable(true)
+    end
     if not looked_up then
         download_url, lookup_err, mirror_failed = nil, Errors.UNEXPECTED, false
     end
 
     if not download_url then
         progress_widget:close()
-        Downloader.active_downloads[book.id] = nil
+        Downloader:untrack(book.id)
 
         if lookup_err == HttpUtil.CANCELLED then
             LogUtil.info(string.format("download of %q cancelled while looking up its link", book.title))
@@ -298,7 +446,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         LogUtil.warn("found no download link:", lookup_err)
         -- look the mirrors up again if any failed, in case they've moved, and try again
         if not retrying and mirror_failed then
-            return Downloader:_startDownload(book, filepath, callback, true)
+            return Downloader:_startDownload(book, filepath, callback, true, nil, not progress_widget.is_visible)
         end
 
         callback(false, lookup_err)
@@ -321,14 +469,14 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         FileUtil.removeFile(part_path)
         FileUtil.removeFile(headers_file)
         progress_widget:close()
-        Downloader.active_downloads[book.id] = nil
+        Downloader:untrack(book.id)
         callback(false, err)
     end
     Downloader.active_downloads[book.id].transfer = transfer
     transfer.on_finish = function(ok, err)
         transfer.finished = true
         progress_widget:close()
-        Downloader.active_downloads[book.id] = nil -- cleanup after download finishes
+        Downloader:untrack(book.id)
         FileUtil.removeFile(headers_file)
         if ok and not os.rename(part_path, filepath) then
             LogUtil.warn("could not move the downloaded book from", part_path, "to", filepath)
@@ -343,12 +491,19 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     if source.NEW_LINK_WHEN_SERVER_FAILS and not retrying then
         transfer.relink = function()
             progress_widget:close()
-            Downloader.active_downloads[book.id] = nil
+            Downloader:untrack(book.id)
             FileUtil.removeFile(headers_file)
             FileUtil.removeFile(part_path)
             UIManager:forceRePaint()
             -- looking the link up without holding KOReader up, as when the download was started
-            self:_startDownloadInBackground(book, filepath, callback, true, transfer.download_url)
+            self:_startDownloadInBackground(
+                book,
+                filepath,
+                callback,
+                true,
+                transfer.download_url,
+                not progress_widget.is_visible
+            )
         end
     end
 
@@ -362,7 +517,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         LogUtil.warn("could not start curl to download:", spawn_err)
         FileUtil.removeFile(headers_file)
         progress_widget:close()
-        Downloader.active_downloads[book.id] = nil
+        Downloader:untrack(book.id)
         callback(false, spawn_err or "failed to spawn curl downloader")
         return
     end
@@ -376,9 +531,9 @@ end
 
 -- start downloading the book (see _startDownload) without holding KOReader up while its link is looked up, as that
 -- can mean trying several mirrors, and saying so if something goes wrong in Kindle Fetch meanwhile (see Guard)
-function Downloader:_startDownloadInBackground(book, filepath, callback, retrying, failed_url)
+function Downloader:_startDownloadInBackground(book, filepath, callback, retrying, failed_url, hidden)
     Trapper:wrap(Guard.wrap("starting the download of " .. tostring(book.title), function()
-        self:_startDownload(book, filepath, callback, retrying, failed_url)
+        self:_startDownload(book, filepath, callback, retrying, failed_url, hidden)
     end, function(err)
         local download = Downloader.active_downloads[book.id]
         if download and download.transfer then
@@ -387,10 +542,34 @@ function Downloader:_startDownloadInBackground(book, filepath, callback, retryin
         end
         if download then
             download.progress_widget:close()
-            Downloader.active_downloads[book.id] = nil
+            Downloader:untrack(book.id)
         end
         callback(false, err)
     end))
+end
+
+-- why a book can't be downloaded to filepath, or nil when it can: its folder can't be found (e.g. once deleted, or on
+-- an SD card that has been taken out) or written to, or another book (e.g. another edition) is being downloaded to the
+-- same name, which would share its .part file, and one would be saved as the other
+function Downloader:cantDownloadTo(filepath)
+    local folder, name = filepath:match("^(.*)/([^/]*)$")
+    folder = folder ~= "" and folder or "/"
+    local ok, err = FileUtil.checkWritableDir(folder)
+    if not ok then
+        LogUtil.warn("can't download to", folder, "as", err)
+        return string.format(_("books can't be saved in %s, as %s, so choose another folder"), folder, err)
+    end
+    local taken = false
+    for _, download in pairs(self.active_downloads) do
+        taken = taken or download.filepath == filepath
+    end
+    if taken then
+        LogUtil.warn("another book is already downloading to", filepath)
+        return string.format(
+            _("another book is already downloading as %s, so wait for it to finish, or choose another folder"),
+            name
+        )
+    end
 end
 
 -- open_existing is optionally called with the path of a book that's already there, when asked to read that one
@@ -415,6 +594,12 @@ function Downloader:downloadBook(book, filepath, callback, open_existing)
     -- show download prompt to let user choose folder and confirm
     local prompt = DownloadPrompt.new(book, filepath, function(confirmed_filepath)
         local function start()
+            -- before the link is looked up, which can count as one of the few downloads Z-Library allows a day
+            local err = self:cantDownloadTo(confirmed_filepath)
+            if err then
+                callback(false, err)
+                return
+            end
             -- turning on wifi first if need be, as KOReader is set up to (it says so itself if it can't connect)
             NetworkMgr:runWhenConnected(function()
                 self:_startDownloadInBackground(book, confirmed_filepath, callback, false)
@@ -449,6 +634,48 @@ function Downloader:downloadBook(book, filepath, callback, open_existing)
     prompt:show()
 end
 
+-- each download whose book has started to download, whose curl can be stopped and started again
+local function eachTransfer(active_downloads, fn)
+    for _, download in pairs(active_downloads) do
+        if download.transfer then
+            fn(download.transfer)
+        end
+    end
+end
+
+-- the device is going to sleep, which turns Wi-Fi off, so stop each download until it's awake again (see
+-- pauseTransfer). sent by KOReader through the plugin (see main.lua), as are the events below
+function Downloader:onSuspend()
+    eachTransfer(self.active_downloads, function(transfer)
+        transfer.sleeping = true
+        pauseTransfer(transfer, "the device is going to sleep")
+    end)
+end
+
+-- carry on with each download once the device is awake, as soon as it's connected again (see pollDownload)
+function Downloader:onResume()
+    eachTransfer(self.active_downloads, function(transfer)
+        transfer.sleeping = nil
+        if transfer.paused and NetworkMgr:isConnected() then
+            resumeTransfer(transfer)
+        end
+    end)
+end
+
+function Downloader:onNetworkDisconnected()
+    eachTransfer(self.active_downloads, function(transfer)
+        pauseTransfer(transfer, "Wi-Fi went off")
+    end)
+end
+
+function Downloader:onNetworkConnected()
+    eachTransfer(self.active_downloads, function(transfer)
+        if transfer.paused and not transfer.sleeping then
+            resumeTransfer(transfer)
+        end
+    end)
+end
+
 -- show the progress of a download, if it was hidden. returns whether the book with that id is downloading
 function Downloader:showDownload(id)
     local active_download = self.active_downloads[id]
@@ -471,12 +698,12 @@ function Downloader:getActiveDownloads()
             title = download_info.book.display_title or download_info.book.title,
             filepath = download_info.filepath,
             widget = download_info.progress_widget,
-            started = download_info.started,
+            order = download_info.order or 0,
         })
     end
     table.sort(downloads, function(a, b)
-        if a.started ~= b.started then
-            return a.started < b.started
+        if a.order ~= b.order then
+            return a.order < b.order
         end
         return a.title < b.title
     end)
@@ -491,6 +718,7 @@ function Downloader:cancelAllDownloads()
         FileUtil.removeFile(download_info.headers_file)
     end
     self.active_downloads = {}
+    allowSleep()
 end
 
 return Downloader

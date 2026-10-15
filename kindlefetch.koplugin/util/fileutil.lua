@@ -87,6 +87,21 @@ function FileUtil.isValidDirectory(path)
     return lfs.attributes(path, "mode") == "directory"
 end
 
+-- whether files can be saved in a folder, returning true, or nil and why not: it doesn't exist (e.g. once deleted, or
+-- on an SD card that has been taken out), or can't be written to
+function FileUtil.checkWritableDir(path)
+    if not FileUtil.isValidDirectory(path) then
+        return nil, "it doesn't exist"
+    end
+    local check_path = path .. "/.kindlefetch_write_check"
+    local ok, err = FileUtil.writeFile(check_path, "")
+    FileUtil.removeFile(check_path)
+    if not ok then
+        return nil, string.format("it can't be written to (%s)", tostring(err))
+    end
+    return true
+end
+
 -- the names of what's in a folder (without . and ..), or nil and why not, e.g. when it can't be read: lfs.dir raises
 -- an error for that rather than returning it, which KOReader would exit on
 function FileUtil.listDir(path)

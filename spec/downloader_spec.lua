@@ -66,6 +66,7 @@ describe("Downloader", function()
         data_dir = helper.tmpdir("data")
         helper.state.data_dir = data_dir
         helper.run("mkdir -p " .. helper.quote(data_dir .. "/settings"))
+        helper.run("mkdir -p " .. helper.quote(data_dir .. "/Books"))
         filepath = data_dir .. "/Dune.epub"
         book = {
             source = "libgen",
@@ -256,6 +257,48 @@ describe("Downloader", function()
             end)
         end)
 
+        -- which was only found out once its link had been looked up, which can count as one of the few downloads
+        -- Z-Library allows a day
+        it("doesn't look up the link when the folder chosen can't be found", function()
+            Downloader:downloadBook(book, filepath, onResult)
+            prompts[1].on_download(data_dir .. "/SD card/Dune.epub")
+
+            assert.are.same({
+                {
+                    ok = false,
+                    err = "books can't be saved in "
+                        .. data_dir
+                        .. "/SD card, as it doesn't exist, so choose another folder",
+                },
+            }, results)
+            assert.are.equal(0, #spawned)
+            assert.are.same({}, Downloader:getActiveDownloads())
+            assert.are.equal(0, #web.fetched)
+        end)
+
+        -- e.g. another edition with the same title, which shared its .part file, so one was saved as the other
+        it("doesn't download two books to the same name at once", function()
+            download()
+            local other_edition = {
+                source = "libgen",
+                id = fixtures.DUNE.md5:gsub("^.", "f"),
+                title = "Dune",
+                file_type = "epub",
+            }
+            Downloader:downloadBook(other_edition, filepath, onResult)
+            prompts[2].on_download(filepath)
+
+            assert.are.same({
+                {
+                    ok = false,
+                    err = "another book is already downloading as Dune.epub, so wait for it to finish, or choose "
+                        .. "another folder",
+                },
+            }, results)
+            assert.are.equal(1, #spawned)
+            assert.is_nil(Downloader.active_downloads[other_edition.id])
+        end)
+
         it("shows the progress again when a book that is already downloading is chosen", function()
             download()
             local widget = progress()
@@ -327,6 +370,35 @@ describe("Downloader", function()
                 assert.are.equal(1, #spawned)
             end)
 
+            -- whose taps would only arrive once it's over
+            it("can't be cancelled or hidden while KOReader's own HTTP holds KOReader up", function()
+                local enabled = {}
+                HttpUtil.getBody = function(url)
+                    table.insert(enabled, progress().cancel_button.enabled)
+                    table.insert(enabled, progress().hide_button.enabled)
+                    return getBody(url)
+                end
+
+                download()
+                assert.are.same({ false, false, false, false }, enabled)
+                assert.is_true(progress().cancel_button.enabled)
+                assert.is_true(progress().hide_button.enabled)
+            end)
+
+            it("can be cancelled and hidden while curl looks it up in the background", function()
+                HttpUtil.canCancel = function()
+                    return true
+                end
+                local enabled = {}
+                HttpUtil.getBody = function(url)
+                    table.insert(enabled, progress().cancel_button.enabled ~= false)
+                    return getBody(url)
+                end
+
+                download()
+                assert.are.same({ true, true }, enabled)
+            end)
+
             it("can be called off, which says nothing about the mirrors", function()
                 HttpUtil.getBody = function(url)
                     if url:find("/ads.php", 1, true) then
@@ -345,6 +417,24 @@ describe("Downloader", function()
                 HttpUtil.getBody = getBody
                 assert.are.same(mirrors, UrlApi:getLibgenUrls())
                 assert.are.equal(1, web.scrapes)
+            end)
+
+            -- rather than showing again, as a new download's would
+            it("stays hidden when hidden while a mirror fails, and the mirrors are looked up again", function()
+                local failed = false
+                HttpUtil.getBody = function(url)
+                    if url:find("/ads.php", 1, true) and not failed then
+                        failed = true
+                        progress().hide_button.callback()
+                        return nil, "HTTP error response", 500
+                    end
+                    return getBody(url)
+                end
+
+                download()
+                assert.are.equal(2, web.scrapes)
+                assert.are.equal(1, #spawned)
+                assert.is_false(progress().is_visible)
             end)
 
             it("says something went wrong, rather than leaving the progress showing", function()
@@ -504,16 +594,20 @@ describe("Downloader", function()
         end)
 
         -- rather than looking as if KOReader is stuck, as curl only tries again once it has stalled for a while
+        -- once nothing has arrived for 10 seconds, the 20 checks on it since, however the clock has changed (it can be
+        -- put back, or jump forward once the time is looked up)
         it("says when the download has stalled", function()
             helper.state.time = 1000
             download()
             curlWrote(MB / 2)
             helper.tick()
-            helper.state.time = 1009
-            helper.tick()
+            helper.state.time = 5000
+            for _ = 1, 19 do
+                helper.tick()
+            end
             assert.are.equal("50% · 0.5 / 1.0 MB", progress().status_widget.text)
 
-            helper.state.time = 1010
+            helper.state.time = 10
             helper.tick()
             assert.are.equal("Stalled at 50%, retrying...", progress().status_widget.text)
             assert.are.equal(0.5, progress().bar_widget.percentage)
@@ -526,12 +620,11 @@ describe("Downloader", function()
 
         it("says when a download of unknown size has stalled", function()
             remote_size = nil
-            helper.state.time = 1000
             download()
             curlWrote(MB / 2)
-            helper.tick()
-            helper.state.time = 1010
-            helper.tick()
+            for _ = 1, 21 do
+                helper.tick()
+            end
             assert.are.equal("Stalled at 0.5 MB, retrying...", progress().status_widget.text)
         end)
 
@@ -1027,6 +1120,36 @@ describe("Downloader", function()
             assert.are.equal(MB, #helper.readFile(filepath))
         end)
 
+        -- which can count as another of the few downloads Z-Library allows a day
+        it("doesn't ask for another link when Wi-Fi went off, carrying on with the same one once it's back", function()
+            download()
+            require("ui/network/manager").connected = false
+            curlWrote(MB / 2, 6)
+            helper.tick()
+            assert.are.equal(1, links)
+
+            require("ui/network/manager").connected = true
+            helper.tick()
+            assert.are.equal(1, links)
+            assert.are.equal("https://dl1.example/1984.epub", spawned[2].url)
+        end)
+
+        -- rather than showing again, as a new download's would
+        it("keeps a hidden download's progress hidden while it asks for another link", function()
+            download()
+            progress().hide_button.callback()
+            local shown = #helper.state.shown
+            serverAnswered(522)
+            helper.tick()
+
+            assert.are.equal(2, #spawned)
+            assert.is_false(progress().is_visible)
+            assert.are.equal(shown, #helper.state.shown)
+            -- and can still be shown again
+            assert.is_true(Downloader:showDownload(book.id))
+            assert.are.equal(progress().container, helper.lastShown())
+        end)
+
         it("asks for another link when the server doesn't answer at all", function()
             download()
             helper.writeFile(spawned[1].exit_file, "7")
@@ -1059,6 +1182,202 @@ describe("Downloader", function()
         end)
     end)
 
+    -- which failed the download as if the site had, removing what had arrived, and for Z-Library, asking for another
+    -- link, which can count as another download
+    describe("when Wi-Fi goes off, or the device goes to sleep", function()
+        local network
+
+        before_each(function()
+            network = require("ui/network/manager")
+            download()
+            curlWrote(MB / 2)
+            helper.tick()
+        end)
+
+        local function progressText()
+            return progress().status_text
+        end
+
+        it("waits for Wi-Fi to come back, then carries on from what had arrived with the same link", function()
+            network.connected = false
+            curlWrote(MB / 2, 6)
+            helper.tick()
+            assert.are.same({}, results)
+            assert.are.equal("Waiting for Wi-Fi...", progressText())
+            assert.are.equal(MB / 2, #helper.readFile(filepath .. ".part"))
+            assert.are.same({}, killed)
+            -- still waiting
+            helper.tick()
+            assert.are.equal(1, #spawned)
+
+            -- found to be back, as KOReader doesn't say so on every device
+            network.connected = true
+            helper.tick()
+            assert.are.equal(2, #spawned)
+            assert.are.equal(spawned[1].url, spawned[2].url)
+            assert.is_true(spawned[2].resume)
+            assert.are.equal("Waiting for Library Genesis...", progressText())
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
+            assert.are.equal(MB, #helper.readFile(filepath))
+        end)
+
+        it("stops curl as soon as KOReader says Wi-Fi went off, and starts it again once it says it's back", function()
+            Downloader:onNetworkDisconnected()
+            assert.are.same({ 1000 }, killed)
+            assert.are.equal("Waiting for Wi-Fi...", progressText())
+            helper.tick()
+            assert.are.same({}, results)
+
+            Downloader:onNetworkConnected()
+            assert.are.equal(2, #spawned)
+            assert.is_true(spawned[2].resume)
+        end)
+
+        it("stops curl while the device sleeps, carrying on once it's awake", function()
+            Downloader:onSuspend()
+            assert.are.same({ 1000 }, killed)
+            assert.is_true(helper.exists(filepath .. ".part"))
+            -- not while it's asleep, whatever it says about Wi-Fi
+            Downloader:onNetworkConnected()
+            helper.tick()
+            assert.are.equal(1, #spawned)
+
+            Downloader:onResume()
+            assert.are.equal(2, #spawned)
+            assert.is_true(spawned[2].resume)
+        end)
+
+        it("waits once the device is awake for Wi-Fi to reconnect", function()
+            Downloader:onSuspend()
+            network.connected = false
+            Downloader:onResume()
+            helper.tick()
+            assert.are.equal(1, #spawned)
+
+            network.connected = true
+            Downloader:onNetworkConnected()
+            assert.are.equal(2, #spawned)
+        end)
+
+        it("can be cancelled while it waits", function()
+            Downloader:onNetworkDisconnected()
+            progress().cancel_button.callback()
+            helper.runScheduled()
+            assert.are.same({ { ok = false, err = "request cancelled" } }, results)
+            assert.is_false(helper.exists(filepath .. ".part"))
+        end)
+
+        it("fails when curl can't be started again", function()
+            Downloader:onNetworkDisconnected()
+            CurlUtil.startDownload = function()
+                return nil, "could not start curl"
+            end
+            Downloader:onNetworkConnected()
+            assert.are.same({ { ok = false, err = "could not start curl" } }, results)
+            assert.is_false(helper.exists(filepath .. ".part"))
+            assert.are.same({}, Downloader:getActiveDownloads())
+        end)
+    end)
+
+    -- as going to sleep turns Wi-Fi off, which stopped the download
+    describe("keeping the device awake", function()
+        local PluginShare
+
+        before_each(function()
+            PluginShare = require("pluginshare")
+        end)
+
+        it("while a book downloads, letting it sleep again once it has", function()
+            download()
+            assert.are.equal(1, helper.state.standby_prevented)
+            assert.is_true(PluginShare.pause_auto_suspend)
+            assert.are.same({ "lipc-set-prop com.lab126.powerd preventScreenSaver 1" }, helper.state.lipc)
+
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({ { ok = true } }, results)
+            assert.are.equal(0, helper.state.standby_prevented)
+            assert.is_nil(PluginShare.pause_auto_suspend)
+            assert.are.equal("lipc-set-prop com.lab126.powerd preventScreenSaver 0", helper.state.lipc[2])
+        end)
+
+        it("until every book has downloaded", function()
+            download()
+            local first = book
+            book = {
+                source = "libgen",
+                id = fixtures.DUNE.md5:gsub("^.", "f"),
+                title = "Dune Messiah",
+                file_type = "epub",
+            }
+            hasBook(mirrors[1])
+            filepath = data_dir .. "/Dune Messiah.epub"
+            download()
+            assert.are.equal(2, #spawned)
+            assert.are.equal(1, helper.state.standby_prevented)
+            assert.are.equal(1, #helper.state.lipc)
+
+            curlWrote(MB, 0)
+            helper.tick()
+            assert.are.equal(1, helper.state.standby_prevented)
+            assert.is_not_nil(Downloader.active_downloads[first.id])
+        end)
+
+        it("putting auto-suspend back as it was, unless something else has changed it since", function()
+            PluginShare.pause_auto_suspend = false
+            download()
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.is_false(PluginShare.pause_auto_suspend)
+
+            -- e.g. AutoTurn, which was turned off meanwhile
+            PluginShare.pause_auto_suspend = nil
+            download()
+            PluginShare.pause_auto_suspend = false
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.is_false(PluginShare.pause_auto_suspend)
+        end)
+
+        it("leaving a Kindle's screensaver to Keep alive, when that's keeping it awake", function()
+            PluginShare.keepalive = true
+            download()
+            curlWrote(MB, 0)
+            helper.runScheduled()
+            assert.are.same({}, helper.state.lipc)
+        end)
+
+        it("only holding off a Kindle's own screensaver on a Kindle", function()
+            helper.stubs.device.kindle = false
+            download()
+            assert.are.equal(1, helper.state.standby_prevented)
+            assert.are.same({}, helper.state.lipc)
+        end)
+
+        it("letting it sleep again however downloads end", function()
+            -- no link
+            web.pages[adsUrl(mirrors[1])] = "<html>nothing</html>"
+            download()
+            assert.are.equal(0, helper.state.standby_prevented)
+
+            -- cancelled
+            hasBook(mirrors[1])
+            download()
+            progress().cancel_button.callback()
+            helper.runScheduled()
+            assert.are.equal(0, helper.state.standby_prevented)
+
+            -- all cancelled at once, as when KOReader closes
+            download()
+            Downloader:cancelAllDownloads()
+            assert.are.equal(0, helper.state.standby_prevented)
+            assert.is_nil(PluginShare.pause_auto_suspend)
+        end)
+    end)
+
     describe("active downloads", function()
         it("lists downloads in progress", function()
             download()
@@ -1071,16 +1390,17 @@ describe("Downloader", function()
             assert.are.equal(progress(), downloads[1].widget)
         end)
 
+        -- even once the clock has been put back, as an e-reader's can be when its battery runs flat
         it("are listed in the order they were started", function()
             helper.state.time = 3000
-            download()
             for i, title in ipairs({ "Zebra", "Apple" }) do
-                Downloader.active_downloads["other" .. i] = {
+                Downloader:track("other" .. i, {
                     book = { id = "other" .. i, title = title },
                     progress_widget = {},
-                    started = 1000 + (title == "Zebra" and 0 or 1000),
-                }
+                })
+                helper.state.time = helper.state.time - 1000
             end
+            download()
 
             local titles = {}
             for _, active_download in ipairs(Downloader:getActiveDownloads()) do

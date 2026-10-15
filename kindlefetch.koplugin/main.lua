@@ -126,12 +126,31 @@ function KindleFetch:onDispatcherRegisterActions()
 end
 
 -- cancel downloads when KOReader exits or restarts, so curl isn't left running and partial books are removed
--- (without returning true, so the event still reaches the rest of KOReader)
+-- (without returning true, so the event still reaches the rest of KOReader). KOReader closes without exiting too:
+-- when the device is powered off or restarted, its storage is shared over USB (which curl would carry on writing
+-- to), or it's quit from the file manager, each of which only sends Close (as closing a book doesn't)
 function KindleFetch:onExit()
-    LogUtil.debug("cancelling downloads before exiting")
+    if #Downloader:getActiveDownloads() > 0 then
+        LogUtil.info("cancelling downloads, as KOReader is closing")
+    end
     Downloader:cancelAllDownloads()
 end
 KindleFetch.onRestart = KindleFetch.onExit
+KindleFetch.onClose = KindleFetch.onExit
+
+-- downloads wait while the device sleeps or Wi-Fi is off, carrying on once it's back (again without returning true)
+function KindleFetch:onSuspend()
+    Downloader:onSuspend()
+end
+function KindleFetch:onResume()
+    Downloader:onResume()
+end
+function KindleFetch:onNetworkDisconnected()
+    Downloader:onNetworkDisconnected()
+end
+function KindleFetch:onNetworkConnected()
+    Downloader:onNetworkConnected()
+end
 
 -- sent by the dispatcher actions, e.g. when a gesture is assigned to one
 function KindleFetch:onKindleFetch()
@@ -473,12 +492,24 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
                 {
                     text = _("Keep searching"),
                     callback = function()
-                        self:searchFrom(query, next_page)
+                        self:searchOnline(query, next_page)
                     end,
                 },
             },
         },
     })
+end
+
+-- search from a page of results (see searchFrom), turning on Wi-Fi first if need be, as KOReader is set up to, unless
+-- the page is saved from an earlier search
+function KindleFetch:searchOnline(query, page)
+    if not NetworkMgr:isConnected() and not Sources[self.source]:isCached(query, page) then
+        NetworkMgr:runWhenConnected(function()
+            self:searchFrom(query, page)
+        end)
+        return
+    end
+    self:searchFrom(query, page)
 end
 
 function KindleFetch:search(query, page)

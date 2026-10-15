@@ -22,14 +22,15 @@ DownloadProgress.__index = DownloadProgress
 -- fixed width for the whole widget's contents to prevent overdrawing
 local CONTENT_WIDTH = Screen:scaleBySize(280)
 
--- on_cancel: function called when the user taps Cancel.
-function DownloadProgress.new(title, on_cancel)
+-- on_cancel: function called when the user taps Cancel. hidden: whether it starts out hidden, as when it's for the
+-- download of a book whose progress was hidden, which is trying again
+function DownloadProgress.new(title, on_cancel, hidden)
     local self = setmetatable({}, DownloadProgress)
 
     self.title = title
     self.cancelled = false
     self.on_cancel = on_cancel
-    self.is_visible = true
+    self.is_visible = not hidden
     self.percentage = 0
     self.status_text = ""
     self:build()
@@ -73,6 +74,7 @@ function DownloadProgress:build()
     -- cancel button
     self.cancel_button = Button:new {
         text = _("Cancel"),
+        enabled = self.cancellable ~= false,
         callback = function()
             self:cancel()
         end,
@@ -82,6 +84,7 @@ function DownloadProgress:build()
     -- hide button
     self.hide_button = Button:new {
         text = _("Hide"),
+        enabled = self.cancellable ~= false,
         callback = function()
             self:toggleVisibility()
         end,
@@ -164,6 +167,24 @@ function DownloadProgress:toggleVisibility()
         self:_show()
     else
         self:_close()
+    end
+end
+
+-- whether Cancel and Hide can be tapped, which they can't while what's waited for holds KOReader up (KOReader's own
+-- HTTP, see HttpUtil.canCancel), as taps on them would only arrive once it's over
+function DownloadProgress:setCancellable(cancellable)
+    self.cancellable = cancellable
+    for _, button in ipairs({ self.cancel_button, self.hide_button }) do
+        if cancellable then
+            button:enable()
+        else
+            button:disable()
+        end
+    end
+    if self.is_visible and not self.closed then
+        UIManager:setDirty(self.container, function()
+            return "ui", self.frame.dimen
+        end)
     end
 end
 

@@ -332,6 +332,32 @@ describe("KindleFetch", function()
             assert.is_nil(openUI():onRestart())
             assert.are.equal(1, cancelled_downloads)
         end)
+
+        -- so downloads wait for the device to wake up and Wi-Fi to come back, rather than failing
+        it("tells the downloader when the device sleeps and wakes, and Wi-Fi goes off and comes back", function()
+            local told = {}
+            local Downloader = require("api.downloader")
+            for _, event in ipairs({ "onSuspend", "onResume", "onNetworkDisconnected", "onNetworkConnected" }) do
+                Downloader[event] = function()
+                    table.insert(told, event)
+                end
+            end
+            local plugin = openUI()
+            for _, event in ipairs({ "onSuspend", "onResume", "onNetworkDisconnected", "onNetworkConnected" }) do
+                -- letting the event carry on to the rest of KOReader
+                assert.is_nil(plugin[event](plugin))
+            end
+            assert.are.same({ "onSuspend", "onResume", "onNetworkDisconnected", "onNetworkConnected" }, told)
+        end)
+
+        -- as when the device is powered off or restarted, or its storage is shared over USB, which curl carried on
+        -- writing to
+        it("cancels downloads when KOReader closes without exiting", function()
+            active_downloads = { { id = "dune", title = "Dune" } }
+            assert.is_nil(openUI():onClose())
+            assert.are.equal(1, cancelled_downloads)
+            assert.is_truthy(helper.logged("info", "^cancelling downloads, as KOReader is closing"))
+        end)
     end)
 
     -- to make sense of a crash.log from someone's device
@@ -1061,6 +1087,22 @@ describe("KindleFetch", function()
                 keep_searching.callback()
                 assert.are.same({ { "dune", 1 }, { "dune", 6 } }, searches)
                 assert.are.same({ "Dune", "Load more" }, itemTexts(menus[1]))
+            end)
+
+            -- which searched straight away, as Wi-Fi may have gone off since
+            it("turns on Wi-Fi before searching on, when it's off", function()
+                search_results[1] = { {}, nil, 6, 500 }
+                search_results[6] = { { book("Dune") } }
+                search(openUI(), "dune")
+                helper.stubs.network.connected = false
+
+                helper.lastShown().other_buttons[1][1].callback()
+                assert.are.equal("turn wifi on", helper.stubs.network.prompted)
+                assert.are.same({ { "dune", 1 } }, searches)
+
+                helper.stubs.network.connected = true
+                helper.stubs.network.when_connected()
+                assert.are.same({ { "dune", 1 }, { "dune", 6 } }, searches)
             end)
         end)
     end)

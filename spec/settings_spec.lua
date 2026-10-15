@@ -65,10 +65,27 @@ describe("KindleFetchSettings", function()
 
     describe("getDownloadDir", function()
         it("uses the saved download folder", function()
+            helper.state.fs["/mnt/us/books"] = "directory"
             helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
                 download_dir = "/mnt/us/books",
             }
             assert.are.equal("/mnt/us/books", Settings:getDownloadDir())
+        end)
+
+        -- e.g. once deleted, or on an SD card that has been taken out, which was downloaded to all the same, failing
+        -- once its link had been looked up
+        it("uses the default while the saved download folder can't be found, keeping it for when it's back", function()
+            local home = helper.tmpdir("home")
+            setReaderHomeDir(home)
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                download_dir = "/mnt/sd/books",
+            }
+            assert.are.equal(home, Settings:getDownloadDir())
+            assert.are.equal("/mnt/sd/books", pluginSettings().download_dir)
+            assert.is_truthy(helper.logged("warn", "^the download folder /mnt/sd/books can't be found"))
+
+            helper.state.fs["/mnt/sd/books"] = "directory"
+            assert.are.equal("/mnt/sd/books", Settings:getDownloadDir())
         end)
 
         it("defaults to koreader's home folder", function()
@@ -103,8 +120,14 @@ describe("KindleFetchSettings", function()
 
         it("refuses folders that do not exist", function()
             local ok, err = Settings:setDownloadDir(data_dir .. "/missing")
-            assert.is_false(ok)
-            assert.are.equal("Invalid directory path", err)
+            assert.is_nil(ok)
+            assert.are.equal("it doesn't exist", err)
+        end)
+
+        it("refuses folders books can't be saved in", function()
+            local ok, err = Settings:setDownloadDir("/proc")
+            assert.is_nil(ok)
+            assert.matches("^it can't be written to", err)
         end)
     end)
 

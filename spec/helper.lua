@@ -357,7 +357,18 @@ local function createStubs(state)
         askForRestart = function(_, text)
             table.insert(state.restart_prompts, text)
         end,
+        -- how many things are keeping the device from going into standby, which KOReader asserts never goes below 0
+        preventStandby = function()
+            state.standby_prevented = state.standby_prevented + 1
+        end,
+        allowStandby = function()
+            assert(state.standby_prevented > 0, "allowing standby that isn't prevented")
+            state.standby_prevented = state.standby_prevented - 1
+        end,
     }
+
+    -- what plugins share with each other, such as whether AutoSuspend is to wait
+    stubs.pluginshare = {}
 
     stubs.inputdialog = {
         new = function(_, o)
@@ -650,6 +661,7 @@ local MODULE_STUBS = {
     ["ui/widget/container/inputcontainer"] = "InputContainer",
     ["ui/geometry"] = "geometry",
     ["ui/downloadmgr"] = "downloadmgr",
+    ["pluginshare"] = "pluginshare",
 }
 
 -- widgets the plugin only builds and lays out
@@ -716,7 +728,17 @@ function helper.reset()
         -- curl isn't there unless a spec says it is, so pages are fetched with luasocket
         commands = { { pattern = "curl --version", output = "" } },
         trapped = {},
-        execute_stubs = {},
+        -- a Kindle's settings, such as whether its screensaver is held off, which are kept in lipc
+        execute_stubs = {
+            {
+                pattern = "lipc-set-prop",
+                handler = function(cmd)
+                    table.insert(helper.state.lipc, cmd)
+                end,
+            },
+        },
+        lipc = {},
+        standby_prevented = 0,
         executed = {},
         popen_calls = {},
         shown = {},
@@ -737,6 +759,14 @@ function helper.reset()
     end
     for _, module_name in ipairs(WIDGET_MODULES) do
         package.loaded[module_name] = widgetClass()
+    end
+    -- buttons that can't be tapped until they're enabled again, as KOReader's are dimmed
+    local Button = package.loaded["ui/widget/button"]
+    function Button:enable()
+        self.enabled = true
+    end
+    function Button:disable()
+        self.enabled = false
     end
     -- the characters TextBoxWidget uses for bold text
     local TextBoxWidget = package.loaded["ui/widget/textboxwidget"]
