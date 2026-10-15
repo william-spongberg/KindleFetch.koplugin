@@ -400,6 +400,17 @@ describe("IaSearch", function()
             assert.are.equal("Internet Archive no longer has this book as PDF", err)
         end)
 
+        -- for crash.log, which said only how big it was
+        it("logs what Internet Archive answered with when it can't be read", function()
+            web.pages[FILES_URL] = "<html><body>Bad gateway</body></html>"
+
+            local url = IaSearch.findDownloadLink(book)
+            assert.is_nil(url)
+            local logged = helper.logged("warn", "^unexpected list of files from Internet Archive")
+            assert.matches("37 bytes, which", logged, 1, true)
+            assert.matches("Bad gateway", logged, 1, true)
+        end)
+
         it("says when Internet Archive doesn't answer, without looking the link up again", function()
             local url, err, look_again = IaSearch.findDownloadLink(book)
             assert.is_nil(url)

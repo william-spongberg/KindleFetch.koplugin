@@ -226,7 +226,13 @@ function ZlibSearch.findDownloadLink(book, __, failed_url)
         end
         link = type(data.file) == "table" and data.file.downloadLink
         if not StringUtil.isSafeUrl(link) then
-            LogUtil.warn("Z-Library didn't give a download link that can be used")
+            -- (without the link itself, which carries a key)
+            LogUtil.warn(
+                "Z-Library didn't give a download link that can be used, answering with",
+                type(data.file) ~= "table" and "no file"
+                    or type(link) == "string" and "a link to " .. LogUtil.site(link)
+                    or "a link that's a " .. type(link)
+            )
             return nil, _("Z-Library didn't give a download link")
         end
         if LogUtil.site(link) ~= failed_site then

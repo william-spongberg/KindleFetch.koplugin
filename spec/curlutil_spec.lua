@@ -453,6 +453,9 @@ describe("CurlUtil", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
 
             assert.is_true(CurlUtil.download("https://libgen.example/get.php?md5=abc", filepath, false))
+            -- logging where from, but not the link, which can carry a temporary key
+            assert.is_truthy(helper.logged("dbg", "^curl downloading from libgen.example to"))
+            assert.is_nil(helper.logged("dbg", "md5=abc"))
             assert.are.equal("epub data", helper.readFile(filepath))
 
             local cmd = helper.state.executed[#helper.state.executed]

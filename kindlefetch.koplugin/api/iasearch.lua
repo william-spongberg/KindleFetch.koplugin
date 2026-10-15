@@ -541,7 +541,15 @@ function IaSearch.findDownloadLink(book)
     end
     if not ok or type(data) ~= "table" then
         if body then
-            LogUtil.warn("unexpected list of files from", IaSearch.NAME .. ": HTTP", status, #body, "bytes")
+            LogUtil.warn(
+                "unexpected list of files from",
+                IaSearch.NAME .. ": HTTP",
+                tostring(status),
+                #body,
+                "bytes,",
+                not ok and data and "which couldn't be read (" .. tostring(data) .. "):" or "which isn't a list:",
+                body:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+            )
         end
         return nil, explainFailure(body, err, status)
     end

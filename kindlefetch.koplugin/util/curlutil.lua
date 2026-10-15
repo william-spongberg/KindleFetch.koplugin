@@ -516,7 +516,8 @@ local function downloadCommand(download_url, filepath, use_proxy, max_time, opts
     local exit_file = CurlUtil.createExitFile()
     cmd = CurlUtil.saveExitCode(cmd, exit_file)
 
-    LogUtil.debug("curl download command", cmd)
+    -- without the link, which can carry a temporary key
+    LogUtil.debug("curl downloading from", LogUtil.site(download_url), "to", filepath)
     return cmd, exit_file
 end
 

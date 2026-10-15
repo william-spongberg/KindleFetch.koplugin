@@ -127,6 +127,8 @@ describe("UrlApi", function()
                 assert.are.equal("https://libgen.vg", urls[1])
                 assert.are.equal(5, #urls)
                 assert.is_truthy(helper.logged("warn", "^using the mirrors known when KindleFetch was written"))
+                -- saying what Wikipedia answered with, for crash.log
+                assert.matches("Page not found", helper.logged("warn", "^found no mirrors on .* %(HTTP 404, "))
             end)
 
             -- rather than for every page of every search
