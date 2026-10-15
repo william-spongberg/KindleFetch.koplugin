@@ -19,6 +19,9 @@ CurlUtil.MIN_VERSION = "8.21.0"
 
 -- constants
 local TMP_DIR = DataStorage:getSettingsDir() .. "/tmp/"
+-- how long a page can send nothing for before it's given up on, as a site can take the connection then never answer,
+-- as Library Genesis' mirrors have, which otherwise waited out the whole time a page has to arrive in for each one
+local FETCH_STALL_TIME = 20
 local CURL_ERRORS = {
     [1] = _("unsupported protocol"),
     [3] = _("malformed URL"),
@@ -494,9 +497,10 @@ end
 -- a command that has curl fetch a web page into page_file, then print the HTTP status it ended with (000 when the
 -- site didn't answer) and curl's own exit code, e.g. "200 0". unlike a download, a page with an error status is
 -- kept, as what it says is of use. answer_timeout and page_timeout are how long, in seconds, the site can take to
--- answer and then to send the whole page. config_file optionally gives curl more options (see createConfigFile),
--- and is removed once curl has read it and finished, even if what's waiting for it has been called off. it goes
--- through the proxy, the backup where use_proxy is set (see applyProxy)
+-- answer and then to send the whole page, which is given up on sooner once nothing has arrived for a while.
+-- config_file optionally gives curl more options (see createConfigFile), and is removed once curl has read it and
+-- finished, even if what's waiting for it has been called off. it goes through the proxy, the backup where use_proxy
+-- is set (see applyProxy)
 function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_timeout, config_file)
     checkCurl()
 
@@ -508,6 +512,7 @@ function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_t
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, url)
     cmd = string.format("%s --connect-timeout %d --max-time %d", cmd, answer_timeout, page_timeout)
+    cmd = CurlUtil.abortWhenStalled(cmd, FETCH_STALL_TIME)
     cmd = CurlUtil.applyEncryptedDns(cmd)
     -- each config file curl is given, removed once it has finished with them
     local config_files = {}

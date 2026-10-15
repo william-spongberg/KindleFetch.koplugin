@@ -179,7 +179,8 @@ describe("CurlUtil", function()
             installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
             assert.are.equal(
                 "(curl -sL -o 'the page' 'https://libgen.example/index.php?req=dune' --compressed -A 'Mozilla/5.0' "
-                    .. "-e 'https://libgen.example/' --connect-timeout 10 --max-time 60 -w '%{http_code}'; "
+                    .. "-e 'https://libgen.example/' --connect-timeout 10 --max-time 60 "
+                    .. "--speed-limit 1 --speed-time 20 -w '%{http_code}'; "
                     .. 'echo " $?") 2>/dev/null',
                 CurlUtil.fetchCommand("https://libgen.example/index.php?req=dune", "the page", false, 10, 60)
             )

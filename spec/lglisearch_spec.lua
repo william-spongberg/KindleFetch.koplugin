@@ -695,27 +695,34 @@ describe("LlgiSearch", function()
             assert.matches("Under maintenance", helper.logged("warn", "^unexpected search page from"))
         end)
 
-        it("scrapes the mirrors again when every mirror fails", function()
-            -- every mirror is down until they have been scraped again
-            web.pages[searchUrl(mirrors[1])] = function()
-                if web.scrapes > 1 then
-                    return fixtures.libgenResults({ fixtures.DUNE })
+        it("scrapes the mirrors again when every mirror fails, searching those that have moved", function()
+            -- every mirror is down, as Library Genesis has moved to another, which Wikipedia lists once it's scraped
+            -- again
+            local moved = "https://libgen.moved"
+            web.pages[require("api.urlapi").LIBGEN_PAGE] = function()
+                local items = {}
+                for _, mirror in ipairs(web.scrapes > 1 and { moved } or mirrors) do
+                    table.insert(items, "<li>" .. mirror:gsub("^https://", "") .. "</li>")
                 end
+                return "<html><body><ul>" .. table.concat(items) .. "</ul></body></html>"
             end
+            results(moved, { fixtures.DUNE })
 
             local books = LlgiSearch:search("dune", 1)
             assert.are.equal(2, web.scrapes)
             assert.are.equal(1, #books)
             assert.are.equal("Dune", books[1].title)
+            assert.are.equal(searchUrl(moved), searches()[#searches()])
         end)
 
-        it("gives up after scraping the mirrors again once", function()
+        -- which have just failed, some (such as one that takes the connection but never answers) only after a while
+        it("gives up once scraping the mirrors again finds no others, without asking them again", function()
             local books, err = LlgiSearch:search("dune", 1)
 
             assert.is_nil(books)
             assert.are.equal("failed to connect to server", err)
             assert.are.equal(2, web.scrapes)
-            assert.are.equal(2 * #mirrors, #searches())
+            assert.are.equal(#mirrors, #searches())
         end)
 
         -- which its mirrors all say at once, as they share it, rather than that each sent something unexpected, which
