@@ -475,6 +475,62 @@ describe("SettingsPage", function()
         end)
     end)
 
+    -- e.g. for the books found, where what's ticked would hide all of them
+    describe("a list of choices to tick", function()
+        local saves, closes, refuse
+
+        local function tickSites()
+            SettingsPage:tickSeveral(
+                "Sites",
+                { { text = "Z-Library", code = "zlib" }, { text = "Internet Archive", code = "archive" } },
+                { "zlib", "archive" },
+                function(codes)
+                    table.insert(saves, codes)
+                    if refuse then
+                        return false
+                    end
+                end,
+                "Tick at least one",
+                function(changed)
+                    table.insert(closes, changed)
+                end
+            )
+            return lastMenu()
+        end
+
+        before_each(function()
+            saves, closes, refuse = {}, {}, true
+        end)
+
+        it("stays open where what's ticked can't be saved", function()
+            local list = tickSites()
+            tap("Z-Library")
+            list.onClose()
+            assert.are.same({ { "archive" } }, saves)
+            assert.is_false(helper.wasClosed(list))
+            assert.are.same({}, closes)
+
+            refuse = false
+            list.onClose()
+            assert.is_true(helper.wasClosed(list))
+            assert.are.same({ true }, closes)
+        end)
+
+        -- which KOReader's Home key closes, then sends Home on again until what's on top has changed
+        it("closes, as it was, where KOReader's Home key closes it and what's ticked can't be saved", function()
+            local Menu = require("ui/widget/menu")
+            Menu.onHome = function(self)
+                self:onClose()
+                return true
+            end
+            local list = tickSites()
+            tap("Z-Library")
+            list:onHome()
+            assert.is_true(helper.wasClosed(list))
+            assert.are.same({ false }, closes)
+        end)
+    end)
+
     describe("preferred file types", function()
         it("are grouped by category", function()
             SettingsPage:showSettings()

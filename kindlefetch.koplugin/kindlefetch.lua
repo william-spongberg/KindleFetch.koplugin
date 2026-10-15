@@ -20,6 +20,7 @@ local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local BookMenu = require("ui.bookmenu")
+local BookFilter = require("ui.bookfilter")
 local Menu = require("ui/widget/menu")
 local WaitingMessage = require("ui.waitingmessage")
 local ZlibLogin = require("ui.zliblogin")
@@ -1186,22 +1187,56 @@ local function bookText(book)
     )
 end
 
--- the books as entries for the menu of results, followed by a way to load more when there are more to load. only
--- those with the text looked for in them, when the results are being looked through (see filterBooks)
+-- the book's entry's text in the results: its title, authors and file type (see bookText), and the site it was found
+-- on, where several were searched
+function KindleFetch:bookItemText(book)
+    local text = bookText(book)
+    if self.several_sites and Sources[book.source] then
+        text = StringUtil.joinDetails(text, Sources[book.source].NAME)
+    end
+    return text
+end
+
+-- whether the results show the book: when it has the text looked for in it (see filterBooks), where they're being
+-- looked through, and none of the sites, languages and so on unticked is all it has (see chooseShown)
+function KindleFetch:isShown(book)
+    local filter = self.filter and util.stringLower(self.filter)
+    if filter and not util.stringLower(self:bookItemText(book)):find(filter, 1, true) then
+        return false
+    end
+    return BookFilter.isShown(book, self.hidden or {}, function(b)
+        return self:isDownloaded(b)
+    end)
+end
+
+-- whether only some of the books found are shown (see isShown)
+function KindleFetch:isFiltering()
+    return self.filter ~= nil or BookFilter.isHiding(self.hidden or {})
+end
+
+-- how many of the books found are shown (see isShown), from the from'th on, where given
+function KindleFetch:countShown(from)
+    local count = 0
+    local books = self.books or {}
+    for i = from or 1, #books do
+        if self:isShown(books[i]) then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+-- the books shown (see isShown) as entries for the menu of results, followed by a way to load more when there are
+-- more to load
 function KindleFetch:bookMenuItems(books)
     local this = self
     local menu_items = {}
-    local filter = self.filter and util.stringLower(self.filter)
 
     for __, book in ipairs(books) do
-        local text = bookText(book)
-        if self.several_sites and Sources[book.source] then
-            text = StringUtil.joinDetails(text, Sources[book.source].NAME)
-        end
-        if not filter or util.stringLower(text):find(filter, 1, true) then
+        if self:isShown(book) then
             table.insert(menu_items, {
                 book = book,
-                text = text,
+                text = self:bookItemText(book),
                 -- (where it's KOReader's own menu that lists them, see showBooks)
                 mandatory_func = function()
                     return this:isDownloaded(book) and _("Downloaded") or nil
@@ -1214,7 +1249,7 @@ function KindleFetch:bookMenuItems(books)
     end
 
     -- the sites still being searched, whose books are added once they've found them (see searchFrom), or a way to
-    -- load more, where there's more (and the books loaded wouldn't be among those being looked through)
+    -- load more, where there's more, whose books are shown as the others are (see isShown)
     if self.search and not self.search:isDone() then
         table.insert(menu_items, {
             still_searching = true,
@@ -1225,7 +1260,7 @@ function KindleFetch:bookMenuItems(books)
                 )
             end,
         })
-    elseif self:hasMore() and not self.filter then
+    elseif self:hasMore() then
         table.insert(menu_items, {
             text = _("Load more"),
             callback = function()
@@ -1238,11 +1273,11 @@ function KindleFetch:bookMenuItems(books)
 end
 
 -- what was searched for and how many books have been found, for the top of the menu of results, and how many of them
--- have the text being looked for in them
-function KindleFetch:booksTitle(shown)
+-- are shown, where only some are (see isShown)
+function KindleFetch:booksTitle()
     local count = #self.books
-    if self.filter then
-        return T(_("%1 · %2 of %3 books"), self.current_search_query, shown or count, count)
+    if self:isFiltering() then
+        return T(_("%1 · %2 of %3 books"), self.current_search_query, self:countShown(), count)
     end
     -- there may be more to load, or still to come
     local more = self:hasMore() or self.search and not self.search:isDone()
@@ -1250,9 +1285,22 @@ function KindleFetch:booksTitle(shown)
     return string.format("%s · %s", self.current_search_query, found)
 end
 
--- whether any site has more results to load (see loadMoreBooks)
+-- the next page of each site's results that has more, to load (see loadMoreBooks), but for the sites whose books are
+-- hidden (see chooseShown)
+function KindleFetch:pagesToLoad()
+    local pages = {}
+    local hidden_sites = self.hidden and self.hidden.site or {}
+    for source, page in pairs(self.next_pages or {}) do
+        if not hidden_sites[source] then
+            pages[source] = page
+        end
+    end
+    return pages
+end
+
+-- whether any site whose books are shown has more results to load (see pagesToLoad)
 function KindleFetch:hasMore()
-    return self.next_pages ~= nil and next(self.next_pages) ~= nil
+    return next(self:pagesToLoad()) ~= nil
 end
 
 -- list the books found again, as more have been, staying on the page that's showing, or turning to the one with the
@@ -1284,38 +1332,79 @@ function KindleFetch:finishBooks()
     end
 end
 
--- the number of books among menu items, leaving out Load more
-local function countBooks(menu_items)
-    local count = 0
-    for __, item in ipairs(menu_items) do
-        if item.book then
-            count = count + 1
-        end
+-- list the books shown again, from the first, once what's shown has changed (see isShown), loading their covers
+function KindleFetch:showFromFirst()
+    local menu = self.books_menu
+    if not menu then
+        return
     end
-    return count
+    menu:switchItemTable(self:booksTitle(), self:bookMenuItems(self.books), 1)
+    if coversShown() then
+        menu:loadCoversForPage(1)
+    end
 end
 
--- show only the books found with text in their title, authors or file type, whatever its capitals, without searching
--- again, or every book again when there's no text. the books shown stay as they are when none have it
+-- show only the books found with text in their title, authors or file type, whatever its capitals, among those
+-- shown (see isShown), without searching again, or all of them again when there's no text. the books shown stay as
+-- they are when none of them have it
 function KindleFetch:filterBooks(text)
     text = StringUtil.trim(text)
     local previous = self.filter
     self.filter = text ~= "" and text or nil
 
-    local items = self:bookMenuItems(self.books)
-    local shown = countBooks(items)
+    local shown = self:countShown()
     if shown == 0 then
+        local hiding = BookFilter.isHiding(self.hidden or {})
         self.filter = previous
-        NotifyUtil.message(T(_("None of the books found have “%1” in them."), text))
+        NotifyUtil.message(
+            hiding and T(_("None of the books shown have “%1” in them."), text)
+                or T(_("None of the books found have “%1” in them."), text)
+        )
         return
     end
     LogUtil.info(string.format("showing %d of the %d books found, looking for %q", shown, #self.books, text))
+    self:showFromFirst()
+end
 
-    local menu = self.books_menu
-    menu:switchItemTable(self:booksTitle(shown), items, 1)
-    if coversShown() then
-        menu:loadCoversForPage(1)
+-- tick and untick the values the books found have for filter (see BookFilter.FILTERS), e.g. the sites they were found
+-- on, to show only the books with those ticked, without searching again (see isShown). each value is listed with how
+-- many of the books have it, and what would hide every book isn't taken
+function KindleFetch:chooseShown(filter)
+    local values = BookFilter.values(self.books, filter, function(book)
+        return self:isDownloaded(book)
+    end)
+    local hidden = self.hidden[filter.id] or {}
+    local choices, ticked = {}, {}
+    for __, value in ipairs(values) do
+        table.insert(choices, { text = T(_("%1 (%2)"), value.text, value.count), code = value.code })
+        if not hidden[value.code] then
+            table.insert(ticked, value.code)
+        end
     end
+    SettingsPage:tickSeveral(
+        filter.name,
+        choices,
+        ticked,
+        function(shown)
+            local before = self.hidden[filter.id]
+            self.hidden[filter.id] = BookFilter.hiding(values, shown)
+            if self:countShown() == 0 then
+                self.hidden[filter.id] = before
+                NotifyUtil.info(_("That would hide every book found."))
+                return false
+            end
+        end,
+        _("That would hide every book found."),
+        function(changed)
+            -- (rather than going back to the first page, where nothing has)
+            if changed then
+                LogUtil.info(
+                    string.format("showing %d of the %d books found, by %s", self:countShown(), #self.books, filter.id)
+                )
+                self:showFromFirst()
+            end
+        end
+    )
 end
 
 -- ask for text to look through the books found for (see filterBooks)
@@ -1351,7 +1440,9 @@ function KindleFetch:askForFilter()
     dialog:onShowKeyboard()
 end
 
--- what can be done with the books found, from the menu at the top left of the results
+-- what can be done with the books found, from the menu at the top left of the results: looking through them for text,
+-- showing only those from some of the sites, languages and so on they're from (see chooseShown, each offered where
+-- the books found don't all have the same), showing all of them again, and searching again (see searchAgain)
 function KindleFetch:showResultsMenu()
     local this = self
     local dialog
@@ -1366,17 +1457,55 @@ function KindleFetch:showResultsMenu()
             },
         },
     }
-    if self.filter then
+    self.hidden = self.hidden or {}
+    for __, filter in ipairs(BookFilter.FILTERS) do
+        -- (whether each book has been downloaded is only looked up once it's asked for, see BookFilter.values)
+        local values = filter.fixed or BookFilter.values(self.books, filter)
+        if BookFilter.isOffered(filter, values) then
+            table.insert(buttons, {
+                {
+                    text = T(_("%1: %2"), filter.name, BookFilter.describe(values, self.hidden[filter.id])),
+                    callback = function()
+                        UIManager:close(dialog)
+                        this:chooseShown(filter)
+                    end,
+                },
+            })
+        end
+    end
+    if self:isFiltering() then
         table.insert(buttons, {
             {
                 text = T(_("Show all %1 books"), #self.books),
                 callback = function()
                     UIManager:close(dialog)
-                    this:filterBooks("")
+                    this.filter = nil
+                    this.hidden = {}
+                    this:showFromFirst()
                 end,
             },
         })
     end
+    table.insert(buttons, {
+        {
+            text = _("Search again…"),
+            callback = function()
+                UIManager:close(dialog)
+                this:searchAgain()
+            end,
+        },
+    })
+    dialog = ButtonDialog:new {
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
+end
+
+-- change which languages, file types or book types the books found can be in, in the settings (see changeChoices),
+-- searching again with them, from the results
+function KindleFetch:searchAgain()
+    local this = self
+    local dialog
     -- narrowing the search down, or widening it, searching again (see changeChoices)
     local changes = {
         { text = _("Languages…"), change = SettingsPage.changeLanguages },
@@ -1398,9 +1527,9 @@ function KindleFetch:showResultsMenu()
             end,
         })
     end
-    table.insert(buttons, row)
     dialog = ButtonDialog:new {
-        buttons = buttons,
+        title = _("Change the settings, and search again:"),
+        buttons = { row },
     }
     UIManager:show(dialog)
 end
@@ -1440,7 +1569,9 @@ end
 function KindleFetch:showBooks(books)
     local this = self
     self.downloaded = nil
+    -- what's shown of them (see isShown), afresh for each search
     self.filter = nil
+    self.hidden = {}
 
     -- or as KOReader's own menu lists things, where its menu can't lay them out with their covers
     local MenuClass = BookMenu.isSupported() and BookMenu or Menu
@@ -1504,8 +1635,8 @@ function KindleFetch:showBooks(books)
     end
 end
 
--- load the next page of each site's results that has more (see hasMore), adding the books to the list as each site
--- finds them, turning to the first of them
+-- load the next page of each site's results that has more, but for the sites whose books are hidden (see
+-- pagesToLoad), adding the books to the list as each site finds them, turning to the first of them that's shown
 function KindleFetch:loadMoreBooks()
     if not self:hasMore() then
         NotifyUtil.message(_("No more books found"))
@@ -1513,18 +1644,16 @@ function KindleFetch:loadMoreBooks()
     end
 
     local query = self.current_search_query
-    local pages = {}
-    for source, page in pairs(self.next_pages) do
-        pages[source] = page
-    end
+    local pages = self:pagesToLoad()
     if not self:canSearchNow(query, pages, function()
         self:loadMoreBooks()
     end) then
         return
     end
 
-    -- the sites that failed, which keep their page to load more from again, and how many results the others read
-    local failures, results_read, found = {}, 0, 0
+    -- the sites that failed, which keep their page to load more from again, how many results the others read, and
+    -- how many books they found, and how many of those are shown
+    local failures, results_read, found, shown = {}, 0, 0, 0
     local first_new_book = #self.books + 1
     self:startSearch(query, pages, _("Loading more books..."), {
         on_result = function(source, books, err, next_page, read)
@@ -1549,9 +1678,11 @@ function KindleFetch:loadMoreBooks()
                 table.insert(self.books, book)
             end
             self:closeWaitingMessage()
-            -- turning to the page the first new books start on (the one that was showing), rather than going back to
-            -- the first, and staying there as more arrive
-            self:refreshBooks(found == 0 and first_new_book or nil)
+            -- turning to the page the first new books shown start on (the one that was showing), rather than going
+            -- back to the first, and staying there as more arrive
+            local was_shown = shown
+            shown = self:countShown(first_new_book)
+            self:refreshBooks(was_shown == 0 and shown > 0 and self:countShown() - shown + 1 or nil)
             found = found + #books
         end,
         on_done = function()
@@ -1575,7 +1706,20 @@ function KindleFetch:loadMoreBooks()
                 end
                 return
             end
+            if shown > 0 then
+                return
+            end
             if found > 0 then
+                NotifyUtil.message(
+                    T(
+                        N_(
+                            "1 more book was found, but it isn't among those shown.",
+                            "%1 more books were found, but none of them are among those shown.",
+                            found
+                        ),
+                        found
+                    )
+                )
                 return
             end
             if self:hasMore() then
