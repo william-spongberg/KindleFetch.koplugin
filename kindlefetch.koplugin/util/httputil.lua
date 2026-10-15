@@ -299,7 +299,7 @@ function HttpUtil.downloadFile(url, path)
     if not CurlUtil.canFetch() then
         return downloadWithKOReader(url, path)
     end
-    local ok, err = CurlUtil.download(url, path, false, false)
+    local ok, err = CurlUtil.download(url, path, false)
     if not ok then
         return nil, err
     end

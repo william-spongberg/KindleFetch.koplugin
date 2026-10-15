@@ -535,15 +535,15 @@ describe("HttpUtil", function()
             )
             local CurlUtil = require("util.curlutil")
             local download
-            CurlUtil.download = function(url, filepath, use_proxy, background)
-                download = { url, filepath, use_proxy, background }
-                return false, "request timed out"
+            CurlUtil.download = function(url, filepath, use_proxy)
+                download = { url, filepath, use_proxy }
+                return nil, "request timed out"
             end
 
             local ok, err = HttpUtil.downloadFile("https://github.example/curl-armhf", path)
             assert.is_nil(ok)
             assert.are.equal("request timed out", err)
-            assert.are.same({ "https://github.example/curl-armhf", path, false, false }, download)
+            assert.are.same({ "https://github.example/curl-armhf", path, false }, download)
             assert.are.equal(0, #requests)
         end)
     end)

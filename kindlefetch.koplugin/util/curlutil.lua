@@ -301,11 +301,13 @@ function CurlUtil.getProxyFlag(use_proxy)
     return proxy_flag
 end
 
+-- start cmd in the background (see echoPid), returning its pid, or nil and Errors.START_FAILED
 function CurlUtil.spawnCurlPid(cmd)
     -- execute command
     local pipe = io.popen(cmd, "r")
     if not pipe then
-        return nil, "unable to launch curl"
+        LogUtil.warn("could not start a shell to run curl")
+        return nil, Errors.START_FAILED
     end
 
     -- read pid from terminal output
@@ -314,7 +316,8 @@ function CurlUtil.spawnCurlPid(cmd)
 
     local pid = tonumber(pid_str)
     if not pid then
-        return nil, "unable to determine curl pid"
+        LogUtil.warn("curl was started, but its pid wasn't given:", tostring(pid_str))
+        return nil, Errors.START_FAILED
     end
 
     return pid
@@ -472,24 +475,13 @@ function CurlUtil.echoPid(cmd)
     return string.format("%s & echo $!", cmd)
 end
 
-function CurlUtil.getCMD(download_url, filepath, exit_file, use_proxy)
-    local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
-    cmd = CurlUtil.enableRetry(cmd, 2, 2)
-    cmd = CurlUtil.setTimeout(cmd, 15)
-    if use_proxy then
-        cmd = CurlUtil.applyProxy(cmd)
-    end
-    cmd = CurlUtil.saveExitCode(cmd, exit_file)
-
-    return cmd
-end
-
+-- the command that has curl download url to filepath (see download), and the file it saves curl's exit code in.
 -- max_time optionally limits how long each attempt (and retrying) can take, in seconds.
 -- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize),
 -- opts.stall_time gives up on a download once nothing has arrived for that many seconds, and opts.resume has curl
 -- carry on from what's already in filepath, including when it tries again after a download stops partway (where
 -- the site says it can), rather than starting again from the beginning
-function CurlUtil.download(download_url, filepath, use_proxy, background, max_time, opts)
+local function downloadCommand(download_url, filepath, use_proxy, max_time, opts)
     opts = opts or {}
 
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
@@ -517,20 +509,34 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
     cmd = CurlUtil.saveExitCode(cmd, exit_file)
 
     LogUtil.debug("curl download command", cmd)
+    return cmd, exit_file
+end
 
-    if background then
-        cmd = CurlUtil.echoPid(cmd)
-        local pid, err = CurlUtil.spawnCurlPid(cmd, exit_file)
-        if not pid or err then
-            return nil, nil, err
-        end
-
-        return pid, exit_file
+-- download url to filepath in the background (see downloadCommand for the options), returning the pid to follow it
+-- by (see isPidRunning and killPid) and the file its exit code is saved in once it has finished (see getExitCode), or
+-- nil and why it couldn't be started
+function CurlUtil.startDownload(download_url, filepath, use_proxy, max_time, opts)
+    local cmd, exit_file = downloadCommand(download_url, filepath, use_proxy, max_time, opts)
+    local pid, err = CurlUtil.spawnCurlPid(CurlUtil.echoPid(cmd))
+    if not pid then
+        return nil, err
     end
+    return pid, exit_file
+end
 
+-- download url to filepath (see downloadCommand for the options), holding KOReader up until it has. returns true, or
+-- nil and what went wrong, leaving nothing behind
+function CurlUtil.download(download_url, filepath, use_proxy, max_time, opts)
+    local cmd, exit_file = downloadCommand(download_url, filepath, use_proxy, max_time, opts)
     os.execute(cmd)
 
     local exit_code = CurlUtil.getExitCode(exit_file)
+    if not exit_code then
+        LogUtil.warn("could not start curl to download from", LogUtil.site(download_url))
+        FileUtil.removeFile(exit_file)
+        FileUtil.removeFile(filepath)
+        return nil, Errors.START_FAILED
+    end
     if exit_code == 0 then
         local file_size = FileUtil.getSize(filepath)
         if file_size and file_size > 0 then
@@ -542,7 +548,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
         else
             LogUtil.warn("download from", LogUtil.site(download_url), "to", filepath, "produced an empty file")
             FileUtil.removeFile(filepath)
-            return false, "download produced empty file"
+            return nil, "download produced empty file"
         end
     else
         LogUtil.warn(
@@ -555,7 +561,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, background, max_ti
             "(" .. CurlUtil.getErrorMeaning(exit_code) .. ")"
         )
         FileUtil.removeFile(filepath)
-        return false, CurlUtil.getErrorMeaning(exit_code)
+        return nil, CurlUtil.getErrorMeaning(exit_code)
     end
 end
 

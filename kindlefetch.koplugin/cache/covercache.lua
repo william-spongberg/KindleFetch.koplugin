@@ -155,10 +155,10 @@ function CoverCache:download(id, url)
     ensureCacheDir()
     local path = self:getPath(id)
 
-    local success = CurlUtil.download(url, path, false, false, COVER_MAX_TIME)
+    local success = CurlUtil.download(url, path, false, COVER_MAX_TIME)
     if not success and hasProxy() then
         LogUtil.debug("retrying cover download through proxy", id)
-        success = CurlUtil.download(url, path, true, false, COVER_MAX_TIME)
+        success = CurlUtil.download(url, path, true, COVER_MAX_TIME)
     end
     if success then
         persistent_cache:set(path, id)

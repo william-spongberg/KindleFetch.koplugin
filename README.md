@@ -195,7 +195,7 @@ kindlefetch.koplugin/
     ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from
     ├── guard.lua              # Runs what KOReader runs later (scheduled tasks, Trapper's functions, event handlers), catching errors, logging where they happened and cleaning up
     ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback; posts forms and sends cookies, giving them to curl in a file rather than on its command line; downloads files with curl, or KOReader's own HTTP where curl can't connect
-    ├── fileutil.lua           # File operations (size, creation, deletion, validation) and directory checks
+    ├── fileutil.lua           # File operations (size, reading, writing and deleting files, listing folders) and directory checks
     ├── stringutil.lua         # String utilities (trimming, validation, cleaning titles and file names, HTML entity conversion, checking web addresses)
     ├── logutil.lua            # Logger wrapper
     ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed

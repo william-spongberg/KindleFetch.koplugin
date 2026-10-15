@@ -82,11 +82,7 @@ describe("Downloader", function()
         web = fixtures.fakeWeb(helper)
 
         CurlUtil = require("util.curlutil")
-        CurlUtil.download = function(url, path, use_proxy, background, _, opts)
-            if not background then -- book cover
-                helper.writeFile(path, "jpeg")
-                return true
-            end
+        CurlUtil.startDownload = function(url, path, use_proxy, _, opts)
             local exit_file = CurlUtil.createExitFile()
             table.insert(spawned, {
                 url = url,
@@ -781,15 +777,12 @@ describe("Downloader", function()
         end)
 
         it("fails when curl cannot be started", function()
-            CurlUtil.download = function(_, _, _, background)
-                if background then
-                    return nil, nil, "unable to launch curl"
-                end
-                return true
+            CurlUtil.startDownload = function()
+                return nil, "could not start curl"
             end
 
             download()
-            assert.are.same({ { ok = false, err = "unable to launch curl" } }, results)
+            assert.are.same({ { ok = false, err = "could not start curl" } }, results)
             assert.are.same({}, Downloader:getActiveDownloads())
         end)
 
@@ -910,13 +903,13 @@ describe("Downloader", function()
         it("fails when the proxy retry cannot be started", function()
             helper.state.env.PROXY_URL = "http://proxy.example:8080"
             download()
-            CurlUtil.download = function()
-                return nil, nil, "unable to launch curl"
+            CurlUtil.startDownload = function()
+                return nil, "could not start curl"
             end
 
             curlWrote(0, 7)
             helper.runScheduled()
-            assert.are.same({ { ok = false, err = "unable to launch curl" } }, results)
+            assert.are.same({ { ok = false, err = "could not start curl" } }, results)
         end)
 
         it("can be cancelled from the progress widget", function()

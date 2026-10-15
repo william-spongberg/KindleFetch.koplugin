@@ -37,17 +37,17 @@ end
 -- start curl downloading the book in the background, as transfer says (see _startDownload), returning whether it
 -- started, and why not if it didn't
 local function startCurl(transfer)
-    local pid, exit_file, err =
-        CurlUtil.download(transfer.download_url, transfer.part_path, transfer.tried_proxy, true, nil, {
+    local pid, exit_file_or_err =
+        CurlUtil.startDownload(transfer.download_url, transfer.part_path, transfer.tried_proxy, nil, {
             headers_file = transfer.headers_file,
             stall_time = DOWNLOAD_STALL_TIME,
             -- so that curl carries on from where a download that stalled got to, rather than starting it again
             resume = transfer.resume,
         })
     if not pid then
-        return false, err
+        return false, exit_file_or_err
     end
-    transfer.pid, transfer.exit_file = pid, exit_file
+    transfer.pid, transfer.exit_file = pid, exit_file_or_err
     return true
 end
 

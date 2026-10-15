@@ -70,13 +70,13 @@ for _, layout in ipairs(LAYOUTS) do
             downloadRelease = function(url)
                 error("unexpected download of " .. url)
             end
-            CurlUtil.download = function(url, filepath, use_proxy, background, max_time)
-                if not url:find("/releases/latest", 1, true) then
-                    return downloadRelease(url, filepath)
-                end
+            CurlUtil.download = function(url, filepath)
+                return downloadRelease(url, filepath)
+            end
+            CurlUtil.startDownload = function(url, filepath, use_proxy, max_time)
                 table.insert(release_lookups, {
                     url = url,
-                    background = background,
+                    background = true,
                     max_time = max_time,
                 })
                 local exit_file = CurlUtil.createExitFile()
@@ -138,7 +138,7 @@ for _, layout in ipairs(LAYOUTS) do
 
             it("waits for curl to finish looking up the latest release", function()
                 local exit_file, release_file
-                CurlUtil.download = function(_, filepath)
+                CurlUtil.startDownload = function(_, filepath)
                     release_file = filepath
                     exit_file = CurlUtil.createExitFile()
                     return 4000, exit_file
@@ -212,8 +212,8 @@ for _, layout in ipairs(LAYOUTS) do
             end)
 
             it("gives up when curl cannot be started", function()
-                CurlUtil.download = function()
-                    return nil, nil, "unable to launch curl"
+                CurlUtil.startDownload = function()
+                    return nil, "could not start curl"
                 end
                 checkForUpdates(true)
                 assert.are.equal("Failed to fetch updates for KindleFetch", helper.lastError())
