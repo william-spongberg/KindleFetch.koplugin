@@ -73,7 +73,7 @@ for _, layout in ipairs(LAYOUTS) do
             CurlUtil.download = function(url, filepath)
                 return downloadRelease(url, filepath)
             end
-            CurlUtil.startDownload = function(url, filepath, use_proxy, max_time)
+            CurlUtil.startDownload = function(url, filepath, max_time)
                 table.insert(release_lookups, {
                     url = url,
                     background = true,

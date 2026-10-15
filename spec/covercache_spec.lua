@@ -60,7 +60,7 @@ describe("CoverCache", function()
 
     describe("download", function()
         it("downloads and remembers a cover", function()
-            CurlUtil.download = function(url, path, use_proxy, max_time)
+            CurlUtil.download = function(url, path, max_time)
                 assert.are.equal("https://covers.example/abc.jpg", url)
                 -- the download prompt waits for the cover, so a stalled one mustn't hold it up
                 assert.are.equal(10, max_time)
@@ -84,34 +84,6 @@ describe("CoverCache", function()
             assert.is_false(CoverCache:cacheExists("abc"))
             assert.is_false(helper.exists(covers_dir .. "abc.jpg"))
             assert.is_truthy(helper.logged("warn", "^left out the cover of abc as it isn't an image: Not Found$"))
-        end)
-
-        it("retries through PROXY_URL when the direct download fails", function()
-            helper.state.env.PROXY_URL = "http://proxy.example:8080"
-            local attempts = {}
-            CurlUtil.download = function(_, path, use_proxy)
-                table.insert(attempts, use_proxy)
-                if use_proxy then
-                    helper.writeFile(path, fixtures.JPEG)
-                    return true
-                end
-                return nil, "TLS/SSL connection failed"
-            end
-
-            assert.are.equal(covers_dir .. "abc.jpg", CoverCache:download("abc", "https://covers.example/abc.jpg"))
-            assert.are.same({ false, true }, attempts)
-        end)
-
-        it("does not retry without PROXY_URL", function()
-            helper.state.env.PROXY_URL = false
-            local attempts = 0
-            CurlUtil.download = function()
-                attempts = attempts + 1
-                return nil, "TLS/SSL connection failed"
-            end
-
-            assert.is_nil(CoverCache:download("abc", "https://covers.example/abc.jpg"))
-            assert.are.equal(1, attempts)
         end)
 
         it("returns nil when the download fails", function()
@@ -243,12 +215,11 @@ describe("CoverCache", function()
             CurlUtil.canFetch = function()
                 return true
             end
-            CurlUtil.downloadMultiple = function(urls, paths, use_proxy, background, parallel_jobs, _, _, opts)
+            CurlUtil.downloadMultiple = function(urls, paths, background, parallel_jobs, _, _, opts)
                 assert.is_true(background)
                 local run = {
                     urls = urls,
                     paths = paths,
-                    use_proxy = use_proxy,
                     parallel_jobs = parallel_jobs,
                     stall_time = opts.stall_time,
                     pid = 4000 + #runs,
@@ -295,7 +266,6 @@ describe("CoverCache", function()
             assert.are.same({ "https://covers.example/new.jpg" }, runs[1].urls)
             assert.are.same({ covers_dir .. "new.jpg" }, runs[1].paths)
             assert.are.equal(6, runs[1].parallel_jobs)
-            assert.is_false(runs[1].use_proxy)
             -- one that has stalled mustn't keep its placeholder showing, or the next page's covers waiting
             assert.are.equal(10, runs[1].stall_time)
             -- search results show placeholders, rather than a notification
@@ -396,22 +366,6 @@ describe("CoverCache", function()
                 finishRun(runs[1], { true, true, true })
                 helper.runScheduled()
                 assert.are.same({ "a", "b", "c" }, savedCovers())
-            end)
-
-            it("only retries the covers that didn't arrive through PROXY_URL", function()
-                helper.state.env.PROXY_URL = "http://proxy.example:8080"
-                arrive({ "a", 0 })
-                helper.tick()
-
-                arrive({ "a", 0 }, { "b", 35 }, { "c", 35 })
-                finishRun(runs[1], {}, 35)
-                helper.tick()
-                assert.are.equal(2, #runs)
-                assert.are.same({ "https://covers.example/b.jpg", "https://covers.example/c.jpg" }, runs[2].urls)
-
-                finishRun(runs[2], { true, true })
-                helper.runScheduled()
-                assert.are.same({ 3 }, results)
             end)
         end)
 
@@ -599,35 +553,6 @@ describe("CoverCache", function()
             end
 
             assert.is_true(CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone))
-            assert.are.same({ 0 }, results)
-        end)
-
-        it("retries the covers that failed through PROXY_URL", function()
-            helper.state.env.PROXY_URL = "http://proxy.example:8080"
-            local books = { book("a", "https://covers.example/a.jpg"), book("b", "https://covers.example/b.jpg") }
-            CoverCache:downloadMultiple(books, 6, onDone)
-
-            finishRun(runs[1], { false, false }, 35)
-            helper.tick()
-            assert.are.equal(2, #runs)
-            assert.is_true(runs[2].use_proxy)
-            assert.are.same({ "https://covers.example/a.jpg", "https://covers.example/b.jpg" }, runs[2].urls)
-
-            finishRun(runs[2], { true, true })
-            helper.tick()
-            assert.are.same({ 2 }, results)
-            assert.is_true(CoverCache:cacheExists("b"))
-            -- as for searches and books, which are retried through the proxy in crash.log too
-            assert.is_truthy(helper.logged("info", "^retrying 2 cover downloads through the proxy"))
-        end)
-
-        it("does not retry covers without PROXY_URL", function()
-            helper.state.env.PROXY_URL = false
-            CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone)
-
-            finishRun(runs[1], { false }, 35)
-            helper.runScheduled()
-            assert.are.equal(1, #runs)
             assert.are.same({ 0 }, results)
         end)
 

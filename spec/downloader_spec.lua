@@ -118,12 +118,11 @@ describe("Downloader", function()
         CurlUtil.canFetch = function()
             return can_fetch
         end
-        CurlUtil.startDownload = function(url, path, use_proxy, _, opts)
+        CurlUtil.startDownload = function(url, path, _, opts)
             local exit_file = CurlUtil.createExitFile()
             table.insert(spawned, {
                 url = url,
                 path = path,
-                use_proxy = use_proxy,
                 pid = 1000 + #spawned,
                 exit_file = exit_file,
                 headers_file = opts.headers_file,
@@ -135,7 +134,7 @@ describe("Downloader", function()
         -- which is followed just as curl is (see HttpDownload)
         require("util.httpdownload").start = function(url, path, opts)
             table.insert(koreader_downloads, url)
-            return CurlUtil.startDownload(url, path, opts.proxy ~= nil, nil, opts)
+            return CurlUtil.startDownload(url, path, nil, opts)
         end
         -- book covers, which download in the background (and fail here)
         cover_downloads = {}
@@ -380,7 +379,6 @@ describe("Downloader", function()
             assert.are.same({
                 url = getUrl(mirrors[1]),
                 path = filepath .. ".part",
-                use_proxy = false,
                 pid = 1000,
                 exit_file = spawned[1].exit_file,
                 headers_file = spawned[1].headers_file,
@@ -591,7 +589,6 @@ describe("Downloader", function()
             helper.tick()
             assert.are.equal(2, #spawned)
             assert.is_false(spawned[2].resume)
-            assert.is_false(spawned[2].use_proxy)
             assert.is_false(helper.exists(filepath .. ".part"))
 
             curlWrote(MB, 0)
@@ -833,24 +830,6 @@ describe("Downloader", function()
                 assert.are.same({ { ok = false, err = "partial file transfer (download interrupted)" } }, results)
                 assert.is_false(helper.exists(filepath))
                 assert.is_truthy(helper.logged("warn", '^only 524288 of the 1048576 bytes of "Dune" arrived$'))
-            end)
-
-            -- e.g. a page from the network the device is on, rather than the site
-            it("tries again through PROXY_URL from the beginning, rather than carrying on from what arrived", function()
-                helper.state.env.PROXY_URL = "http://proxy.example:8080"
-                download()
-                curlSent(PAGE)
-                helper.tick()
-
-                assert.are.equal(2, #spawned)
-                assert.is_true(spawned[2].use_proxy)
-                assert.is_false(spawned[2].resume)
-                assert.is_false(helper.exists(filepath .. ".part"))
-
-                curlWrote(MB, 0)
-                helper.runScheduled()
-                assert.are.same({ { ok = true } }, results)
-                assert.are.equal(MB, #helper.readFile(filepath))
             end)
 
             it("says it's checking the book, which takes a while for a large one, and can be cancelled", function()
@@ -1235,45 +1214,14 @@ describe("Downloader", function()
             assert.are.same({ { ok = false, err = "download process ended unexpectedly" } }, results)
         end)
 
-        it("retries through PROXY_URL when the download fails", function()
-            helper.state.env.PROXY_URL = "http://proxy.example:8080"
-            download()
-
-            curlWrote(MB / 4, 7)
-            helper.tick()
-            assert.are.equal(2, #spawned)
-            assert.is_true(spawned[2].use_proxy)
-            assert.are.equal(filepath .. ".part", spawned[2].path)
-            assert.are.equal(30, spawned[2].stall_time)
-            -- carrying on from what had downloaded
-            assert.is_true(spawned[2].resume)
-            assert.are.equal(MB / 4, #helper.readFile(filepath .. ".part"))
-
-            curlWrote(MB, 0)
-            helper.runScheduled()
-            assert.are.same({ { ok = true } }, results)
-        end)
-
-        it("fails when the proxy retry fails too", function()
-            helper.state.env.PROXY_URL = "http://proxy.example:8080"
-            download()
-
-            curlWrote(0, 7)
-            helper.tick()
-            curlWrote(0, 7)
-            helper.runScheduled()
-            assert.are.same({ { ok = false, err = "failed to connect to server" } }, results)
-            assert.are.equal(2, #spawned)
-        end)
-
-        it("fails when the proxy retry cannot be started", function()
-            helper.state.env.PROXY_URL = "http://proxy.example:8080"
+        it("fails when it can't be started again from the beginning", function()
             download()
             CurlUtil.startDownload = function()
                 return nil, "could not start curl"
             end
 
-            curlWrote(0, 7)
+            -- the site can't carry on from where it stopped
+            curlWrote(MB / 2, 33)
             helper.runScheduled()
             assert.are.same({ { ok = false, err = "could not start curl" } }, results)
         end)

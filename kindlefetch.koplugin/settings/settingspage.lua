@@ -144,7 +144,7 @@ function SettingsPage:settingsItems()
     local check_for_updates = KindleFetchSettings:getCheckForUpdates()
     local search_cache_days = KindleFetchSettings:getSearchCacheExpiryDays()
     local mirror_cache_days = KindleFetchSettings:getMirrorCacheExpiryDays()
-    local proxy = ProxyUtil.koreader()
+    local proxy = ProxyUtil.get()
     local encrypted_dns = KindleFetchSettings:getEncryptedDns()
 
     return {
@@ -296,7 +296,7 @@ function SettingsPage:changeProxy()
                 },
                 {
                     text = _("Turn off"),
-                    enabled = ProxyUtil.koreader() ~= nil,
+                    enabled = ProxyUtil.get() ~= nil,
                     callback = function()
                         UIManager:close(dialog)
                         NetworkMgr:setHTTPProxy(nil)

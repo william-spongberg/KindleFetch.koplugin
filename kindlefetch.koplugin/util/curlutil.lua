@@ -454,12 +454,12 @@ function CurlUtil.applyEncryptedDns(curl_cmd)
     return curl_cmd
 end
 
--- curl_cmd, going through the proxy (see ProxyUtil.get, its backup when use_backup is set), which is given to curl in
--- a config file (see createConfigFile), rather than on its command line, where any program on the device can read it,
--- as it can have a password in it. the config file is returned too, to remove once curl has read it. without a proxy
--- (or where the file can't be written, when curl goes without, saying so), it's curl_cmd as it was
-function CurlUtil.applyProxy(curl_cmd, use_backup)
-    local proxy = ProxyUtil.get(use_backup)
+-- curl_cmd, going through KOReader's HTTP proxy, where it's on (see ProxyUtil), which is given to curl in a config
+-- file (see createConfigFile), rather than on its command line, where any program on the device can read it, as it
+-- can have a password in it. the config file is returned too, to remove once curl has read it. without a proxy (or
+-- where the file can't be written, when curl goes without, saying so), it's curl_cmd as it was
+function CurlUtil.applyProxy(curl_cmd)
+    local proxy = ProxyUtil.get()
     if not proxy then
         return curl_cmd
     end
@@ -499,9 +499,9 @@ end
 -- kept, as what it says is of use. answer_timeout and page_timeout are how long, in seconds, the site can take to
 -- answer and then to send the whole page, which is given up on sooner once nothing has arrived for a while.
 -- config_file optionally gives curl more options (see createConfigFile), and is removed once curl has read it and
--- finished, even if what's waiting for it has been called off. it goes through the proxy, the backup where use_proxy
--- is set (see applyProxy)
-function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_timeout, config_file)
+-- finished, even if what's waiting for it has been called off. it goes through KOReader's HTTP proxy, where it's on
+-- (see applyProxy)
+function CurlUtil.fetchCommand(url, page_file, answer_timeout, page_timeout, config_file)
     checkCurl()
 
     local cmd = string.format("curl -sL -o %s %s", CurlUtil.shellQuote(page_file), CurlUtil.shellQuote(url))
@@ -517,7 +517,7 @@ function CurlUtil.fetchCommand(url, page_file, use_proxy, answer_timeout, page_t
     -- each config file curl is given, removed once it has finished with them
     local config_files = {}
     local proxy_config
-    cmd, proxy_config = CurlUtil.applyProxy(cmd, use_proxy)
+    cmd, proxy_config = CurlUtil.applyProxy(cmd)
     if proxy_config then
         table.insert(config_files, CurlUtil.shellQuote(proxy_config))
     end
@@ -593,9 +593,9 @@ end
 -- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize),
 -- opts.stall_time gives up on a download once nothing has arrived for that many seconds, and opts.resume has curl
 -- carry on from what's already in filepath, including when it tries again after a download stops partway (where
--- the site says it can), rather than starting again from the beginning. it goes through the proxy, the backup where
--- use_proxy is set (see applyProxy)
-local function downloadCommand(download_url, filepath, use_proxy, max_time, opts)
+-- the site says it can), rather than starting again from the beginning. it goes through KOReader's HTTP proxy, where
+-- it's on (see applyProxy)
+local function downloadCommand(download_url, filepath, max_time, opts)
     opts = opts or {}
 
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
@@ -617,7 +617,7 @@ local function downloadCommand(download_url, filepath, use_proxy, max_time, opts
     end
     cmd = CurlUtil.applyEncryptedDns(cmd)
     local proxy_config
-    cmd, proxy_config = CurlUtil.applyProxy(cmd, use_proxy)
+    cmd, proxy_config = CurlUtil.applyProxy(cmd)
 
     local exit_file = CurlUtil.createExitFile()
     cmd = CurlUtil.saveExitCode(cmd, exit_file, proxy_config)
@@ -630,8 +630,8 @@ end
 -- download url to filepath in the background (see downloadCommand for the options), returning the pid to follow it
 -- by (see isPidRunning and killPid) and the file its exit code is saved in once it has finished (see getExitCode), or
 -- nil and why it couldn't be started
-function CurlUtil.startDownload(download_url, filepath, use_proxy, max_time, opts)
-    local cmd, exit_file = downloadCommand(download_url, filepath, use_proxy, max_time, opts)
+function CurlUtil.startDownload(download_url, filepath, max_time, opts)
+    local cmd, exit_file = downloadCommand(download_url, filepath, max_time, opts)
     local pid, err = CurlUtil.spawnCurlPid(CurlUtil.echoPid(cmd))
     if not pid then
         return nil, err
@@ -641,8 +641,8 @@ end
 
 -- download url to filepath (see downloadCommand for the options), holding KOReader up until it has. returns true, or
 -- nil and what went wrong, leaving nothing behind
-function CurlUtil.download(download_url, filepath, use_proxy, max_time, opts)
-    local cmd, exit_file = downloadCommand(download_url, filepath, use_proxy, max_time, opts)
+function CurlUtil.download(download_url, filepath, max_time, opts)
+    local cmd, exit_file = downloadCommand(download_url, filepath, max_time, opts)
     os.execute(cmd)
 
     local exit_code = CurlUtil.getExitCode(exit_file)
@@ -681,16 +681,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, max_time, opts)
 end
 
 -- opts.stall_time optionally gives up on a file once nothing of it has arrived for that many seconds
-function CurlUtil.downloadMultiple(
-    download_urls,
-    filepaths,
-    use_proxy,
-    background,
-    num_parallel_jobs,
-    enable_retry,
-    timeout,
-    opts
-)
+function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_parallel_jobs, enable_retry, timeout, opts)
     opts = opts or {}
     ensureTmpDir()
 
@@ -699,8 +690,9 @@ function CurlUtil.downloadMultiple(
         return (value:gsub("\\", "\\\\"):gsub('"', '\\"'))
     end
     local lines = {}
-    -- the proxy to go through (see ProxyUtil.get), with the files, rather than on curl's command line (see applyProxy)
-    local proxy = ProxyUtil.get(use_proxy)
+    -- KOReader's HTTP proxy, where it's on (see ProxyUtil), with the files, rather than on curl's command line (see
+    -- applyProxy)
+    local proxy = ProxyUtil.get()
     if proxy and not proxy:find("%c") then
         table.insert(lines, string.format('proxy = "%s"\n', quote(proxy)))
     end

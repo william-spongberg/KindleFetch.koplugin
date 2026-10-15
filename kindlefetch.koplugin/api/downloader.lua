@@ -110,20 +110,19 @@ end
 local function startCurl(transfer)
     local pid, exit_file_or_err
     if CurlUtil.canFetch() then
-        pid, exit_file_or_err =
-            CurlUtil.startDownload(transfer.download_url, transfer.part_path, transfer.tried_proxy, nil, {
-                headers_file = transfer.headers_file,
-                stall_time = DOWNLOAD_STALL_TIME,
-                -- so that curl carries on from where a download that stalled got to, rather than starting it again
-                resume = transfer.resume,
-            })
+        pid, exit_file_or_err = CurlUtil.startDownload(transfer.download_url, transfer.part_path, nil, {
+            headers_file = transfer.headers_file,
+            stall_time = DOWNLOAD_STALL_TIME,
+            -- so that curl carries on from where a download that stalled got to, rather than starting it again
+            resume = transfer.resume,
+        })
     else
         -- (from the beginning, as KOReader's HTTP can't carry on from what's there)
         LogUtil.info("downloading with KOReader's own HTTP, as curl can't")
         pid, exit_file_or_err = HttpDownload.start(transfer.download_url, transfer.part_path, {
             headers_file = transfer.headers_file,
             stall_time = DOWNLOAD_STALL_TIME,
-            proxy = ProxyUtil.get(transfer.tried_proxy),
+            proxy = ProxyUtil.get(),
         })
     end
     if not pid then
@@ -192,26 +191,16 @@ local function pollIn(seconds, transfer)
 end
 
 -- try a download again once it has failed, or what arrived wasn't the book (bad_book, see checkBook): from the
--- beginning, where the site wouldn't carry on from where it stopped, or what arrived can't be carried on from; through
--- the proxy as a backup (carrying on from there otherwise); or with another link, from a site whose links each go to
--- one of its servers, when the one it went to failed. returns whether it's being tried again
+-- beginning, where the site wouldn't carry on from where it stopped, or with another link, from a site whose links
+-- each go to one of its servers, when the one it went to failed. returns whether it's being tried again
 local function retry(transfer, exit_code, http_status, bad_book)
-    local why
     if bad_book then
-        transfer.resume = false
-        transfer.total_size, transfer.last_size, transfer.quiet_polls = nil, nil, 0
+        -- (which can't be carried on from)
         FileUtil.removeFile(transfer.part_path)
     elseif exit_code == 33 and transfer.resume then
-        why = "downloading the book again from the beginning, as the site can't carry on from where it stopped"
+        LogUtil.info("downloading the book again from the beginning, as the site can't carry on from where it stopped")
         transfer.resume = false
         FileUtil.removeFile(transfer.part_path)
-    end
-    if not why and not transfer.tried_proxy and ProxyUtil.backup() then
-        why = "retrying the download through the proxy"
-        transfer.tried_proxy = true
-    end
-    if why then
-        LogUtil.info(why)
         local started, spawn_err = startCurl(transfer)
         if not started then
             LogUtil.warn("could not start curl to try again:", spawn_err)
@@ -432,10 +421,9 @@ function pollDownload(transfer)
         end
         LogUtil.warn(
             string.format(
-                "download of %q from %s%s failed after %ds: curl exit code %d (%s%s), %d of %s bytes",
+                "download of %q from %s failed after %ds: curl exit code %d (%s%s), %d of %s bytes",
                 book.title,
                 LogUtil.site(transfer.download_url),
-                transfer.tried_proxy and " through the proxy" or "",
                 seconds,
                 exit_code,
                 exit_code == 0 and "empty file" or CurlUtil.getErrorMeaning(exit_code),
@@ -514,7 +502,6 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     local transfer = {
         book = book,
         part_path = filepath .. ".part",
-        tried_proxy = false,
         resume = true,
         expected = {},
     }

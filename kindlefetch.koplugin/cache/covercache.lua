@@ -169,11 +169,7 @@ function CoverCache:download(id, url)
     ensureCacheDir()
     local path = self:getPath(id)
 
-    local success = CurlUtil.download(url, path, false, COVER_MAX_TIME)
-    if not success and ProxyUtil.backup() then
-        LogUtil.info("retrying the cover download of", id, "through the proxy")
-        success = CurlUtil.download(url, path, true, COVER_MAX_TIME)
-    end
+    local success = CurlUtil.download(url, path, COVER_MAX_TIME)
     if success and isImage(id, path) then
         persistent_cache:set(path, id)
         return path
@@ -248,18 +244,18 @@ end
 
 -- with curl, or where curl can't (see CurlUtil.canFetch), KOReader's own HTTP, one after another, as a device may have
 -- no curl at all, as a Kobo can (#63), which left every cover a placeholder
-local function startDownloads(download_urls, filepaths, use_proxy, parallel_jobs, on_progress, on_done)
+local function startDownloads(download_urls, filepaths, parallel_jobs, on_progress, on_done)
     local pid, exit_file, config_file, err
     if CurlUtil.canFetch() then
         pid, exit_file, config_file, err =
-            CurlUtil.downloadMultiple(download_urls, filepaths, use_proxy, true, parallel_jobs, false, 15, {
+            CurlUtil.downloadMultiple(download_urls, filepaths, true, parallel_jobs, false, 15, {
                 stall_time = COVER_STALL_TIME,
             })
     else
         pid, exit_file, config_file, err = HttpDownload.startMultiple(download_urls, filepaths, {
             stall_time = COVER_STALL_TIME,
             max_time = COVER_MAX_TIME,
-            proxy = ProxyUtil.get(use_proxy),
+            proxy = ProxyUtil.get(),
         })
     end
     if not pid then
@@ -356,34 +352,7 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
         on_done(count)
     end
 
-    startDownloads(download_urls, filepaths, false, parallel_jobs, onProgress, function(downloaded_paths)
-        if #downloaded_paths == #filepaths or not ProxyUtil.backup() then
-            finish(downloaded_paths)
-            return
-        end
-
-        -- retry the covers that failed through the proxy
-        local downloaded = {}
-        for _, path in ipairs(downloaded_paths) do
-            downloaded[path] = true
-        end
-        local retry_urls = {}
-        local retry_paths = {}
-        for i, path in ipairs(filepaths) do
-            if not downloaded[path] then
-                table.insert(retry_urls, download_urls[i])
-                table.insert(retry_paths, path)
-            end
-        end
-
-        LogUtil.info("retrying", #retry_urls, "cover downloads through the proxy, as for searches and books")
-        startDownloads(retry_urls, retry_paths, true, parallel_jobs, onProgress, function(retried_paths)
-            for _, path in ipairs(retried_paths) do
-                table.insert(downloaded_paths, path)
-            end
-            finish(downloaded_paths)
-        end)
-    end)
+    startDownloads(download_urls, filepaths, parallel_jobs, onProgress, finish)
 
     return true
 end
