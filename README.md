@@ -19,6 +19,7 @@ KindleFetch integrates Library Genesis, Internet Archive and Z-Library into KORe
 - **Looking Through Results**: Show only the books found with some text in their title, authors or file type, without searching again, or change the languages, file types and book types they can be in from the menu at the top of the results, searching again with them
 - **Other Sites**: When a search finds nothing, or fails, offers to search the other sites for the same thing (Z-Library once logged in)
 - **Errors That Offer the Fix**: When a search, loading more books or a download fails for a reason with a fix, the message offers it, then tries again: Log in (once Z-Library has logged Kindle Fetch out), Update curl (on a Kindle whose curl is too old), or Turn on Wi-Fi (or Try again, where it's on). A book found on Z-Library is downloaded once logged in, rather than its link being looked up only for Z-Library to say so
+- **Narrower Searches**: Search only the books' titles, authors or ISBNs on Library Genesis and Internet Archive (Z-Library searches everything)
 - **Searching From Your Books**: Search for more by a book's author from the dialog KOReader shows on holding it (in the file browser, history, collections and file search, on versions of KOReader that let plugins add to it), or from Kindle Fetch's menu while reading it, and for text you highlight in a book with Search Kindle Fetch, choosing which site to search
 - **Book Cover Previews**: Display cover images in search results and the download prompt, with placeholders until each one arrives; tap a cover in the download prompt to see it full size
 - **Download Progress**: Visual download progress bar with real-time file size information, saying what it's waiting for until the book starts to arrive, and when the download has stalled
@@ -56,7 +57,7 @@ Internet Archive only has the books that anyone can download, rather than borrow
 
 <img width="350" alt="Kindle Fetch in KOReader's search menu" src="docs/screenshots/01-search-menu.png" /> <img width="350" alt="Kindle Fetch's menu" src="docs/screenshots/02-kindlefetch-menu.png" />
 
-1. Enter a book title, author, or keyword in the search box, or tap Recent to search again for one of your last 10 searches. KOReader carries on while the site answers; tap Cancel on the message saying it's searching to call the search off.
+1. Enter a book title, author, or keyword in the search box, or tap Recent to search again for one of your last 10 searches. On Library Genesis and Internet Archive, Search in narrows the search down to the books' titles, authors or ISBNs. KOReader carries on while the site answers; tap Cancel on the message saying it's searching to call the search off.
 
 <img width="350" alt="Search box" src="docs/screenshots/03-search-dialog.png" /> <img width="350" alt="Message saying it's searching, with a button to cancel" src="docs/screenshots/04-searching.png" />
 

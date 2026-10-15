@@ -237,8 +237,9 @@ describe("KindleFetch", function()
         helper.stub("api.lglisearch", {
             NAME = "Library Genesis",
             HAS_BOOK_TYPES = true,
-            search = function(_, query, page)
-                table.insert(searches, { query, page })
+            SCOPES = { "title", "author", "isbn" },
+            search = function(_, query, page, scope)
+                table.insert(searches, { query, page, scope })
                 table.insert(trap_widgets, require("util.httputil").getTrapWidget() or false)
                 -- books, error, the page to carry on from and how many results were read (or a function to run in
                 -- place of the search)
@@ -255,8 +256,9 @@ describe("KindleFetch", function()
         -- which finds the same books, but has no book types
         helper.stub("api.iasearch", {
             NAME = "Internet Archive",
-            search = function(_, query, page)
-                table.insert(archive_searches, { query, page })
+            SCOPES = { "title", "author", "isbn" },
+            search = function(_, query, page, scope)
+                table.insert(archive_searches, { query, page, scope })
                 local result = search_results[page] or { {} }
                 return result[1], result[2], result[3], result[4]
             end,
@@ -267,8 +269,8 @@ describe("KindleFetch", function()
         helper.stub("api.zlibsearch", {
             NAME = "Z-Library",
             NEEDS_LOGIN = true,
-            search = function(_, query, page)
-                table.insert(zlib_searches, { query, page })
+            search = function(_, query, page, scope)
+                table.insert(zlib_searches, { query, page, scope })
                 local result = search_results[page] or { {} }
                 return result[1], result[2], result[3], result[4]
             end,
@@ -846,7 +848,7 @@ describe("KindleFetch", function()
         it("can be cancelled", function()
             local plugin = openUI()
             plugin:setupUI("libgen")
-            plugin.search_box.buttons[1][1].callback()
+            button(plugin.search_box, "Cancel").callback()
 
             assert.is_true(helper.wasClosed(plugin.search_box))
             assert.are.equal(0, #searches)
@@ -1447,6 +1449,53 @@ describe("KindleFetch", function()
                 helper.stubs.network.when_connected()
                 assert.are.same({ { "dune", 1 }, { "dune", 6 } }, searches)
             end)
+        end)
+    end)
+
+    -- e.g. only the books' authors, on the sites that can be
+    describe("narrowing a search down", function()
+        it("searches what's chosen in the search box", function()
+            local plugin = openUI()
+            plugin:setupUI("libgen")
+            local scope = button(plugin.search_box, "Search in: All")
+            assert.are.equal("scope", scope.id)
+
+            scope.callback()
+            local chooser = helper.lastShown()
+            assert.are.equal("✓ All", chooser.buttons[1][1].text)
+            assert.are.equal("Author", chooser.buttons[1][3].text)
+            chooser.buttons[1][3].callback()
+            assert.is_true(helper.wasClosed(chooser))
+            assert.are.equal("Search in: Author", scope.text)
+
+            plugin.search_box.input_text = "herbert"
+            button(plugin.search_box, "Search").callback()
+            assert.are.same({ { "herbert", 1, "author" } }, searches)
+        end)
+
+        -- which it can't be
+        it("isn't offered for Z-Library", function()
+            local plugin = openUI()
+            plugin:setupUI("zlib")
+            assert.is_false(pcall(button, plugin.search_box, "Search in: All"))
+            plugin:setupUI("zlib", "1984", "author")
+            assert.are.same({ { "1984", 1 } }, zlib_searches)
+        end)
+
+        it("searches the other sites narrowed down as this one was, where they can be", function()
+            local plugin = openUI()
+            plugin:setupUI("libgen", "herbert", "author")
+            local explanation = helper.lastShown()
+            explanation.other_buttons[1][1].callback()
+            helper.tick()
+            assert.are.same({ { "herbert", 1, "author" } }, archive_searches)
+            assert.are.equal("Search in: Author", button(plugin.search_box, "Search in: Author").text)
+        end)
+
+        it("searches the authors' names for more by an author", function()
+            openUI():searchFor("Frank Herbert", "author")
+            helper.lastShown().buttons[1][1].callback()
+            assert.are.same({ { "Frank Herbert", 1, "author" } }, searches)
         end)
     end)
 

@@ -198,14 +198,31 @@ local function quote(term)
     return '"' .. term:gsub('[\\"]', "\\%0") .. '"'
 end
 
--- each word of the query in a book's title or the name of its author, e.g. "1984 orwell" finding 1984 by George
--- Orwell, rather than in all that's been written about it, which finds too much else
-local function wordClauses(query)
+-- what a search can be narrowed to (see Sources): only the books' titles, the names of their authors, or their ISBNs
+IaSearch.SCOPES = { "title", "author", "isbn" }
+local SCOPE_FIELDS = {
+    title = "title",
+    author = "creator",
+}
+
+-- each word of the query in a book's title or the name of its author (or the one of them the search is narrowed to,
+-- see SCOPES), e.g. "1984 orwell" finding 1984 by George Orwell, rather than in all that's been written about it,
+-- which finds too much else. an ISBN's the digits of the query, as it's saved without its hyphens
+local function wordClauses(query, scope)
+    if scope == "isbn" then
+        local isbn = query:upper():gsub("[^%dX]", "")
+        return isbn ~= "" and { "isbn:" .. quote(isbn) } or {}
+    end
     local clauses = {}
     for word in query:gmatch("%S+") do
         -- leaving out what's only punctuation, as there's nothing in it to find
         if word:find("[%w\128-\255]") then
-            table.insert(clauses, string.format("(title:%s OR creator:%s)", quote(word), quote(word)))
+            local field = SCOPE_FIELDS[scope]
+            table.insert(
+                clauses,
+                field and string.format("%s:%s", field, quote(word))
+                    or string.format("(title:%s OR creator:%s)", quote(word), quote(word))
+            )
         end
     end
     return clauses
@@ -222,8 +239,8 @@ end
 -- the search for the query, in the formats the file types can be in and the languages, among the books that anyone
 -- can download (Internet Archive lends most of its books instead, as files only its app can open), or nil if
 -- there's nothing in the query to search for
-function IaSearch.buildQuery(query, languages, file_types)
-    local clauses = wordClauses(query)
+function IaSearch.buildQuery(query, languages, file_types, scope)
+    local clauses = wordClauses(query, scope)
     if #clauses == 0 then
         return nil
     end
@@ -415,35 +432,38 @@ local function explainFailure(body, err, status)
 end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
-function IaSearch:isCached(query, page)
+function IaSearch:isCached(query, page, scope)
     local cached = SearchCache:get(
         SOURCE,
         query,
         page,
         KindleFetchSettings:getPreferredLanguages(),
         KindleFetchSettings:getPreferredFileTypes(),
-        {}
+        {},
+        scope
     )
     return cached ~= nil and cached.books ~= nil
 end
 
 -- search the given page of Internet Archive's results, returning the books found, the page to carry on from (or
--- nil once there are no more results), and how many results were read to find them (as LlgiSearch:search does)
-function IaSearch:search(query, page)
+-- nil once there are no more results), and how many results were read to find them, narrowed down by scope, where
+-- given (as LlgiSearch:search does)
+function IaSearch:search(query, page, scope)
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
     LogUtil.info(
         string.format(
-            "searching %s for %q from page %d, in %s, as %s",
+            "searching %s for %q%s from page %d, in %s, as %s",
             self.NAME,
             query,
+            scope and " by " .. scope or "",
             page,
             table.concat(languages, "/"),
             table.concat(file_types, "/")
         )
     )
 
-    local cached = SearchCache:get(SOURCE, query, page, languages, file_types, {})
+    local cached = SearchCache:get(SOURCE, query, page, languages, file_types, {}, scope)
     if cached and cached.books then
         LogUtil.info("showing", #cached.books, "books saved from an earlier search")
         return cached.books, nil, cached.next_page
@@ -453,7 +473,7 @@ function IaSearch:search(query, page)
         LogUtil.warn(self.NAME, "has none of the file types chosen")
         return nil, Errors.NO_FILE_TYPES
     end
-    local search = IaSearch.buildQuery(query, languages, file_types)
+    local search = IaSearch.buildQuery(query, languages, file_types, scope)
     if not search then
         return {}, nil, nil, 0
     end
@@ -497,7 +517,7 @@ function IaSearch:search(query, page)
         SearchCache:set({
             books = books,
             next_page = next_page,
-        }, SOURCE, query, page, languages, file_types, {})
+        }, SOURCE, query, page, languages, file_types, {}, scope)
     end
     return books, nil, next_page, results
 end

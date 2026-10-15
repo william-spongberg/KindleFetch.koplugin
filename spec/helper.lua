@@ -456,6 +456,27 @@ local function createStubs(state)
             o.getInputText = function(self)
                 return self.input_text or self.input or ""
             end
+            -- its buttons, by their ids, which can be turned on and off, and have their text changed, as KOReader's
+            o.button_table = {
+                getButtonById = function(_, id)
+                    for _, row in ipairs(o.buttons or {}) do
+                        for _, b in ipairs(row) do
+                            if b.id == id then
+                                function b:enable()
+                                    self.enabled = true
+                                end
+                                function b:disable()
+                                    self.enabled = false
+                                end
+                                function b:setText(text)
+                                    self.text = text
+                                end
+                                return b
+                            end
+                        end
+                    end
+                end,
+            }
             o.setInputText = function(self, text)
                 self.input_text = text
             end
