@@ -50,14 +50,13 @@ function Diagnostics.summary()
         return require("version"):getCurrentRevision()
     end)
     return string.format(
-        "KindleFetch %s on KOReader %s, %s %s, curl %s%s%s",
+        "KindleFetch %s on KOReader %s, %s %s, curl %s%s",
         Diagnostics.version() or "unknown",
         ok and koreader_version or "unknown",
         deviceKind(),
         tostring(Device.model),
         CurlUtil.getVersion() or "not found",
-        ProxyUtil.koreader() and ", through KOReader's HTTP proxy" or "",
-        ProxyUtil.backup() and ", with PROXY_URL set" or ""
+        ProxyUtil.get() and ", through KOReader's HTTP proxy" or ""
     )
 end
 

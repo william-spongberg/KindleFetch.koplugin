@@ -128,7 +128,7 @@ Kindle Fetch looks Library Genesis' sites up on Wikipedia, then searches them in
 - Encrypted DNS in the [settings](#settings), which Kindle Fetch offers when it can't find them, as it looks them up with Cloudflare's DNS rather than the network's
 - another Wi-Fi network, such as a phone's hotspot
 - another DNS server on your router, such as 1.1.1.1 or 8.8.8.8, as the Kindle uses the one its Wi-Fi network gives it
-- a proxy (see HTTP Proxy in the [settings](#settings), or [Environment Variables](#environment-variables)) or VPN
+- a proxy (HTTP Proxy in the [settings](#settings)) or VPN
 
 ### Updating curl fails
 
@@ -178,7 +178,7 @@ kindlefetch.koplugin/
 │   ├── settings.lua           # Persistent storage and management of user preferences
 │   └── settingspage.lua       # UI for configuring user preferences, and clearing the caches
 ├── api/
-│   ├── downloader.lua         # Downloads books from the site they were found on, with progress tracking, proxy fallback, and error recovery
+│   ├── downloader.lua         # Downloads books from the site they were found on, with progress tracking and error recovery
 │   ├── sources.lua            # The sites books can be searched for and downloaded from
 │   ├── lglisearch.lua         # Searches Library Genesis and finds its download links; parses HTML, filters by preferences and caches results
 │   ├── iasearch.lua           # Searches Internet Archive's books that anyone can download, and finds their files, with its search API
@@ -214,7 +214,7 @@ kindlefetch.koplugin/
     ├── logutil.lua            # Logger wrapper
     ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed
     ├── pathutil.lua           # Plugin install location and temporary download directory
-    ├── proxyutil.lua          # The proxies everything goes through: KOReader's HTTP proxy, where it's on, and PROXY_URL as a backup
+    ├── proxyutil.lua          # The proxy everything goes through: KOReader's HTTP proxy, where it's on
     ├── shellutil.lua          # Runs a step of installing an update with shell commands, saying what went wrong in the command's own words
     └── versionutil.lua        # Version parsing and comparison utilities
 ```
@@ -272,14 +272,14 @@ kindlefetch.koplugin/
    - A download that receives nothing for 30 seconds is tried again, carrying on from where it stopped rather than starting the book again, and given up on after two more tries
    - Progress widget updates every 0.5 seconds with percentage and file size information. Until the book starts to arrive, it says what it's waiting for: a download link, then the site, which can take several seconds to start sending the book. Once nothing has arrived for 10 seconds, it says the download has stalled
    - The device is kept from going to sleep while books download, as that turns Wi-Fi off: no standby between taps, and no suspending while it isn't used (by KOReader's AutoSuspend, or a Kindle's own screensaver), each put back as it was once the last download is over
-   - Once it has arrived, the book is checked: by how it starts (rather than a web page sent in its place, or a file that isn't its file type), that all of it arrived, and, where the site lists its MD5 (Library Genesis and Internet Archive), that it's the very file listed, a piece at a time so KOReader carries on. One that isn't is tried again from the beginning, through the proxy or with another link where there is one, otherwise the download fails saying why
+   - Once it has arrived, the book is checked: by how it starts (rather than a web page sent in its place, or a file that isn't its file type), that all of it arrived, and, where the site lists its MD5 (Library Genesis and Internet Archive), that it's the very file listed, a piece at a time so KOReader carries on. One that isn't is downloaded again with another link where the site gives one (Z-Library), otherwise the download fails saying why
    - On completion, the `.part` file is renamed to the book's name, in the folder chosen in the download prompt, and the plugin offers to open it
 
 5. **Error Handling & Resilience**
    - Wi-Fi is turned on before searching if it's off
    - When something fails for a reason with a fix, the message offers it, then tries again: Log in, Update curl, Use encrypted DNS, Turn on Wi-Fi, or Try again. The other sites are offered when a search finds nothing or fails
    - A download waits while the device sleeps or Wi-Fi is off, rather than failing as if the site had, then carries on from what had arrived, with the same link, once Wi-Fi is back (so Z-Library isn't asked for another, which can count as another download)
-   - Everything goes through KOReader's HTTP proxy, where it's turned on, given to curl in a file rather than on its command line, as it can have a password in it. Failed searches, cover downloads and book downloads automatically retry through a backup proxy (if `PROXY_URL` env var is set) and empty or failed downloads are deleted
+   - Everything goes through KOReader's HTTP proxy, where it's turned on (in KOReader's network settings or Kindle Fetch's), given to curl in a file rather than on its command line, as it can have a password in it. Empty or failed downloads are deleted
    - Mirrors that answer with something other than Library Genesis are removed from cache; one that doesn't answer is tried after the others for an hour (and from then on, until it answers again), rather than removed, as it may only not have for a moment; if all cached URLs fail they are re-scraped from Wikipedia
    - When none of Library Genesis' sites can be found, though Wikipedia can, as when the network is blocking them, the plugin says so, rather than only that the last couldn't be found (see [Troubleshooting](#troubleshooting))
    - When Library Genesis' database is too busy for its mirrors to search or give download links, which they all say at once as they share it, the plugin says so, keeping the mirrors rather than looking them up again
@@ -290,16 +290,6 @@ kindlefetch.koplugin/
    - User can cancel downloads at any time via the progress widget, and downloads are cancelled when KOReader closes (which it does when the device is powered off or restarted, or its storage is shared over USB, as well as when it exits), rather than curl carrying on, writing to the storage being shared
    - Curl exit codes are mapped to human-readable error messages, and what went wrong is shown in a message that stays until it's dismissed
    - A mistake in Kindle Fetch itself, in what KOReader runs later and doesn't catch errors in (such as checking on a download), is logged to crash.log with where it happened, and stops what was going on, cleaning up after it, rather than KOReader exiting
-
-### Environment Variables
-
-The plugin supports an optional `PROXY_URL` environment variable for a backup proxy:
-
-```bash
-export PROXY_URL="http://proxy.example.com:8080"
-```
-
-If a search, book cover or book download fails, the plugin automatically retries it through the proxy. To go through a proxy for everything, turn on HTTP Proxy in the settings instead.
 
 ## Attribution
 

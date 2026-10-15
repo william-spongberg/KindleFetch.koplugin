@@ -75,8 +75,7 @@ local function fetchUpdateInfo(callback)
     end
 
     local release_file = PathUtil.getTmpPath() .. "/latest_release.json"
-    local pid, exit_file =
-        CurlUtil.startDownload(REPO_VERSION_URL .. "/releases/latest", release_file, false, CHECK_MAX_TIME)
+    local pid, exit_file = CurlUtil.startDownload(REPO_VERSION_URL .. "/releases/latest", release_file, CHECK_MAX_TIME)
     if not pid then
         -- (which is then why not)
         LogUtil.warn("could not start curl to look up the latest release:", exit_file)

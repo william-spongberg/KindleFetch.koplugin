@@ -132,28 +132,6 @@ describe("HttpUtil", function()
         assert.is_nil(HttpUtil.getBody("https://libgen.example"))
     end)
 
-    it("retries through PROXY_URL when the direct request fails", function()
-        helper.state.env.PROXY_URL = "http://proxy.example:8080"
-        respond({ "", nil, "connection refused" }, { "<html>via proxy</html>", 1, 200 })
-
-        assert.are.equal("<html>via proxy</html>", HttpUtil.getBody("https://libgen.example"))
-        assert.are.equal("http://proxy.example:8080", requests[2].proxy)
-    end)
-
-    it("returns the proxy error when both requests fail, without logging the proxy's address", function()
-        helper.state.env.PROXY_URL = "http://user:secret@proxy.example:8080"
-        respond({ "", nil, "connection refused" }, { "", nil, "proxy unreachable" })
-
-        local body, err = HttpUtil.getBody("https://libgen.example")
-        assert.is_nil(body)
-        assert.are.equal("proxy unreachable", err)
-        for _, log in ipairs(helper.state.logs) do
-            for i = 3, #log do
-                assert.is_nil(tostring(log[i]):find("secret", 1, true))
-            end
-        end
-    end)
-
     -- where it's turned on, as for KOReader's own requests
     it("goes through KOReader's HTTP proxy", function()
         helper.stubs.http.PROXY = "http://koreader.example:3128"
@@ -163,12 +141,12 @@ describe("HttpUtil", function()
         assert.are.equal("http://koreader.example:3128", requests[1].proxy)
     end)
 
-    it("does not use a proxy when PROXY_URL is not set", function()
-        helper.state.env.PROXY_URL = false
+    it("goes without a proxy where there's none, asking once", function()
         respond({ "", nil, "connection refused" })
 
         assert.is_nil(HttpUtil.getBody("https://libgen.example"))
         assert.are.equal(1, #requests)
+        assert.is_nil(requests[1].proxy)
     end)
 
     -- curl asks for pages compressed, which Library Genesis sends several times sooner, and doesn't hold KOReader
@@ -391,23 +369,6 @@ describe("HttpUtil", function()
             assert.are.equal("curl isn't installed on this device", err)
         end)
 
-        it("retries through PROXY_URL when the direct request fails", function()
-            helper.state.env.PROXY_URL = "http://proxy.example:8080"
-            curlAnswers(function(cmd)
-                -- given to curl in a file (see CurlUtil.applyProxy)
-                local config_file = cmd:match("%-K '([^']+)'")
-                if
-                    config_file and helper.readFile(config_file):find('proxy = "http://proxy.example:8080"', 1, true)
-                then
-                    return "<html>via proxy</html>", 200
-                end
-                return nil, "000", 7
-            end)
-
-            assert.are.equal("<html>via proxy</html>", HttpUtil.getBody("https://libgen.example"))
-            assert.are.equal(2, #fetches)
-        end)
-
         it("holds KOReader up while it waits, when it wasn't asked to wait in the background", function()
             curlAnswers(function()
                 return "<html>results</html>", 200
@@ -532,8 +493,7 @@ describe("HttpUtil", function()
                 assert.are.equal(message, HttpUtil.getTrapWidget())
             end)
 
-            it("says so when it's called off, without trying again through PROXY_URL", function()
-                helper.state.env.PROXY_URL = "http://proxy.example:8080"
+            it("says so when it's called off", function()
                 -- a tap on its Cancel
                 message.cancelled = true
                 helper.state.dismiss = true
@@ -625,8 +585,8 @@ describe("HttpUtil", function()
             )
             local CurlUtil = require("util.curlutil")
             local download
-            CurlUtil.download = function(url, filepath, use_proxy, max_time, opts)
-                download = { url, filepath, use_proxy, max_time, opts }
+            CurlUtil.download = function(url, filepath, max_time, opts)
+                download = { url, filepath, max_time, opts }
                 return nil, "request timed out"
             end
 
@@ -634,7 +594,7 @@ describe("HttpUtil", function()
             assert.is_nil(ok)
             assert.are.equal("request timed out", err)
             -- for at most 5 minutes, and 30 seconds without anything arriving, as it holds KOReader up meanwhile
-            assert.are.same({ "https://github.example/curl-armhf", path, false, 300, { stall_time = 30 } }, download)
+            assert.are.same({ "https://github.example/curl-armhf", path, 300, { stall_time = 30 } }, download)
             assert.are.equal(0, #requests)
         end)
     end)
