@@ -1239,6 +1239,31 @@ describe("KindleFetch", function()
             assert.are.equal(0, #helper.state.notifications)
         end)
 
+        describe("offering what fixes a search that failed", function()
+            it("tries again, once the device is connected", function()
+                search_results[1] = { nil, "no internet connection" }
+                search(openUI(), "dune")
+                search_results[1] = { { book("Dune") } }
+
+                local again = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Try again", again.text)
+                again.callback()
+                assert.are.same({ { "dune", 1 }, { "dune", 1 } }, searches)
+                assert.are.same({ "Dune" }, itemTexts(menus[1]))
+            end)
+
+            it("logs in again, then searches again, once Z-Library has logged Kindle Fetch out", function()
+                search_results[1] = { nil, "Z-Library has logged Kindle Fetch out, so log in again" }
+                search(openUI(), "1984", "zlib")
+
+                local log_in = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Log in", log_in.text)
+                log_in.callback()
+                zlib_logins[1]()
+                assert.are.equal(2, #zlib_searches)
+            end)
+        end)
+
         describe("offering the other sites", function()
             local function texts(row)
                 local result = {}
@@ -1288,7 +1313,9 @@ describe("KindleFetch", function()
                 search(openUI(), "dune")
 
                 assert.are.equal("Search failed: no internet connection", helper.lastError())
-                assert.is_nil(helper.lastShown().other_buttons)
+                -- just trying again (see the fixes errors offer)
+                assert.are.same({ "Try again" }, texts(helper.lastShown().other_buttons[1]))
+                assert.are.equal(1, #helper.lastShown().other_buttons)
             end)
 
             it("offers them when the site listed results, but none in the languages and file types chosen", function()
@@ -1704,6 +1731,17 @@ describe("KindleFetch", function()
             search(plugin, "dune")
         end)
 
+        it("offers to try again when loading more fails as the device isn't connected", function()
+            search_results[2] = { nil, "no internet connection" }
+            loadMore()
+            local again = helper.lastShown().other_buttons[1][1]
+            assert.are.equal("Loading more books failed: no internet connection", helper.lastShown().text)
+
+            search_results[2] = { { book("Children of Dune") }, nil, 4 }
+            again.callback()
+            assert.are.same({ "Dune", "Dune Messiah", "Children of Dune", "Load more" }, itemTexts(menus[1]))
+        end)
+
         it("says it's loading more until they're found, with a button to call it off", function()
             search_results[2] = { { book("Children of Dune") }, nil, 4 }
             local shown = #helper.state.shown
@@ -2089,6 +2127,64 @@ describe("KindleFetch", function()
             downloads[1].callback(false)
             assert.are.equal("Download failed", helper.lastError())
             assert.are.equal(0, refreshes)
+        end)
+
+        -- rather than its link being looked up, only for Z-Library to say so
+        it("logs in to Z-Library first, to download a book found there once logged out", function()
+            local zlib_book = book("1984")
+            zlib_book.source = "zlib"
+            zlib_logged_in = false
+            plugin:downloadBook(zlib_book)
+            assert.are.equal(0, #downloads)
+            assert.are.equal(1, #zlib_logins)
+
+            zlib_logged_in = true
+            zlib_logins[1]()
+            assert.are.equal(zlib_book, downloads[1].book)
+        end)
+
+        describe("offering what fixes it when it fails", function()
+            it("logs in again, then downloads the book again, once Z-Library has logged Kindle Fetch out", function()
+                selectBook("Dune")
+                downloads[1].callback(false, "Z-Library has logged Kindle Fetch out, so log in again")
+
+                local failure = helper.lastShown()
+                assert.are.equal(
+                    "Download failed: Z-Library has logged Kindle Fetch out, so log in again",
+                    failure.text
+                )
+                assert.are.equal("notice-warning", failure.icon)
+                assert.are.equal("Log in", failure.other_buttons[1][1].text)
+                failure.other_buttons[1][1].callback()
+                zlib_logins[1]()
+                assert.are.equal(2, #downloads)
+                assert.are.equal("Dune", downloads[2].book.title)
+            end)
+
+            it("offers to update a Kindle's curl, where it's too old", function()
+                selectBook("Dune")
+                downloads[1].callback(false, require("util.errors").OUTDATED_CURL)
+
+                local update = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Update curl", update.text)
+                update.callback()
+                assert.are.equal(1, checks.curl)
+                assert.is_true(curl_check_user_requested)
+            end)
+
+            it("turns Wi-Fi on, then downloads the book again, where the device isn't connected", function()
+                selectBook("Dune")
+                helper.stubs.network.wifi_on = false
+                helper.stubs.network.connected = false
+                downloads[1].callback(false, "no internet connection")
+
+                local wifi = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Turn on Wi-Fi", wifi.text)
+                wifi.callback()
+                assert.are.equal(1, #downloads)
+                helper.stubs.network.when_connected()
+                assert.are.equal(2, #downloads)
+            end)
         end)
 
         it("says a download was cancelled, rather than that it failed", function()

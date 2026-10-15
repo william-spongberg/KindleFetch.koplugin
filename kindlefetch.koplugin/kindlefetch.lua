@@ -439,7 +439,7 @@ end
 
 -- whether the site can only be searched once logged into, and isn't. then logs in, calling on_logged_in once it has
 local function needsLogin(source, on_logged_in)
-    if not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn() then
+    if not (Sources[source] and Sources[source].NEEDS_LOGIN) or ZlibAccount:isLoggedIn() then
         return false
     end
     LogUtil.info("logging in to", Sources[source].NAME, "before searching it")
@@ -653,7 +653,7 @@ function KindleFetch:searchFrom(query, page)
         if err or not books then
             err = err or "search failed"
             LogUtil.warn(string.format("search for %q failed: %s", query, err))
-            self:explainFailure(query, err)
+            self:explainFailure(query, page, err)
             return
         end
         if #books == 0 then
@@ -683,11 +683,59 @@ function KindleFetch:rememberSearch(query)
     end
 end
 
--- say the search failed, and why, offering to search the other sites instead (see otherSites), unless the device
--- isn't connected, which they'd fail for too
-function KindleFetch:explainFailure(query, err)
-    local text = T(_("Search failed: %1"), err)
-    if err == Errors.NO_CONNECTION then
+-- buttons for what fixes err, where something does, which call retry, where given, once it has: logging in to
+-- Z-Library again, updating a Kindle's curl, or turning Wi-Fi on (or, where it's on, trying again, as the internet may
+-- only have dropped for a moment)
+function KindleFetch:fixes(err, retry)
+    if err == Errors.LOGGED_OUT then
+        return {
+            {
+                text = _("Log in"),
+                callback = function()
+                    ZlibLogin.show(retry)
+                end,
+            },
+        }
+    elseif err == Errors.OUTDATED_CURL then
+        return {
+            {
+                text = _("Update curl"),
+                callback = function()
+                    CurlUpdater.checkVersion(true)
+                end,
+            },
+        }
+    elseif err == Errors.NO_CONNECTION and retry then
+        if not NetworkMgr:isWifiOn() then
+            return {
+                {
+                    text = _("Turn on Wi-Fi"),
+                    callback = function()
+                        NetworkMgr:runWhenConnected(retry)
+                    end,
+                },
+            }
+        end
+        return { { text = _("Try again"), callback = retry } }
+    end
+    return {}
+end
+
+-- say something failed (text, which err is why), offering what fixes it (see fixes, which call retry once it has) and
+-- the rows of buttons in other_rows, that have any, in a message that stays until closed, or as an error, where
+-- there's nothing to offer
+function KindleFetch:showFailure(text, err, retry, other_rows)
+    local rows = {}
+    local fixes = self:fixes(err, retry)
+    if #fixes > 0 then
+        table.insert(rows, fixes)
+    end
+    for __, row in ipairs(other_rows or {}) do
+        if #row > 0 then
+            table.insert(rows, row)
+        end
+    end
+    if #rows == 0 then
         NotifyUtil.error(text)
         return
     end
@@ -696,8 +744,16 @@ function KindleFetch:explainFailure(query, err)
         icon = "notice-warning",
         no_ok_button = true,
         cancel_text = _("Close"),
-        other_buttons = { self:otherSites(query) },
+        other_buttons = rows,
     })
+end
+
+-- say the search for the page failed, and why, offering what fixes it (see fixes), and to search the other sites
+-- instead (see otherSites), unless the device isn't connected, which they'd fail for too
+function KindleFetch:explainFailure(query, page, err)
+    self:showFailure(T(_("Search failed: %1"), err), err, function()
+        self:searchOnline(query, page)
+    end, { err ~= Errors.NO_CONNECTION and self:otherSites(query) or {} })
 end
 
 -- say that no books were found, and why when it's known: the site may have listed plenty, all in other languages or
@@ -1108,7 +1164,9 @@ function KindleFetch:loadMoreBooks()
         if err or not books then
             err = err or "search failed"
             LogUtil.warn(string.format("loading more books for %q failed: %s", query, err))
-            NotifyUtil.error(T(_("Loading more books failed: %1"), err))
+            self:showFailure(T(_("Loading more books failed: %1"), err), err, function()
+                self:loadMoreBooks()
+            end)
             return
         end
 
@@ -1215,6 +1273,15 @@ function KindleFetch:bookButtons(filepath, close)
 end
 
 function KindleFetch:downloadBook(book)
+    -- logging in first, where the site needs that, as a book found before logging out can't be downloaded until then,
+    -- rather than its link being looked up only for Z-Library to say so
+    local function downloadOnceLoggedIn()
+        self:downloadBook(book)
+    end
+    if needsLogin(book.source, downloadOnceLoggedIn) then
+        return
+    end
+
     local filepath = buildDownloadPath(book)
     Downloader:downloadBook(book, filepath, function(ok, err, saved_filepath)
         if ok then
@@ -1275,7 +1342,10 @@ function KindleFetch:downloadBook(book)
             NotifyUtil.info(_("Download cancelled"))
         else
             LogUtil.warn("download failed for", book.title, err)
-            NotifyUtil.error(err and T(_("Download failed: %1"), err) or _("Download failed"))
+            -- offering what fixes it, then downloading it again (see fixes)
+            self:showFailure(err and T(_("Download failed: %1"), err) or _("Download failed"), err, function()
+                self:downloadBook(book)
+            end)
         end
     end, function(existing_filepath)
         -- the book is already there, and was chosen to be read rather than downloaded again
