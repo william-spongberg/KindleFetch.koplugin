@@ -1,0 +1,32 @@
+name: Canary
+
+# the tests against the live sites (tagged #live), which find out when a site has changed, e.g. how its pages are laid
+# out, every day, rather than on every push, which they'd fail whenever a site is down. a scheduled run that fails is
+# emailed to whoever last changed this schedule
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # KOReader runs on LuaJIT
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "luajit-2.1"
+
+      - uses: leafo/gh-actions-luarocks@v6
+
+      - name: Install busted
+        run: luarocks install busted
+
+      # (Z-Library's are skipped without an account to log in with)
+      - name: Test against the live sites
+        env:
+          KINDLEFETCH_ZLIB_EMAIL: ${{ secrets.KINDLEFETCH_ZLIB_EMAIL }}
+          KINDLEFETCH_ZLIB_PASSWORD: ${{ secrets.KINDLEFETCH_ZLIB_PASSWORD }}
+        run: busted --tags=live

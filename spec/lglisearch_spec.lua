@@ -857,7 +857,7 @@ describe("LlgiSearch", function()
         end)
 
         -- catches Library Genesis changing its results page, like Anna's Archive blocking searches did (#24)
-        it("finds books on the live Library Genesis site", function()
+        it("finds books on the live Library Genesis site #live", function()
             web.live = true
             local books, err, next_page = LlgiSearch:search("frank herbert dune", 1)
 
