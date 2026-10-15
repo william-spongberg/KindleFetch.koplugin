@@ -23,6 +23,11 @@ local FALLBACK_URLS = {
     "https://libgen.gl",
     "https://libgen.li",
 }
+-- how long a mirror that didn't answer is tried after the others for (see restUrl), even once the mirrors have been
+-- looked up again
+local REST_TIME = 60 * 60
+-- when each mirror that didn't answer last didn't, this session
+local failed_at = {}
 local ZLIB_KEY = "zlib"
 local ZLIB_URL = "https://en.wikipedia.org/wiki/Z-Library"
 -- the address Wikipedia listed when this was written, for the same reason
@@ -77,6 +82,25 @@ local function parseZlibUrls(html)
     return #urls > 0 and urls or nil
 end
 
+-- urls, with those that didn't answer in the last while (see restUrl) after the others, in a new list
+local function restedLast(urls)
+    local now = os.time()
+    local ready, resting = {}, {}
+    for __, url in ipairs(urls) do
+        local failed = failed_at[url]
+        -- (or since the clock was put back)
+        if failed and failed <= now and now - failed < REST_TIME then
+            table.insert(resting, url)
+        else
+            table.insert(ready, url)
+        end
+    end
+    for __, url in ipairs(resting) do
+        table.insert(ready, url)
+    end
+    return ready
+end
+
 -- the urls listed on a page, cached, or looked up again when refresh is set. without them, also returns why, and
 -- whether the page answered at all (it doesn't without an internet connection). name is the site they're for, to
 -- say what's being looked up
@@ -120,10 +144,11 @@ function UrlApi:getUrls(key, url, parse, refresh, name)
     return nil, _("no mirrors listed"), true
 end
 
--- why a site's mirrors couldn't be looked up on Wikipedia, which didn't answer (it answering without any falls back to
--- those known when KindleFetch was written, see getSiteUrls): that there's no internet connection, when its name
--- couldn't be looked up or it couldn't be connected to, otherwise what went wrong, such as a secure connection failing,
--- as it does when the device's clock is wrong, which was said to be there being no internet connection
+-- why a site's mirrors couldn't be looked up on Wikipedia, which didn't answer just after the ones there were failed
+-- (otherwise they fall back to those looked up before, or known when KindleFetch was written, see getSiteUrls): that
+-- there's no internet connection, when its name couldn't be looked up or it couldn't be connected to, otherwise what
+-- went wrong, such as a secure connection failing, as it does when the device's clock is wrong, which was said to be
+-- there being no internet connection
 function UrlApi.explainLookupFailure(err)
     if err == HttpUtil.CANCELLED then
         return err
@@ -148,12 +173,34 @@ function UrlApi.explainLookupFailure(err)
     return T(_("the mirrors couldn't be looked up on Wikipedia (%1)"), err)
 end
 
--- a site's urls, looked up on its Wikipedia page again when refresh is set (see getUrls), or the ones known when
--- KindleFetch was written when the page answers without any
+-- a site's urls, looked up on its Wikipedia page again when refresh is set (see getUrls), those that didn't answer
+-- in the last while last (see restUrl). when the page can't be reached, e.g. where Wikipedia is blocked, they're the
+-- ones looked up before, however long ago, or otherwise the ones known when KindleFetch was written, which may well
+-- still work, unless the ones there were have just failed (refresh), when it's said why. they're those known when it
+-- was written too when the page answers without any
 function UrlApi:getSiteUrls(key, url, parse, fallback, refresh, name)
     local urls, err, answered = self:getUrls(key, url, parse, refresh, name)
-    if urls or not answered then
-        return urls, err, answered
+    if urls then
+        return restedLast(urls)
+    end
+    if err == HttpUtil.CANCELLED or (not answered and refresh) then
+        return nil, err, answered
+    end
+    if not answered then
+        local known = UrlCache:peek(key)
+        if type(known) == "table" and #known > 0 then
+            LogUtil.warn("using the mirrors looked up before, as Wikipedia couldn't be reached:", err)
+        else
+            LogUtil.warn("using the mirrors known when KindleFetch was written, as Wikipedia couldn't be reached:", err)
+            known = fallback
+        end
+        -- kept for as long as any others would be, as they're looked up again as soon as they fail
+        local known_urls = {}
+        for __, known_url in ipairs(known) do
+            table.insert(known_urls, known_url)
+        end
+        UrlCache:set(known_urls, key)
+        return restedLast(known_urls)
     end
 
     -- Wikipedia answered, but not with the mirrors. they're kept like any others, so Wikipedia is asked again
@@ -182,6 +229,19 @@ function UrlApi:deleteLibgenUrl(url)
     return UrlCache:deleteValueFromKey(url, LIBGEN_KEY)
 end
 
+-- try the mirror after the others for a while (see REST_TIME), as it didn't answer: it may be down, or only have been
+-- for a moment, so it's no longer dropped, which left none once the connection had dropped for a moment, until they
+-- were looked up again
+local function restUrl(url, key)
+    failed_at[url] = os.time()
+    return UrlCache:moveValueToBack(url, key)
+end
+
+function UrlApi:restLibgenUrl(url)
+    LogUtil.info("trying mirror", LogUtil.site(url), "after the others for a while, as it didn't answer")
+    return restUrl(url, LIBGEN_KEY)
+end
+
 -- Z-Library's addresses, which it moves between as they're taken down, looked up on Wikipedia again when refresh is
 -- set (see getUrls)
 function UrlApi:getZlibUrls(refresh)
@@ -196,6 +256,12 @@ end
 function UrlApi:deleteZlibUrl(url)
     LogUtil.info("dropping Z-Library's address", LogUtil.site(url), "as it failed")
     return UrlCache:deleteValueFromKey(url, ZLIB_KEY)
+end
+
+-- as restLibgenUrl
+function UrlApi:restZlibUrl(url)
+    LogUtil.info("trying Z-Library's address", LogUtil.site(url), "after the others for a while, as it didn't answer")
+    return restUrl(url, ZLIB_KEY)
 end
 
 return UrlApi

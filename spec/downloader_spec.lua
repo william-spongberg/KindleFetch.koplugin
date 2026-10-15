@@ -918,18 +918,20 @@ describe("Downloader", function()
             assert.are.same({ { ok = true } }, results)
         end)
 
-        it("tries the next mirror and forgets ones that fail", function()
+        -- rather than forgetting it, as it may only not have for a moment
+        it("tries the next mirror, and the one that didn't answer after the others from then on", function()
             web.pages[adsUrl(mirrors[1])] = nil
             hasBook(mirrors[2])
 
             download()
             assert.are.equal(getUrl(mirrors[2]), spawned[1].url)
 
-            local remaining = {}
+            local reordered = {}
             for i = 2, #mirrors do
-                table.insert(remaining, mirrors[i])
+                table.insert(reordered, mirrors[i])
             end
-            assert.are.same(remaining, UrlApi:getLibgenUrls())
+            table.insert(reordered, mirrors[1])
+            assert.are.same(reordered, UrlApi:getLibgenUrls())
         end)
 
         it("keeps mirrors that just do not have the book", function()
@@ -1092,11 +1094,26 @@ describe("Downloader", function()
         end)
 
         it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[adsUrl(mirror)] = nil
+            end
             web.wikipedia_down = true
 
             download()
             assert.are.same({ { ok = false, err = "no internet connection" } }, results)
             assert.is_true(helper.wasClosed(helper.lastShown()))
+        end)
+
+        -- e.g. where Wikipedia is blocked
+        it("downloads from the mirrors known when the plugin was written when Wikipedia can't be reached", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[adsUrl(mirror)] = nil
+            end
+            hasBook("https://libgen.vg")
+            web.wikipedia_down = true
+
+            download()
+            assert.are.equal(getUrl("https://libgen.vg"), spawned[1].url)
         end)
 
         -- rather than forgetting every mirror while offline

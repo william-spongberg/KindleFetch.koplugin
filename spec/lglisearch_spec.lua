@@ -628,17 +628,20 @@ describe("LlgiSearch", function()
             assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
         end)
 
-        it("tries the next mirror and forgets ones that fail", function()
+        -- rather than forgetting it, as it may only not have for a moment
+        it("tries the next mirror, and the one that didn't answer after the others from then on", function()
             results(mirrors[2], { fixtures.DUNE })
 
             assert.are.equal(1, #LlgiSearch:search("dune", 1))
             assert.are.same({ searchUrl(mirrors[1]), searchUrl(mirrors[2]) }, searches())
 
-            local remaining = {}
+            local reordered = {}
             for i = 2, #mirrors do
-                table.insert(remaining, mirrors[i])
+                table.insert(reordered, mirrors[i])
             end
-            assert.are.same(remaining, require("api.urlapi"):getLibgenUrls())
+            table.insert(reordered, mirrors[1])
+            assert.are.same(reordered, require("api.urlapi"):getLibgenUrls())
+            assert.is_truthy(helper.logged("info", "^trying mirror .* after the others for a while"))
         end)
 
         -- rather than asking the ones before it every time, which may be blocking searches for a while

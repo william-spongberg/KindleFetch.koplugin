@@ -87,14 +87,68 @@ describe("UrlApi", function()
             assert.are.equal(2, #http.requests)
         end)
 
-        it("are nil when Wikipedia cannot be reached", function()
-            http.request = function()
-                return nil, "could not resolve host"
+        -- e.g. where it's blocked, where the mirrors may well still work
+        describe("when Wikipedia cannot be reached", function()
+            local function unreachable()
+                http.request = function(request)
+                    table.insert(http.requests, request.url)
+                    return nil, "could not resolve host"
+                end
             end
 
-            local urls, err = UrlApi:getLibgenUrls()
-            assert.is_nil(urls)
-            assert.are.equal("could not resolve host", err)
+            it("are the ones known when the plugin was written, when none were looked up before", function()
+                unreachable()
+                local urls = UrlApi:getLibgenUrls()
+
+                assert.are.equal("https://libgen.vg", urls[1])
+                assert.are.equal(5, #urls)
+                assert.is_truthy(
+                    helper.logged(
+                        "warn",
+                        "^using the mirrors known when KindleFetch was written, as Wikipedia couldn't be reached: "
+                            .. "could not resolve host$"
+                    )
+                )
+            end)
+
+            it("are the ones looked up before, however long ago", function()
+                helper.state.time = os.time()
+                local urls = UrlApi:getLibgenUrls()
+                helper.state.time = helper.state.time + 8 * 24 * 60 * 60
+                unreachable()
+
+                assert.are.same(urls, UrlApi:getLibgenUrls())
+                assert.is_truthy(helper.logged("warn", "^using the mirrors looked up before"))
+                -- kept, rather than Wikipedia being asked again for every page of every search
+                UrlApi:getLibgenUrls()
+                assert.are.equal(2, #http.requests)
+            end)
+
+            -- which there's no point in trying again
+            it("are nil just after the ones there were failed, saying why", function()
+                UrlApi:getLibgenUrls()
+                unreachable()
+
+                local urls, err = UrlApi:getLibgenUrls(true)
+                assert.is_nil(urls)
+                assert.are.equal("could not resolve host", err)
+            end)
+        end)
+
+        -- rather than being forgotten, as it may only not have answered for a moment
+        it("can have one that didn't answer tried after the others for a while, even once looked up again", function()
+            local urls = UrlApi:getLibgenUrls()
+            UrlApi:restLibgenUrl(urls[1])
+
+            local reordered = UrlApi:getLibgenUrls()
+            assert.are.equal(#urls, #reordered)
+            assert.are.equal(urls[2], reordered[1])
+            assert.are.equal(urls[1], reordered[#reordered])
+            assert.are.equal(urls[1], UrlApi:getLibgenUrls(true)[#urls])
+
+            -- until it has been a while
+            helper.state.time = os.time() + 60 * 60 + 1
+            assert.are.equal(urls[1], UrlApi:getLibgenUrls(true)[1])
         end)
 
         -- the page can be edited by anyone
