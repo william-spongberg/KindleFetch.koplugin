@@ -9,6 +9,18 @@ function StringUtil.assertValidString(text)
     return true
 end
 
+-- those of the given parts that are text (rather than nil or empty), joined with " · ", as a book's details are shown
+function StringUtil.joinDetails(...)
+    local parts = {}
+    for i = 1, select("#", ...) do
+        local part = select(i, ...)
+        if StringUtil.assertValidString(part) then
+            table.insert(parts, part)
+        end
+    end
+    return table.concat(parts, " · ")
+end
+
 function StringUtil.trim(text)
     if not StringUtil.assertValidString(text) then
         return ""

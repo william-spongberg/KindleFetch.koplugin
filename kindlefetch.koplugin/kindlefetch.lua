@@ -962,16 +962,11 @@ end
 -- a book's title, authors and file type, which the results are looked through for (see filterBooks), as is each
 -- entry's text by KOReader's own Go to letter, which KOReader exited on for an entry without text
 local function bookText(book)
-    local parts = {}
-    local function add(part)
-        if part and part ~= "" then
-            table.insert(parts, part)
-        end
-    end
-    add(book.display_title or book.title)
-    add(book.authors)
-    add(book.file_type and book.file_type:upper())
-    return table.concat(parts, " · ")
+    return StringUtil.joinDetails(
+        book.display_title or book.title,
+        book.authors,
+        book.file_type and book.file_type:upper()
+    )
 end
 
 -- the books as entries for the menu of results, followed by a way to load more when there are more to load. only

@@ -23,6 +23,7 @@ local util = require("util")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local NotifyUtil = require("util.notifyutil")
+local StringUtil = require("util.stringutil")
 local CoverCache = require("cache.covercache")
 local CoverPlaceholder = require("ui.coverplaceholder")
 local Guard = require("util.guard")
@@ -251,14 +252,7 @@ function DownloadPrompt:details()
         end
     end
 
-    local format = {}
-    if book.file_type and book.file_type ~= "" then
-        table.insert(format, book.file_type:upper())
-    end
-    if book.file_size and book.file_size ~= "" then
-        table.insert(format, book.file_size)
-    end
-    add(_("Format"), table.concat(format, " · "))
+    add(_("Format"), StringUtil.joinDetails(book.file_type and book.file_type:upper(), book.file_size))
     add(_("Language"), book.language)
     add(_("Year"), book.year)
     add(_("Type"), book.book_type)
