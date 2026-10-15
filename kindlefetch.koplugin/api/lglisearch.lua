@@ -486,6 +486,7 @@ function LlgiSearch.findDownloadLink(book, retrying)
     local answered = false
     local mirror_failed = false
     local busy = false
+    local blocked = false
     for __, url in ipairs(base_urls) do
         -- load ads page (to get key for download page)
         -- (the book's id is its md5)
@@ -497,26 +498,45 @@ function LlgiSearch.findDownloadLink(book, retrying)
         end
         answered = answered or html ~= nil or status ~= nil
 
-        -- find download url with key linked in ads page
-        if html then
-            local download_path = html:match('href="([^"]*get%.php[^"]*)"')
-
-            if download_path and download_path ~= "" then
-                download_url = url .. "/" .. download_path:gsub("^/", "")
+        -- find download url with key linked in ads page. what answers is told apart as when searching: an error page
+        -- or DDoS protection is a mirror failing, rather than one that doesn't have the book, which was all it was
+        -- taken to be, so the broken mirror stayed first, and the mirrors were never looked up again
+        local download_path = html and html:match('href="([^"]*get%.php[^"]*)"')
+        if download_path and download_path ~= "" then
+            download_url = url .. "/" .. download_path:gsub("^/", "")
+            -- as with covers and Z-Library's links, only what's just an address is passed on to curl, as what a
+            -- mirror sends can't be trusted
+            if StringUtil.isSafeUrl(download_url) then
                 found_on = url
-
                 LogUtil.info("found the download link on", LogUtil.site(url))
-
                 break
-            else
-                LogUtil.warn(
-                    "no download link on",
-                    LogUtil.site(url) .. "'s download page (" .. #html .. " bytes):",
-                    html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
-                )
-                last_err = _("no Library Genesis download link found")
-                busy = busy or isBusy(html)
             end
+            LogUtil.warn("left out a download link from", LogUtil.site(url), "that isn't just an address")
+            download_url = nil
+            last_err = _("no Library Genesis download link found")
+        elseif html and isBlocked(html) then
+            LogUtil.warn("looking up the download link on", LogUtil.site(url), "was blocked by its DDoS protection")
+            blocked = true
+        elseif html and isBusy(html) then
+            LogUtil.warn("found Library Genesis' database too busy on", LogUtil.site(url))
+            busy = true
+        elseif html and status and status >= 400 then
+            LogUtil.warn(
+                "error page from",
+                LogUtil.site(url) .. "'s download page: HTTP",
+                status,
+                html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+            )
+            last_err = T(_("Library Genesis answered with an error (HTTP %1), try again later"), status)
+            mirror_failed = true
+            UrlApi:deleteLibgenUrl(url)
+        elseif html then
+            LogUtil.warn(
+                "no download link on",
+                LogUtil.site(url) .. "'s download page (" .. #html .. " bytes):",
+                html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+            )
+            last_err = _("no Library Genesis download link found")
         elseif status then
             -- it answered with an error
             last_err = err
@@ -545,9 +565,11 @@ function LlgiSearch.findDownloadLink(book, retrying)
         return download_url
     end
     return nil,
-        explainUnfound(unresolved, base_urls, retrying) or busy and BUSY_ERROR or last_err or _(
-            "all Library Genesis mirrors failed"
-        ),
+        explainUnfound(unresolved, base_urls, retrying)
+            or busy and BUSY_ERROR
+            or blocked and Errors.BLOCKED_DOWNLOAD
+            or last_err
+            or _("all Library Genesis mirrors failed"),
         mirror_failed
 end
 
