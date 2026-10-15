@@ -549,7 +549,6 @@ local TYPES = {
     last_version = "string",
     last_update_check = "number",
     skipped_version = "string",
-    curl_update_declined = "boolean",
     recent_searches = "table",
 }
 
@@ -658,12 +657,17 @@ function KindleFetchSettings:setSkippedVersion(version)
     return KindleFetchSettings:setSetting("skipped_version", version)
 end
 
--- curl_update_declined (updating curl was turned down, so it isn't offered again automatically)
+-- curl_update_declined (the version of curl that updating to was turned down, so it isn't offered again
+-- automatically, until there's a newer one), or true, as older versions saved it, for whichever version it was
 function KindleFetchSettings:getCurlUpdateDeclined()
-    return KindleFetchSettings:getSetting("curl_update_declined") == true
+    local declined = getSettingsFile():readSetting("curl_update_declined")
+    if declined == true or type(declined) == "string" then
+        return declined
+    end
 end
-function KindleFetchSettings:setCurlUpdateDeclined(bool)
-    return KindleFetchSettings:setSetting("curl_update_declined", bool)
+-- or nil, once it's been updated
+function KindleFetchSettings:setCurlUpdateDeclined(version)
+    return KindleFetchSettings:setSetting("curl_update_declined", version or nil)
 end
 
 -- recent_searches (what was last searched for, most recent first)

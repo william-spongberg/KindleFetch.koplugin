@@ -65,7 +65,7 @@ describe("CurlUpdater", function()
 
             -- it was asked on every start before (#25)
             it("doesn't offer it again", function()
-                assert.is_true(require("settings.settings"):getCurlUpdateDeclined())
+                assert.are.equal("8.21.0", require("settings.settings"):getCurlUpdateDeclined())
 
                 assert.is_false(CurlUpdater.checkVersion())
                 assert.are.equal(1, #helper.state.shown)
@@ -79,6 +79,23 @@ describe("CurlUpdater", function()
                 assert.are.equal(2, #helper.state.shown)
                 assert.are.equal("Update curl?", helper.state.shown[2].title)
             end)
+
+            -- which was never offered again once any update had been turned down, even for a fix to a security
+            -- problem found since
+            it("offers a newer curl than the one turned down", function()
+                require("settings.settings"):setCurlUpdateDeclined("8.17.0")
+                CurlUpdater.checkVersion()
+                assert.are.equal(2, #helper.state.shown)
+            end)
+        end)
+
+        -- which said only that it was, not which
+        it("takes an update turned down by an older version of Kindle Fetch to be this one", function()
+            installedCurl("7.68.0")
+            require("settings.settings"):setCurlUpdateDeclined(true)
+            assert.is_false(CurlUpdater.checkVersion())
+            assert.are.equal(0, #helper.state.shown)
+            assert.are.equal("8.21.0", require("settings.settings"):getCurlUpdateDeclined())
         end)
 
         it("fails when the curl version cannot be read", function()
@@ -167,12 +184,12 @@ describe("CurlUpdater", function()
         -- e.g. once a Kindle update has put the old curl back
         it("offers to update again later, even if it was turned down before", function()
             stubInstall()
-            require("settings.settings"):setCurlUpdateDeclined(true)
+            require("settings.settings"):setCurlUpdateDeclined("8.21.0")
             installedCurl("7.68.0")
             CurlUpdater.checkVersion(true)
             helper.lastShown().buttons[1][2].callback()
 
-            assert.is_false(require("settings.settings"):getCurlUpdateDeclined())
+            assert.is_nil(require("settings.settings"):getCurlUpdateDeclined())
         end)
 
         it("does nothing when the user cancels", function()

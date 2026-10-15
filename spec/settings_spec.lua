@@ -255,15 +255,23 @@ describe("KindleFetchSettings", function()
     it("remembers when updates were last checked for, and the updates that were turned down", function()
         assert.is_nil(Settings:getLastUpdateCheck())
         assert.is_nil(Settings:getSkippedVersion())
-        assert.is_false(Settings:getCurlUpdateDeclined())
+        assert.is_nil(Settings:getCurlUpdateDeclined())
 
         Settings:setLastUpdateCheck(1234567)
         Settings:setSkippedVersion("0.5")
-        Settings:setCurlUpdateDeclined(true)
+        Settings:setCurlUpdateDeclined("8.21.0")
 
         assert.are.equal(1234567, Settings:getLastUpdateCheck())
         assert.are.equal("0.5", Settings:getSkippedVersion())
-        assert.is_true(Settings:getCurlUpdateDeclined())
+        assert.are.equal("8.21.0", Settings:getCurlUpdateDeclined())
+
+        -- once curl has been updated
+        Settings:setCurlUpdateDeclined(nil)
+        assert.is_nil(Settings:getCurlUpdateDeclined())
+        -- as older versions saved it
+        helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"].curl_update_declined = true
+        package.loaded["settings.settings"] = nil
+        assert.is_true(require("settings.settings"):getCurlUpdateDeclined())
     end)
 
     describe("preferred book types", function()

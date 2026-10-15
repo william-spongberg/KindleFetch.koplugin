@@ -190,7 +190,7 @@ local function updateCurl()
 
     LogUtil.info("installed static curl " .. MIN_VERSION)
     -- ask again if it's ever out of date again, e.g. once a Kindle update puts the old one back
-    KindleFetchSettings:setCurlUpdateDeclined(false)
+    KindleFetchSettings:setCurlUpdateDeclined(nil)
     return true
 end
 
@@ -218,8 +218,9 @@ local function promptCurlUpdate(current_version, min_version)
                     callback = function()
                         UIManager:close(confirm_dialog)
                         LogUtil.info("curl update declined")
-                        -- so it isn't offered again every day, only when asked to check for updates
-                        KindleFetchSettings:setCurlUpdateDeclined(true)
+                        -- so it isn't offered again every day, only when asked to check for updates, until there's a
+                        -- newer one to update to
+                        KindleFetchSettings:setCurlUpdateDeclined(min_version)
                     end,
                 },
                 {
@@ -242,7 +243,7 @@ local function promptCurlUpdate(current_version, min_version)
 end
 
 -- check curl is available and at least MIN_VERSION, offering to update it if not (again after it was turned down
--- only if the user asked for the check)
+-- only if the user asked for the check, or there's a newer one to update to)
 function CurlUpdater.checkVersion(user_requested)
     -- installing curl relies on mntroot, so is only possible on a Kindle
     if not Device:isKindle() then
@@ -276,7 +277,13 @@ function CurlUpdater.checkVersion(user_requested)
         return true
     end
 
-    if not user_requested and KindleFetchSettings:getCurlUpdateDeclined() then
+    -- which older versions saved as true, rather than the version turned down, taken to be this one
+    local declined = KindleFetchSettings:getCurlUpdateDeclined()
+    if declined == true then
+        declined = MIN_VERSION
+        KindleFetchSettings:setCurlUpdateDeclined(declined)
+    end
+    if not user_requested and declined == MIN_VERSION then
         LogUtil.warn("curl", current_version_str, "is older than", MIN_VERSION .. ", but updating it was turned down")
         return false
     end
