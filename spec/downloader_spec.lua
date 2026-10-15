@@ -808,6 +808,58 @@ describe("Downloader", function()
         end)
 
         -- as every mirror did at once while this was written, their shared database refusing connections
+        -- which was taken to be a mirror without the book, so the broken mirror stayed first, and the mirrors were
+        -- never looked up again
+        it("tries the next mirror when one answers with an error page, and forgets it", function()
+            web.pages[adsUrl(mirrors[1])] = function()
+                return "<html>502 Bad Gateway</html>", nil, 502
+            end
+            hasBook(mirrors[2])
+
+            download()
+            assert.are.equal(getUrl(mirrors[2]), spawned[1].url)
+            assert.is_false(UrlApi:getLibgenUrls()[1] == mirrors[1])
+        end)
+
+        it("looks the mirrors up again when every one answers with an error page", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[adsUrl(mirror)] = function()
+                    return "<html>502 Bad Gateway</html>", nil, 502
+                end
+            end
+
+            download()
+            assert.are.equal(2, web.scrapes)
+            assert.are.same({
+                { ok = false, err = "Library Genesis answered with an error (HTTP 502), try again later" },
+            }, results)
+        end)
+
+        it("says when downloads are blocked by DDoS protection, keeping the mirrors", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[adsUrl(mirror)] =
+                    "<html><head><title>DDoS-Guard</title></head><body>Checking your browser</body></html>"
+            end
+
+            download()
+            assert.are.same({
+                { ok = false, err = "Library Genesis is blocking automated downloads right now, try again later" },
+            }, results)
+            assert.are.same(mirrors, UrlApi:getLibgenUrls())
+        end)
+
+        -- which is passed on to curl, as covers' and Z-Library's links are only once they are
+        it("won't use a download link that isn't just an address", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[adsUrl(mirror)] = '<a href="get.php?md5=' .. book.id .. '&key=A B">GET</a>'
+            end
+
+            download()
+            assert.are.equal(0, #spawned)
+            assert.are.same({ { ok = false, err = "no Library Genesis download link found" } }, results)
+            assert.is_truthy(helper.logged("warn", "^left out a download link from .* that isn't just an address"))
+        end)
+
         it("says when Library Genesis is too busy to send the book", function()
             local busy_page = "<html><body>Could not connect to the database 3306. User 'libgen_get' has exceeded the "
                 .. "'max_user_connections' resource (current value: 80) <a href=''>Report an error</a>.</body></html>"

@@ -372,7 +372,8 @@ local function parseBook(doc, file_types)
         source = SOURCE,
         id = SOURCE .. "_" .. identifier,
         identifier = identifier,
-        title = StringUtil.cleanFileName(title),
+        -- (or after the book's identifier, when there's nothing in its title to name its file after)
+        title = StringUtil.cleanFileName(title) ~= "" and StringUtil.cleanFileName(title) or identifier,
         display_title = StringUtil.cleanTitle(title),
         authors = authors ~= "" and authors or "Unknown author",
         year = year ~= "0000" and year or nil,
@@ -521,6 +522,9 @@ local function pickFile(files, file_type)
                 and file.format:lower() == format:lower()
                 and type(file.name) == "string"
                 and file.name ~= ""
+                -- which only those who can borrow it can download, so it would fail
+                and file.private ~= "true"
+                and file.private ~= true
             then
                 return file
             end

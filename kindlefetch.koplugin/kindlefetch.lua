@@ -458,13 +458,6 @@ function KindleFetch:performSearch()
         return
     end
 
-    KindleFetchSettings:addRecentSearch(query)
-    -- which there may not have been any of when the search box was opened
-    local recent = self.search_box.button_table and self.search_box.button_table:getButtonById("recent")
-    if recent then
-        recent:enable()
-    end
-
     -- check device is online, otherwise turn on wifi (as set up in KOReader's network settings) and search once
     -- connected,
     -- unless the results are saved from an earlier search
@@ -512,8 +505,22 @@ function KindleFetch:searchFrom(query, page)
         end
 
         -- show books
+        self:rememberSearch(query)
         self:showBooks(books)
     end)
+end
+
+-- remember a search that found books, to search for again from Recent, rather than typos and searches that failed,
+-- which it was remembered before, and enable Recent in the search box, which there may not have been any of when it
+-- was opened
+function KindleFetch:rememberSearch(query)
+    KindleFetchSettings:addRecentSearch(query)
+    local recent = self.search_box
+        and self.search_box.button_table
+        and self.search_box.button_table:getButtonById("recent")
+    if recent then
+        recent:enable()
+    end
 end
 
 -- say that no books were found, and why when it's known: the site may have listed plenty, all in other languages or

@@ -101,6 +101,30 @@ describe("ZlibSearch", function()
             assert.are.same(Settings:getPreferredFileTypes(), field(request.form, "extensions[]"))
         end)
 
+        -- rather than leaving its file named only for its type, e.g. ".epub", which hid it
+        it("names a book's file after its title in brackets, or its id when there's nothing else", function()
+            results({ book({ title = "[Poems]" }), book({ id = 2, hash = "abc", title = "..." }) })
+            local books = ZlibSearch:search("orwell", 1)
+            assert.are.equal("[Poems]", books[1].title)
+            assert.are.equal("zlib_2", books[2].title)
+        end)
+
+        -- which were said to be results in other file types, when Z-Library had changed what it answers with
+        it("doesn't count books it can't read as results", function()
+            results({ book(), { id = "not a number" }, book({ id = 3, hash = "abc", extension = "azw3" }) })
+            local books, err, _, results_read = ZlibSearch:search("orwell", 1)
+            assert.is_nil(err)
+            assert.are.equal(1, #books)
+            assert.are.equal(2, results_read)
+        end)
+
+        it("says its results couldn't be read when none of its books can be", function()
+            results({ { id = "not a number" }, { title = "no id" } })
+            local books, err = ZlibSearch:search("orwell", 1)
+            assert.is_nil(books)
+            assert.are.equal(require("util.errors").UNREADABLE, err)
+        end)
+
         it("reads each book from the results", function()
             results({
                 book(),
@@ -267,6 +291,19 @@ describe("ZlibSearch", function()
         end)
 
         -- as each link it gives counts, whether or not the book downloads
+        -- which doesn't count again, as when its download failed, but was refused all the same
+        it("asks for a book's link again the same day, once the account has downloaded as many as it can", function()
+            assert.is_not_nil(ZlibSearch.findDownloadLink(zlib_book))
+            profile(10, 10)
+            assert.are.equal("https://dl.example/books/1984.epub?token=abc", ZlibSearch.findDownloadLink(zlib_book))
+
+            -- but not another book's
+            local other = { source = "zlib", id = "zlib_7", zlib_id = 7, hash = "abc", title = "Emma" }
+            local url, err = ZlibSearch.findDownloadLink(other)
+            assert.is_nil(url)
+            assert.matches("which it has today", err, 1, true)
+        end)
+
         it("doesn't ask for the link once the account has downloaded as many books as it can today", function()
             profile(10, 10)
 

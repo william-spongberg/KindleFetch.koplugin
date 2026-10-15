@@ -161,6 +161,13 @@ describe("IaSearch", function()
             )
         end)
 
+        -- rather than leaving its file named only for its type, e.g. ".epub", which hid it
+        it("names a book's file after its identifier when there's nothing in its title to name it after", function()
+            results({ doc({ title = "..." }) })
+            local books = IaSearch:search("emma", 1)
+            assert.are.equal("emma00aust", books[1].title)
+        end)
+
         -- as a library writes them
         it("names the authors with their surnames last, without when they lived or what they did", function()
             results({
@@ -364,6 +371,23 @@ describe("IaSearch", function()
             assert.is_truthy(
                 helper.logged("info", '^downloading emma00aust\'s Text PDF file "emma00aust_text.pdf", 9000000 bytes$')
             )
+        end)
+
+        -- which only those who can borrow it can download
+        it("leaves out files that are private", function()
+            book.file_type = "epub"
+            web.pages[FILES_URL] = fixtures.archiveFiles({
+                { name = "emma_lending.epub", format = "EPUB", private = "true" },
+                { name = "emma.epub", format = "EPUB" },
+            })
+            assert.are.equal("https://archive.org/download/emma00aust/emma.epub", IaSearch.findDownloadLink(book))
+
+            web.pages[FILES_URL] = fixtures.archiveFiles({
+                { name = "emma_lending.epub", format = "EPUB", private = "true" },
+            })
+            local url, err = IaSearch.findDownloadLink(book)
+            assert.is_nil(url)
+            assert.are.equal("Internet Archive no longer has this book as EPUB", err)
         end)
 
         it("links to the first file in the format, when there are several", function()
