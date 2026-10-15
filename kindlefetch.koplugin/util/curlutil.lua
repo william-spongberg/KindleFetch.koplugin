@@ -377,6 +377,10 @@ function CurlUtil.dumpHeaders(curl_cmd, headers_file)
 end
 
 function CurlUtil.enableParallel(curl_cmd, max_parallel)
+    -- which curl older than 7.66 doesn't have, and fails on, downloading them one after another instead
+    if not curlIsAtLeast("7.66.0") then
+        return curl_cmd
+    end
     local cmd = string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
     -- open a connection for each file at once, rather than waiting to see whether they can share one, which
     -- Library Genesis' sites never let them: a page of covers arrives in a third of the time
