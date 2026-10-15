@@ -765,6 +765,36 @@ describe("LlgiSearch", function()
             assert.are.equal("failed to connect to server", err)
         end)
 
+        -- which was said to be there being no internet connection
+        it("says when Wikipedia can't be connected to securely, as when the device's clock is wrong", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[searchUrl(mirror)] = function()
+                    return nil, "TLS/SSL connection failed"
+                end
+            end
+            web.wikipedia_down = "TLS/SSL connection failed"
+
+            local books, err = LlgiSearch:search("dune", 1)
+            assert.is_nil(books)
+            assert.are.equal(
+                "Wikipedia, where the mirrors are looked up, couldn't be connected to securely (TLS/SSL connection "
+                    .. "failed): check the device's date and time",
+                err
+            )
+        end)
+
+        it("says what went wrong looking the mirrors up on Wikipedia, when it isn't the connection", function()
+            for _, mirror in ipairs(mirrors) do
+                web.pages[searchUrl(mirror)] = function()
+                    return nil, "request timed out"
+                end
+            end
+            web.wikipedia_down = "server returned an empty response"
+
+            local _, err = LlgiSearch:search("dune", 1)
+            assert.are.equal("the mirrors couldn't be looked up on Wikipedia (server returned an empty response)", err)
+        end)
+
         it("says there's no internet connection when Wikipedia can't be found either", function()
             for _, mirror in ipairs(mirrors) do
                 web.pages[searchUrl(mirror)] = function()

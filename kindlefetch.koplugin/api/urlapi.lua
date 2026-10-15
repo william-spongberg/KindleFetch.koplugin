@@ -1,4 +1,5 @@
 local HttpUtil = require("util.httputil")
+local CurlUtil = require("util.curlutil")
 local UrlCache = require("cache.urlcache")
 local LogUtil = require("util.logutil")
 local Errors = require("util.errors")
@@ -117,6 +118,34 @@ function UrlApi:getUrls(key, url, parse, refresh, name)
         html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
     )
     return nil, _("no mirrors listed"), true
+end
+
+-- why a site's mirrors couldn't be looked up on Wikipedia, which didn't answer (it answering without any falls back to
+-- those known when KindleFetch was written, see getSiteUrls): that there's no internet connection, when its name
+-- couldn't be looked up or it couldn't be connected to, otherwise what went wrong, such as a secure connection failing,
+-- as it does when the device's clock is wrong, which was said to be there being no internet connection
+function UrlApi.explainLookupFailure(err)
+    if err == HttpUtil.CANCELLED then
+        return err
+    end
+    if
+        err == nil
+        or err == HttpUtil.UNRESOLVED
+        or err == CurlUtil.getErrorMeaning(7)
+        or err == CurlUtil.getErrorMeaning(28)
+    then
+        return UrlApi.NO_CONNECTION_ERROR
+    end
+    if CurlUtil.isTlsFailure(err) then
+        return T(
+            _(
+                "Wikipedia, where the mirrors are looked up, couldn't be connected to securely (%1): check the "
+                    .. "device's date and time"
+            ),
+            err
+        )
+    end
+    return T(_("the mirrors couldn't be looked up on Wikipedia (%1)"), err)
 end
 
 -- a site's urls, looked up on its Wikipedia page again when refresh is set (see getUrls), or the ones known when

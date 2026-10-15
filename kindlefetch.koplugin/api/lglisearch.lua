@@ -249,13 +249,9 @@ end
 
 -- fetch a page of results from the first mirror that works, returning its html and the mirror
 local function fetchResults(params, refresh)
-    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(refresh)
+    local base_urls, urls_err = UrlApi:getLibgenUrls(refresh)
     if not base_urls then
-        if urls_err == HttpUtil.CANCELLED then
-            return nil, urls_err
-        end
-        return nil,
-            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or _("no Library Genesis urls available")
+        return nil, UrlApi.explainLookupFailure(urls_err)
     end
 
     local last_err
@@ -475,13 +471,9 @@ end
 -- rather than not having the book
 function LlgiSearch.findDownloadLink(book, retrying)
     -- get urls from cache, or scrape them from wikipedia again when retrying
-    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(retrying)
+    local base_urls, urls_err = UrlApi:getLibgenUrls(retrying)
     if not base_urls then
-        if urls_err == HttpUtil.CANCELLED then
-            return nil, urls_err
-        end
-        return nil,
-            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or _("no Library Genesis urls available")
+        return nil, UrlApi.explainLookupFailure(urls_err)
     end
 
     -- try each libgen url

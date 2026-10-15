@@ -201,6 +201,17 @@ end
 local TLS_ERRORS = { [35] = true, [51] = true, [58] = true, [59] = true, [60] = true, [77] = true, [83] = true }
 CurlUtil.OUTDATED_ERROR = Errors.OUTDATED_CURL
 
+-- whether what went wrong (as getErrorMeaning says it) was making a secure connection to the site, as happens when the
+-- device's clock is wrong, and the site's certificate seems not to be valid yet, or no longer
+function CurlUtil.isTlsFailure(err)
+    for exit_code in pairs(TLS_ERRORS) do
+        if err == CurlUtil.getErrorMeaning(exit_code) then
+            return true
+        end
+    end
+    return false
+end
+
 -- whether this is a Kindle whose curl is older than the oldest known to connect to Library Genesis
 function CurlUtil.isOutdated()
     return Device:isKindle() and CurlUtil.getVersion() ~= nil and not curlIsAtLeast(CurlUtil.MIN_VERSION)

@@ -21,8 +21,9 @@ function fixtures.fakeWeb(helper)
         table.insert(web.fetched, url)
         table.insert(web.requests, { url = url, form = opts and opts.form, cookies = opts and opts.cookies })
         if url:find("wikipedia.org", 1, true) then
+            -- (saying what went wrong, when it's given)
             if web.wikipedia_down then
-                return nil, "could not resolve host"
+                return nil, type(web.wikipedia_down) == "string" and web.wikipedia_down or "could not resolve host"
             end
             web.scrapes = web.scrapes + 1
             -- or a page given in its place

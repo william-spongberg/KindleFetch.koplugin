@@ -46,13 +46,9 @@ end
 -- returning what it answered, or nil and what went wrong (HttpUtil.CANCELLED when called off). it's asked at each of
 -- its addresses (see UrlApi) until one answers, and they're looked up again, in case they've moved, when none do
 function ZlibAccount:request(path, form, refresh)
-    local urls, urls_err, wikipedia_answered = UrlApi:getZlibUrls(refresh)
+    local urls, urls_err = UrlApi:getZlibUrls(refresh)
     if not urls then
-        if urls_err == HttpUtil.CANCELLED then
-            return nil, urls_err
-        end
-        return nil,
-            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or _("no Z-Library addresses available")
+        return nil, UrlApi.explainLookupFailure(urls_err)
     end
 
     local account = KindleFetchSettings:getZlibAccount()
