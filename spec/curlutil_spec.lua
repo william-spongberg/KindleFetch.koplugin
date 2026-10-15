@@ -49,6 +49,14 @@ describe("CurlUtil", function()
     end)
 
     -- a Kindle's own curl can't connect to Library Genesis, so says the TLS connection failed
+    -- which were said only as their numbers, including the TLS ones curl gives a Kindle's own curl's failing on
+    it("explains each exit code of curl's that can come up", function()
+        for _, exit_code in ipairs({ 16, 51, 58, 59, 77, 83, 92 }) do
+            assert.is_nil(CurlUtil.getErrorMeaning(exit_code):find("exit code", 1, true), tostring(exit_code))
+        end
+        assert.are.equal("(curl exit code 99)", CurlUtil.getErrorMeaning(99))
+    end)
+
     it("explains that a Kindle's curl is too old, and how to update it, when that's why it couldn't connect", function()
         helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
         assert.is_true(CurlUtil.isOutdated())
@@ -445,6 +453,9 @@ describe("CurlUtil", function()
             helper.stubExecute("curl -sL -f -o", fakeCurl("epub data"))
 
             assert.is_true(CurlUtil.download("https://libgen.example/get.php?md5=abc", filepath, false))
+            -- logging where from, but not the link, which can carry a temporary key
+            assert.is_truthy(helper.logged("dbg", "^curl downloading from libgen.example to"))
+            assert.is_nil(helper.logged("dbg", "md5=abc"))
             assert.are.equal("epub data", helper.readFile(filepath))
 
             local cmd = helper.state.executed[#helper.state.executed]
@@ -699,12 +710,14 @@ describe("CurlUtil", function()
             assert.is_true(helper.exists(paths[3]))
         end)
 
-        it("discards everything and notifies when curl fails", function()
+        -- logging why, which what's on screen says if need be, rather than a notification of its own
+        it("discards everything when curl fails", function()
             helper.stubExecute("curl -sL -f --config", fakeParallelCurl({ "a", "b", "c" }, 28))
 
             assert.are.equal(0, CurlUtil.downloadMultiple(urls, paths, false, false, 4, false, 15))
             assert.is_false(helper.exists(paths[1]))
-            assert.matches("request timed out", helper.lastNotification(), 1, true)
+            assert.are.same({}, helper.state.notifications)
+            assert.is_truthy(helper.logged("warn", "^parallel download command failed"))
         end)
 
         it("runs in the background and returns the pid and files to poll", function()

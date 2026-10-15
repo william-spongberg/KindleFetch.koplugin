@@ -4,6 +4,8 @@ local LogUtil = require("util.logutil")
 local KindleFetchSettings = require("settings.settings")
 local UrlApi = require("api.urlapi")
 local Errors = require("util.errors")
+local T = require("ffi/util").template
+local _ = require("gettext")
 
 -- the Z-Library account Kindle Fetch is logged into, as Z-Library only lets those logged in search for and
 -- download books, and asking it about the account, through the API its own app uses
@@ -35,7 +37,7 @@ local function readAnswer(self, data, path, account)
             end
             return nil, self.LOGGED_OUT_ERROR
         end
-        return nil, message and "Z-Library says: " .. message or "unexpected response from Z-Library"
+        return nil, message and T(_("Z-Library says: %1"), message) or _("unexpected response from Z-Library")
     end
     return data
 end
@@ -44,22 +46,20 @@ end
 -- returning what it answered, or nil and what went wrong (HttpUtil.CANCELLED when called off). it's asked at each of
 -- its addresses (see UrlApi) until one answers, and they're looked up again, in case they've moved, when none do
 function ZlibAccount:request(path, form, refresh)
-    local urls, urls_err, wikipedia_answered = UrlApi:getZlibUrls(refresh)
+    local urls, urls_err = UrlApi:getZlibUrls(refresh)
     if not urls then
-        if urls_err == HttpUtil.CANCELLED then
-            return nil, urls_err
-        end
-        return nil,
-            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or "no Z-Library addresses available"
+        return nil, UrlApi.explainLookupFailure(urls_err)
     end
 
     local account = KindleFetchSettings:getZlibAccount()
     local cookies = account and string.format("remix_userid=%s; remix_userkey=%s", account.user_id, account.user_key)
     local last_err
-    -- addresses that didn't answer at all, which may be down, or the device may be offline
+    -- addresses that didn't answer at all, which may be down, or the device may be offline, and how many of them
+    -- couldn't even have their names looked up
     local unanswered = {}
+    local unresolved = 0
     local answered = false
-    for _, url in ipairs(urls) do
+    for __, url in ipairs(urls) do
         local body, err, status = HttpUtil.getBody(url .. path, {
             form = form,
             cookies = cookies or "",
@@ -76,7 +76,7 @@ function ZlibAccount:request(path, form, refresh)
             ok, data = pcall(JSON.decode, body)
         end
         if ok and type(data) == "table" then
-            for _, unanswered_url in ipairs(unanswered) do
+            for __, unanswered_url in ipairs(unanswered) do
                 UrlApi:deleteZlibUrl(unanswered_url)
             end
             UrlApi:preferZlibUrl(url)
@@ -99,19 +99,22 @@ function ZlibAccount:request(path, form, refresh)
             end
             last_err = status
                     and status >= 400
-                    and string.format("Z-Library answered with an error (HTTP %d), try again later", status)
-                or "unexpected response from Z-Library"
+                    and T(_("Z-Library answered with an error (HTTP %1), try again later"), status)
+                or _("unexpected response from Z-Library")
             UrlApi:deleteZlibUrl(url)
         else
             table.insert(unanswered, url)
-            last_err = string.format("Z-Library didn't answer (%s)", err)
+            last_err = T(_("Z-Library didn't answer (%1)"), err)
+            if err == HttpUtil.UNRESOLVED then
+                unresolved = unresolved + 1
+            end
         end
     end
 
     -- the internet is working if another address answered, or the addresses were just looked up, so the ones that
     -- didn't are down. otherwise the device may be offline, so keep them
     if answered or refresh then
-        for _, url in ipairs(unanswered) do
+        for __, url in ipairs(unanswered) do
             UrlApi:deleteZlibUrl(url)
         end
     end
@@ -120,7 +123,13 @@ function ZlibAccount:request(path, form, refresh)
         LogUtil.info("none of Z-Library's addresses answered, looking them up again")
         return self:request(path, form, true)
     end
-    return nil, last_err or "Z-Library didn't answer"
+    -- none of their names could be looked up just after they were looked up on Wikipedia, so the device is online:
+    -- most likely the network is blocking them, as for Library Genesis (#55)
+    if #urls > 0 and unresolved == #urls then
+        LogUtil.warn("none of Z-Library's addresses' names could be looked up, though Wikipedia's could")
+        return nil, Errors.ZLIB_UNFOUND
+    end
+    return nil, last_err or _("Z-Library didn't answer")
 end
 
 -- log into the account with the email and password, keeping the user id and key Z-Library answers with rather than
@@ -139,7 +148,7 @@ function ZlibAccount:login(email, password)
     -- the key is sent to curl in a cookie, so it's only ever letters and digits
     if not (user_id and type(user_key) == "string" and user_key:find("^%w+$")) then
         LogUtil.warn("Z-Library's answer to logging in didn't say how to log in")
-        return false, "unexpected response from Z-Library"
+        return false, _("unexpected response from Z-Library")
     end
     KindleFetchSettings:setZlibAccount({
         email = email,

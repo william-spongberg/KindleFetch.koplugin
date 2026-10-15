@@ -5,6 +5,7 @@ local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local LogUtil = require("util.logutil")
 local lfs = require("libs/libkoreader-lfs")
+local _ = require("gettext")
 
 local KindleFetchSettings = {}
 
@@ -429,51 +430,51 @@ local DOCUMENT_FILE_TYPES = { "pdf", "txt", "rtf", "doc", "docx", "odt", "djvu" 
 local IMAGE_FILE_TYPES = { "jpg", "tif", "pdb" }
 local WEB_FILE_TYPES = { "chm", "htm", "html", "htmlz" }
 local AVAILABLE_FILE_TYPES = {}
-for _, file_types in ipairs({
+for __, file_types in ipairs({
     EBOOK_FILE_TYPES,
     COMIC_FILE_TYPES,
     DOCUMENT_FILE_TYPES,
     IMAGE_FILE_TYPES,
     WEB_FILE_TYPES,
 }) do
-    for _, file_type in ipairs(file_types) do
+    for __, file_type in ipairs(file_types) do
         table.insert(AVAILABLE_FILE_TYPES, file_type)
     end
 end
 -- Library Genesis topics
 local AVAILABLE_BOOK_TYPES = {
     {
-        text = "Fiction",
+        text = _("Fiction"),
         code = "fiction",
     },
     {
-        text = "Non-fiction",
+        text = _("Non-fiction"),
         code = "nonfiction",
     },
     {
-        text = "Comics",
+        text = _("Comics"),
         code = "comics",
     },
     {
-        text = "Magazines",
+        text = _("Magazines"),
         code = "magazines",
     },
     {
-        text = "Scientific articles",
+        text = _("Scientific articles"),
         code = "articles",
     },
     {
-        text = "Standards",
+        text = _("Standards"),
         code = "standards",
     },
 }
 -- by default, every kind of book in every file type KOReader can open (in English)
 DEFAULTS.preferred_file_types = {}
-for _, file_type in ipairs(AVAILABLE_FILE_TYPES) do
+for __, file_type in ipairs(AVAILABLE_FILE_TYPES) do
     table.insert(DEFAULTS.preferred_file_types, file_type)
 end
 DEFAULTS.preferred_book_types = {}
-for _, book_type in ipairs(AVAILABLE_BOOK_TYPES) do
+for __, book_type in ipairs(AVAILABLE_BOOK_TYPES) do
     table.insert(DEFAULTS.preferred_book_types, book_type.code)
 end
 
@@ -487,11 +488,15 @@ local OLD_BOOK_TYPES = {
     standards_document = "standards",
 }
 
+local function settingsPath()
+    return DataStorage:getSettingsDir() .. "/kindlefetch_settings.lua"
+end
+
 -- opened once and kept, as reading the file from storage for every setting is slow on an e-reader
 local cached_file
 local function getSettingsFile()
     if not cached_file then
-        cached_file = LuaSettings:open(DataStorage:getSettingsDir() .. "/kindlefetch_settings.lua")
+        cached_file = LuaSettings:open(settingsPath())
     end
     return cached_file
 end
@@ -555,7 +560,7 @@ local TYPES = {
 -- the strings in a list, leaving out anything else, which a list of languages or searches is never saved with
 local function strings(list)
     local kept = {}
-    for _, value in ipairs(list) do
+    for __, value in ipairs(list) do
         if type(value) == "string" then
             table.insert(kept, value)
         end
@@ -586,10 +591,25 @@ function KindleFetchSettings:getSetting(name)
 
     return value
 end
+-- write the settings, with name set to data, returning true, or nil and why not. LuaSettings doesn't say when it
+-- couldn't write them (e.g. once the storage is full, or read-only), and they're read as they were before next time,
+-- so they're read back to tell
+local function flush(settings_file, name, data)
+    settings_file:flush()
+    if not sameSetting(LuaSettings:open(settingsPath()):readSetting(name), data) then
+        LogUtil.warn("could not save", name, "in", settingsPath())
+        return nil, _("Kindle Fetch's settings couldn't be saved")
+    end
+    return true
+end
+
 function KindleFetchSettings:setSetting(name, data)
     local settings_file = getSettingsFile()
     settings_file:saveSetting(name, data)
-    settings_file:flush()
+    local ok, err = flush(settings_file, name, data)
+    if not ok then
+        return nil, err
+    end
 
     if type(data) ~= "table" then
         LogUtil.debug("updated", name, "to", data)
@@ -678,7 +698,7 @@ end
 -- once each, whatever its capitals, as Library Genesis finds the same books either way
 function KindleFetchSettings:addRecentSearch(query)
     local searches = { query }
-    for _, search in ipairs(self:getRecentSearches()) do
+    for __, search in ipairs(self:getRecentSearches()) do
         if search:lower() ~= query:lower() and #searches < MAX_RECENT_SEARCHES then
             table.insert(searches, search)
         end
@@ -709,7 +729,15 @@ function KindleFetchSettings:setZlibAccount(account)
     else
         settings_file:delSetting("zlib_account")
     end
-    settings_file:flush()
+    local ok, err = flush(settings_file, "zlib_account", account and settings_file:readSetting("zlib_account"))
+    if not ok then
+        return nil, err
+    end
+    -- the settings as they were before (KOReader keeps them in case they can't be read), which would still log into
+    -- the account, and be read in place of these, if they ever can't be
+    if not account then
+        os.remove(settingsPath() .. ".old")
+    end
     return true
 end
 
@@ -750,7 +778,10 @@ function KindleFetchSettings:setDownloadDir(path)
 
     local settings_file = getSettingsFile()
     settings_file:saveSetting("download_dir", path)
-    settings_file:flush()
+    local saved, save_err = flush(settings_file, "download_dir", path)
+    if not saved then
+        return nil, save_err
+    end
     LogUtil.debug("download directory set to", path)
     return true
 end
@@ -771,8 +802,8 @@ end
 function KindleFetchSettings:getPreferredFileTypes()
     local saved = KindleFetchSettings:getSetting("preferred_file_types")
     local file_types = {}
-    for _, file_type in ipairs(saved) do
-        for _, available in ipairs(AVAILABLE_FILE_TYPES) do
+    for __, file_type in ipairs(saved) do
+        for __, available in ipairs(AVAILABLE_FILE_TYPES) do
             if available == file_type then
                 table.insert(file_types, file_type)
             end
@@ -808,9 +839,9 @@ end
 function KindleFetchSettings:getPreferredBookTypes()
     local saved = KindleFetchSettings:getSetting("preferred_book_types")
     local book_types = {}
-    for _, book_type in ipairs(saved) do
+    for __, book_type in ipairs(saved) do
         book_type = OLD_BOOK_TYPES[book_type] or book_type
-        for _, available in ipairs(AVAILABLE_BOOK_TYPES) do
+        for __, available in ipairs(AVAILABLE_BOOK_TYPES) do
             if available.code == book_type then
                 table.insert(book_types, book_type)
             end

@@ -10,12 +10,21 @@ local UrlCache = require("cache.urlcache")
 local CoverCache = require("cache.covercache")
 local ZlibAccount = require("api.zlibaccount")
 local ZlibLogin = require("ui.zliblogin")
+local T = require("ffi/util").template
 local _ = require("gettext")
+local N_ = _.ngettext
 
 local SettingsPage = {}
 
+-- say when a setting couldn't be saved (see KindleFetchSettings:setSetting), which would go back to what it was
+local function saved(ok, err)
+    if not ok then
+        NotifyUtil.error(err)
+    end
+end
+
 local function formatDays(days)
-    return string.format(days == 1 and _("%d day") or _("%d days"), days)
+    return T(N_("1 day", "%1 days", days), days)
 end
 
 -- the most of a folder's path that's shown, which is about as much as fits beside its label
@@ -41,17 +50,17 @@ end
 -- saved as), or All when every one is
 local function describeChosen(choices, chosen)
     local is_chosen = {}
-    for _, code in ipairs(chosen) do
+    for __, code in ipairs(chosen) do
         is_chosen[code] = true
     end
     local names = {}
-    for _, choice in ipairs(choices) do
+    for __, choice in ipairs(choices) do
         if choice.code and is_chosen[choice.code] then
             table.insert(names, choice.text)
         end
     end
     local available = 0
-    for _, choice in ipairs(choices) do
+    for __, choice in ipairs(choices) do
         if choice.code then
             available = available + 1
         end
@@ -88,11 +97,11 @@ local function fileTypeChoices()
     }
 
     local choices = {}
-    for _, category in ipairs(categories) do
+    for __, category in ipairs(categories) do
         table.insert(choices, {
             heading = category.name,
         })
-        for _, ext in ipairs(category.types) do
+        for __, ext in ipairs(category.types) do
             table.insert(choices, {
                 text = ext,
                 code = ext,
@@ -131,61 +140,66 @@ function SettingsPage:settingsItems()
 
     return {
         {
-            text = _(string.format("Show Book Covers: %s", show_book_covers and "☑" or "☐")),
+            text = T(_("Show Book Covers: %1"), show_book_covers and "☑" or "☐"),
             callback = function()
                 this:changeBookCoverVisibility()
             end,
         },
         {
-            text = _("Download Folder: ") .. SettingsPage.shortenFolder(download_dir),
+            text = T(_("Download Folder: %1"), SettingsPage.shortenFolder(download_dir)),
             callback = function()
                 this:changeDownloadFolder()
             end,
         },
         {
-            text = _("Z-Library Account: ") .. (ZlibAccount:getEmail() or _("Not logged in")),
+            text = T(_("Z-Library Account: %1"), ZlibAccount:getEmail() or _("Not logged in")),
             callback = function()
                 this:changeZlibAccount()
             end,
         },
         {
-            text = _("Preferred Languages: ") .. describeChosen(KindleFetchSettings:getAvailableLanguages(), languages),
+            text = T(
+                _("Preferred Languages: %1"),
+                describeChosen(KindleFetchSettings:getAvailableLanguages(), languages)
+            ),
             callback = function()
                 this:changeLanguages()
             end,
         },
         {
-            text = _("Preferred File Types: ") .. describeChosen(fileTypeChoices(), file_types),
+            text = T(_("Preferred File Types: %1"), describeChosen(fileTypeChoices(), file_types)),
             callback = function()
                 this:changeFileTypes()
             end,
         },
         {
-            text = _("Preferred Book Types: ")
-                .. describeChosen(KindleFetchSettings:getAvailableBookTypes(), book_types),
+            text = T(
+                _("Preferred Book Types: %1"),
+                describeChosen(KindleFetchSettings:getAvailableBookTypes(), book_types)
+            ),
             callback = function()
                 this:changeBookTypes()
             end,
         },
         {
-            text = _(string.format("Check for Updates Automatically: %s", check_for_updates and "☑" or "☐")),
+            text = T(_("Check for Updates Automatically: %1"), check_for_updates and "☑" or "☐"),
             callback = function()
                 this:changeCheckForUpdates()
             end,
         },
         {
-            text = _("Keep Searches For: ") .. formatDays(search_cache_days),
+            text = T(_("Keep Searches For: %1"), formatDays(search_cache_days)),
             callback = function()
                 this:changeCacheExpiry(_("Keep Searches For"), search_cache_days, function(days)
-                    KindleFetchSettings:setSearchCacheExpiryDays(days)
+                    saved(KindleFetchSettings:setSearchCacheExpiryDays(days))
                 end)
             end,
         },
         {
-            text = _("Keep Mirrors For: ") .. formatDays(mirror_cache_days),
+            text = T(_("Keep Mirrors For: %1"), formatDays(mirror_cache_days)),
             callback = function()
                 this:changeCacheExpiry(_("Keep Mirrors For"), mirror_cache_days, function(days)
-                    KindleFetchSettings:setMirrorCacheExpiryDays(days)
+                    saved(KindleFetchSettings:setMirrorCacheExpiryDays(days))
                 end)
             end,
         },
@@ -211,7 +225,7 @@ function SettingsPage:refresh()
 end
 
 function SettingsPage:changeBookCoverVisibility()
-    KindleFetchSettings:setShowBookCovers(not KindleFetchSettings:getShowBookCovers())
+    saved(KindleFetchSettings:setShowBookCovers(not KindleFetchSettings:getShowBookCovers()))
     self:refresh()
 end
 
@@ -220,7 +234,7 @@ function SettingsPage:changeCacheExpiry(title, current_days, save)
     local menu
     local items = {}
 
-    for _, days in ipairs(KindleFetchSettings:getAvailableCacheExpiryDays()) do
+    for __, days in ipairs(KindleFetchSettings:getAvailableCacheExpiryDays()) do
         table.insert(items, {
             text = string.format("%s %s", days == current_days and "◉" or "○", formatDays(days)),
             callback = function()
@@ -236,7 +250,7 @@ function SettingsPage:changeCacheExpiry(title, current_days, save)
 end
 
 function SettingsPage:changeCheckForUpdates()
-    KindleFetchSettings:setCheckForUpdates(not KindleFetchSettings:getCheckForUpdates())
+    saved(KindleFetchSettings:setCheckForUpdates(not KindleFetchSettings:getCheckForUpdates()))
     self:refresh()
 end
 
@@ -251,7 +265,7 @@ function SettingsPage:changeZlibAccount()
     end
 
     UIManager:show(ConfirmBox:new {
-        text = string.format(_("Log out of Z-Library (%s)?"), ZlibAccount:getEmail()),
+        text = T(_("Log out of Z-Library (%1)?"), ZlibAccount:getEmail()),
         ok_text = _("Log out"),
         ok_callback = function()
             ZlibAccount:logout()
@@ -270,7 +284,7 @@ function SettingsPage:changeDownloadFolder()
             if ok then
                 this:refresh()
             else
-                NotifyUtil.error(string.format(_("Books can't be downloaded to %s: %s"), dir, err))
+                NotifyUtil.error(T(_("Books can't be downloaded to %1: %2"), dir, err))
             end
         end,
     }:chooseDir()
@@ -283,14 +297,14 @@ end
 function SettingsPage:tickSeveral(title, choices, ticked, save, none_text)
     local this = self
     local selected = {}
-    for _, code in ipairs(ticked) do
+    for __, code in ipairs(ticked) do
         selected[code] = true
     end
 
     local menu
     local function items()
         local item_table = {}
-        for _, choice in ipairs(choices) do
+        for __, choice in ipairs(choices) do
             if choice.heading then
                 table.insert(item_table, {
                     text = "── " .. choice.heading .. " ──",
@@ -312,7 +326,7 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, none_text)
 
     menu = self:newMenu(title, items(), function()
         local result = {}
-        for _, choice in ipairs(choices) do
+        for __, choice in ipairs(choices) do
             if choice.code and selected[choice.code] then
                 table.insert(result, choice.code)
             end
@@ -335,9 +349,9 @@ function SettingsPage:changeLanguages()
         KindleFetchSettings:getAvailableLanguages(),
         KindleFetchSettings:getPreferredLanguages(),
         function(languages)
-            KindleFetchSettings:setPreferredLanguages(languages)
+            saved(KindleFetchSettings:setPreferredLanguages(languages))
         end,
-        "Select at least one language"
+        _("Select at least one language")
     )
 end
 
@@ -349,9 +363,9 @@ function SettingsPage:changeFileTypes()
         choices,
         KindleFetchSettings:getPreferredFileTypes(),
         function(file_types)
-            KindleFetchSettings:setPreferredFileTypes(file_types)
+            saved(KindleFetchSettings:setPreferredFileTypes(file_types))
         end,
-        "Select at least one file type"
+        _("Select at least one file type")
     )
 end
 
@@ -361,9 +375,9 @@ function SettingsPage:changeBookTypes()
         KindleFetchSettings:getAvailableBookTypes(),
         KindleFetchSettings:getPreferredBookTypes(),
         function(book_types)
-            KindleFetchSettings:setPreferredBookTypes(book_types)
+            saved(KindleFetchSettings:setPreferredBookTypes(book_types))
         end,
-        "Select at least one book type"
+        _("Select at least one book type")
     )
 end
 

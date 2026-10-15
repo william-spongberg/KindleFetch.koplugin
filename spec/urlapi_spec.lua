@@ -35,13 +35,22 @@ describe("UrlApi", function()
             assert.are.equal(1, #http.requests)
         end)
 
-        -- as it takes a while, especially on the first search
+        -- as it takes a while, especially on the first search, on what's waiting for them (where it can say so)
         it("say when they're being looked up on Wikipedia, but not when they're cached", function()
+            local said = {}
+            require("util.httputil").setTrapWidget({
+                setStatus = function(_, text)
+                    table.insert(said, text)
+                end,
+            })
             UrlApi:getLibgenUrls()
-            assert.are.same({ "Looking up Library Genesis mirrors..." }, helper.state.notifications)
+            assert.are.same({ "Looking up Library Genesis mirrors..." }, said)
 
             UrlApi:getLibgenUrls()
-            assert.are.equal(1, #helper.state.notifications)
+            assert.are.equal(1, #said)
+            -- rather than in a notification of its own
+            assert.are.same({}, helper.state.notifications)
+            require("util.httputil").setTrapWidget(nil)
         end)
 
         it("can be removed once they stop working", function()
@@ -118,6 +127,8 @@ describe("UrlApi", function()
                 assert.are.equal("https://libgen.vg", urls[1])
                 assert.are.equal(5, #urls)
                 assert.is_truthy(helper.logged("warn", "^using the mirrors known when KindleFetch was written"))
+                -- saying what Wikipedia answered with, for crash.log
+                assert.matches("Page not found", helper.logged("warn", "^found no mirrors on .* %(HTTP 404, "))
             end)
 
             -- rather than for every page of every search
@@ -158,7 +169,7 @@ describe("UrlApi", function()
                 assert.matches("^https://[%w%-]+%.%a+$", url)
             end
             assert.are.equal("https://en.wikipedia.org/wiki/Z-Library", http.requests[1])
-            assert.are.same({ "Looking up Z-Library mirrors..." }, helper.state.notifications)
+            assert.is_truthy(helper.logged("info", "^looking up Z%-Library mirrors on en.wikipedia.org"))
         end)
 
         it("are cached apart from Library Genesis' mirrors", function()

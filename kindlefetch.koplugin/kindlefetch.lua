@@ -33,6 +33,7 @@ local Errors = require("util.errors")
 local Guard = require("util.guard")
 local T = require("ffi/util").template
 local _ = require("gettext")
+local N_ = _.ngettext
 
 -- a new plugin instance is created every time the file manager or a book is opened,
 -- so only check for updates and clear old caches once per session
@@ -116,13 +117,13 @@ function KindleFetch:onDispatcherRegisterActions()
     Dispatcher:registerAction("kindlefetch_archive_action", {
         category = "none",
         event = "KindleFetchArchive",
-        title = string.format(_("Kindle Fetch: search %s"), Sources.archive.NAME),
+        title = T(_("Kindle Fetch: search %1"), Sources.archive.NAME),
         general = true,
     })
     Dispatcher:registerAction("kindlefetch_zlib_action", {
         category = "none",
         event = "KindleFetchZlib",
-        title = string.format(_("Kindle Fetch: search %s"), Sources.zlib.NAME),
+        title = T(_("Kindle Fetch: search %1"), Sources.zlib.NAME),
         general = true,
     })
 end
@@ -212,7 +213,7 @@ end
 
 function KindleFetch:checkForUpdates()
     NetworkMgr:runWhenConnected(function()
-        NotifyUtil.info("Checking for updates...")
+        NotifyUtil.info(_("Checking for updates..."))
         CurlUpdater.checkVersion(true)
         PluginUpdater.checkForUpdates(true)
     end)
@@ -224,19 +225,19 @@ function KindleFetch:addToMainMenu(menu_items)
         sorting_hint = "search",
         sub_item_table = {
             {
-                text = string.format(_("Search %s"), Sources.libgen.NAME),
+                text = T(_("Search %1"), Sources.libgen.NAME),
                 callback = function()
                     self:setupUI("libgen")
                 end,
             },
             {
-                text = string.format(_("Search %s"), Sources.archive.NAME),
+                text = T(_("Search %1"), Sources.archive.NAME),
                 callback = function()
                     self:setupUI("archive")
                 end,
             },
             {
-                text = string.format(_("Search %s"), Sources.zlib.NAME),
+                text = T(_("Search %1"), Sources.zlib.NAME),
                 callback = function()
                     self:setupUI("zlib")
                 end,
@@ -245,7 +246,7 @@ function KindleFetch:addToMainMenu(menu_items)
                 -- where a download that was hidden can be shown again, without finding its book again
                 text_func = function()
                     local count = #Downloader:getActiveDownloads()
-                    return count > 0 and string.format(_("Downloads (%d)"), count) or _("Downloads")
+                    return count > 0 and T(_("Downloads (%1)"), count) or _("Downloads")
                 end,
                 enabled_func = function()
                     return #Downloader:getActiveDownloads() > 0
@@ -320,7 +321,7 @@ function KindleFetch:showDownloads()
 
     local dialog
     local buttons = {}
-    for _, download in ipairs(downloads) do
+    for __, download in ipairs(downloads) do
         -- how far along it is, or what it's doing when that isn't known
         local percentage = download.widget.percentage or 0
         local progress = percentage > 0 and string.format("%d%%", math.floor(percentage * 100))
@@ -347,7 +348,7 @@ end
 function KindleFetch:showRecentSearches()
     local dialog
     local buttons = {}
-    for _, query in ipairs(KindleFetchSettings:getRecentSearches()) do
+    for __, query in ipairs(KindleFetchSettings:getRecentSearches()) do
         table.insert(buttons, {
             {
                 text = query,
@@ -390,7 +391,7 @@ function KindleFetch:setupUI(source)
     self.source = source
 
     self.search_box = InputDialog:new {
-        title = string.format(_("Search %s"), Sources[source].NAME),
+        title = T(_("Search %1"), Sources[source].NAME),
         input_type = "text",
         buttons = {
             {
@@ -430,19 +431,22 @@ function KindleFetch:performSearch()
 
     -- check query is not empty
     if query == "" then
-        NotifyUtil.info("Enter a search term first")
+        NotifyUtil.info(_("Enter a search term first"))
         return
     end
 
-    -- nothing can be found with every language, file type or book type (where the site has them) turned off
-    local turned_off = #KindleFetchSettings:getPreferredLanguages() == 0 and _("language")
-        or #KindleFetchSettings:getPreferredFileTypes() == 0 and _("file type")
-        or Sources[self.source].HAS_BOOK_TYPES
-            and #KindleFetchSettings:getPreferredBookTypes() == 0
-            and _("book type")
+    -- nothing can be found with every language, file type or book type (where the site has them) turned off. said
+    -- like the other things the search box needs first, each in a sentence of its own, to be translated whole
+    local turned_off = #KindleFetchSettings:getPreferredLanguages() == 0 and "language"
+        or #KindleFetchSettings:getPreferredFileTypes() == 0 and "file type"
+        or Sources[self.source].HAS_BOOK_TYPES and #KindleFetchSettings:getPreferredBookTypes() == 0 and "book type"
     if turned_off then
         LogUtil.warn("every", turned_off, "is turned off, so there's nothing to search for")
-        NotifyUtil.error(string.format(_("Turn on at least one %s in Kindle Fetch's settings first."), turned_off))
+        NotifyUtil.info(({
+            ["language"] = _("Turn on at least one language in Kindle Fetch's settings first"),
+            ["file type"] = _("Turn on at least one file type in Kindle Fetch's settings first"),
+            ["book type"] = _("Turn on at least one book type in Kindle Fetch's settings first"),
+        })[turned_off])
         return
     end
 
@@ -480,16 +484,23 @@ function KindleFetch:searchFrom(query, page)
     self.current_search_query = query
     -- saying what's being searched for, as the search box is behind it, on a line of its own, so the message covers
     -- the search box's own buttons however short the search
-    local waiting_text = string.format(_("Searching %s for\n“%s”..."), Sources[self.source].NAME, query)
+    local waiting_text = T(_("Searching %1 for\n“%2”..."), Sources[self.source].NAME, query)
     self:searchInBackground(query, page, waiting_text, function(books, err, next_page, results_read)
         self.books = books
         self.next_page = next_page
+
+        -- which can't be searched for on this site, as when no results are in them, so the settings are offered
+        if err == Errors.NO_FILE_TYPES then
+            LogUtil.warn(Sources[self.source].NAME, "has none of the file types chosen")
+            self:explainNoBooks(query, nil, nil)
+            return
+        end
 
         -- check for errors
         if err or not books then
             err = err or "search failed"
             LogUtil.warn(string.format("search for %q failed: %s", query, err))
-            NotifyUtil.error(_("Search failed: ") .. err)
+            NotifyUtil.error(T(_("Search failed: %1"), err))
             return
         end
         if #books == 0 then
@@ -513,12 +524,17 @@ function KindleFetch:explainNoBooks(query, results_read, next_page)
         return
     end
 
+    -- (none at all for a site that has none of the file types chosen)
+    local name = Sources[self.source].NAME
+    local text = results_read
+            and T(
+                _("%1 listed %2 results, but none in the languages and file types chosen in Kindle Fetch's settings."),
+                name,
+                results_read
+            )
+        or T(_("%1 doesn't have books in any of the file types chosen in Kindle Fetch's settings."), name)
     UIManager:show(ConfirmBox:new {
-        text = string.format(
-            _("%s listed %d results, but none in the languages and file types chosen in Kindle Fetch's settings."),
-            Sources[self.source].NAME,
-            results_read
-        ),
+        text = text,
         ok_text = _("Settings"),
         ok_callback = function()
             SettingsPage:showSettings()
@@ -628,7 +644,7 @@ function KindleFetch:bookMenuItems(books)
     local menu_items = {}
     local filter = self.filter and util.stringLower(self.filter)
 
-    for _, book in ipairs(books) do
+    for __, book in ipairs(books) do
         local text = bookText(book)
         if not filter or util.stringLower(text):find(filter, 1, true) then
             table.insert(menu_items, {
@@ -659,18 +675,17 @@ end
 function KindleFetch:booksTitle(shown)
     local count = #self.books
     if self.filter then
-        return string.format(_("%s · %d of %d books"), self.current_search_query, shown or count, count)
+        return T(_("%1 · %2 of %3 books"), self.current_search_query, shown or count, count)
     end
     -- there may be more to load
-    local found = count == 1 and not self.next_page and _("1 book")
-        or string.format(_("%d%s books"), count, self.next_page and "+" or "")
+    local found = self.next_page and T(_("%1+ books"), count) or T(N_("1 book", "%1 books", count), count)
     return string.format("%s · %s", self.current_search_query, found)
 end
 
 -- the number of books among menu items, leaving out Load more
 local function countBooks(menu_items)
     local count = 0
-    for _, item in ipairs(menu_items) do
+    for __, item in ipairs(menu_items) do
         if item.book then
             count = count + 1
         end
@@ -689,7 +704,7 @@ function KindleFetch:filterBooks(text)
     local shown = countBooks(items)
     if shown == 0 then
         self.filter = previous
-        NotifyUtil.message(string.format(_("None of the books found have “%s” in them."), text))
+        NotifyUtil.message(T(_("None of the books found have “%1” in them."), text))
         return
     end
     LogUtil.info(string.format("showing %d of the %d books found, looking for %q", shown, #self.books, text))
@@ -752,7 +767,7 @@ function KindleFetch:showResultsMenu()
     if self.filter then
         table.insert(buttons, {
             {
-                text = string.format(_("Show all %d books"), #self.books),
+                text = T(_("Show all %1 books"), #self.books),
                 callback = function()
                     UIManager:close(dialog)
                     this:filterBooks("")
@@ -854,7 +869,7 @@ function KindleFetch:loadMoreBooks()
         if err or not books then
             err = err or "search failed"
             LogUtil.warn(string.format("loading more books for %q failed: %s", query, err))
-            NotifyUtil.error(_("Loading more books failed: ") .. err)
+            NotifyUtil.error(T(_("Loading more books failed: %1"), err))
             return
         end
 
@@ -863,9 +878,9 @@ function KindleFetch:loadMoreBooks()
             if next_page then
                 -- there are more results to look through
                 NotifyUtil.message(
-                    string.format(
+                    T(
                         _(
-                            "None of the next %d results are in the languages and file types chosen. Load more to "
+                            "None of the next %1 results are in the languages and file types chosen. Load more to "
                                 .. "keep looking."
                         ),
                         results_read or 0
@@ -881,7 +896,7 @@ function KindleFetch:loadMoreBooks()
 
         -- append new books
         local first_new_book = #self.books + 1
-        for _, book in ipairs(books) do
+        for __, book in ipairs(books) do
             table.insert(self.books, book)
         end
 
@@ -973,7 +988,7 @@ function KindleFetch:downloadBook(book)
             NotifyUtil.info(_("Download cancelled"))
         else
             LogUtil.warn("download failed for", book.title, err)
-            NotifyUtil.error(err and ("Download failed: " .. err) or "Download failed")
+            NotifyUtil.error(err and T(_("Download failed: %1"), err) or _("Download failed"))
         end
     end, function(existing_filepath)
         -- the book is already there, and was chosen to be read rather than downloaded again

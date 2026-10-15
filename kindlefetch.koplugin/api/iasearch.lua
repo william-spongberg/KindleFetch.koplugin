@@ -5,6 +5,9 @@ local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
+local Errors = require("util.errors")
+local T = require("ffi/util").template
+local _ = require("gettext")
 
 -- searches the books on Internet Archive that anyone can download, rather than only borrow, and finds their files'
 -- download links (see Sources)
@@ -140,8 +143,8 @@ local language_names
 local function languageNames()
     if not language_names then
         language_names = {}
-        for _, language in ipairs(KindleFetchSettings:getAvailableLanguages()) do
-            for _, code in ipairs(LANGUAGE_CODES[language.code] or {}) do
+        for __, language in ipairs(KindleFetchSettings:getAvailableLanguages()) do
+            for __, code in ipairs(LANGUAGE_CODES[language.code] or {}) do
                 language_names[code] = language_names[code] or language.text
             end
             language_names[language.text:lower()] = language.text
@@ -164,11 +167,11 @@ local function languageTerms(codes)
             table.insert(terms, term)
         end
     end
-    for _, code in ipairs(codes) do
-        for _, marc_code in ipairs(LANGUAGE_CODES[code] or {}) do
+    for __, code in ipairs(codes) do
+        for __, marc_code in ipairs(LANGUAGE_CODES[code] or {}) do
             add(marc_code)
         end
-        for _, language in ipairs(KindleFetchSettings:getAvailableLanguages()) do
+        for __, language in ipairs(KindleFetchSettings:getAvailableLanguages()) do
             if language.code == code then
                 add(language.text)
             end
@@ -181,8 +184,8 @@ end
 -- Internet Archive's names for the formats the file types can be in, for searching for books in them
 local function formatTerms(file_types)
     local terms = {}
-    for _, file_type in ipairs(file_types) do
-        for _, format in ipairs(FORMATS[file_type] or {}) do
+    for __, file_type in ipairs(file_types) do
+        for __, format in ipairs(FORMATS[file_type] or {}) do
             table.insert(terms, format)
         end
     end
@@ -210,7 +213,7 @@ end
 
 local function orTerms(terms)
     local quoted = {}
-    for _, term in ipairs(terms) do
+    for __, term in ipairs(terms) do
         table.insert(quoted, quote(term))
     end
     return "(" .. table.concat(quoted, " OR ") .. ")"
@@ -242,7 +245,7 @@ end
 -- has are scans of books few have read
 function IaSearch.buildParams(search, page)
     local params = { "q=" .. util.urlEncode(search) }
-    for _, field in ipairs({ "identifier", "title", "creator", "year", "language", "format" }) do
+    for __, field in ipairs({ "identifier", "title", "creator", "year", "language", "format" }) do
         table.insert(params, "fl%5B%5D=" .. field)
     end
     table.insert(params, "sort%5B%5D=downloads%20desc")
@@ -256,7 +259,7 @@ end
 -- anything else, such as JSON's null, is left out
 local function values(field)
     local list = {}
-    for _, value in ipairs(type(field) == "table" and field or { field }) do
+    for __, value in ipairs(type(field) == "table" and field or { field }) do
         if type(value) == "number" then
             value = tostring(value)
         end
@@ -273,11 +276,11 @@ end
 -- the first of the file types that the formats include one of, i.e. the one most preferred
 local function preferredFileType(formats, file_types)
     local has = {}
-    for _, format in ipairs(formats) do
+    for __, format in ipairs(formats) do
         has[format:lower()] = true
     end
-    for _, file_type in ipairs(file_types) do
-        for _, format in ipairs(FORMATS[file_type] or {}) do
+    for __, file_type in ipairs(file_types) do
+        for __, format in ipairs(FORMATS[file_type] or {}) do
             if has[format:lower()] then
                 return file_type
             end
@@ -305,7 +308,7 @@ local ROLES = {
 -- 1775-1817" and "Thomson, Hugh, 1860-1920, ill." as Jane Austen, Hugh Thomson
 local function authorNames(field)
     local names, seen = {}, {}
-    for _, creator in ipairs(values(field)) do
+    for __, creator in ipairs(values(field)) do
         for name in creator:gmatch("[^;]+") do
             name = StringUtil.trim(StringUtil.collapseWhitespace(StringUtil.removeParentheses(name)))
             -- leaving out when they lived and what they did
@@ -333,7 +336,7 @@ end
 -- the names of the languages Internet Archive says a book is in, e.g. "eng" or "ger;lat"
 local function languageName(field)
     local names, seen = {}, {}
-    for _, value in ipairs(values(field)) do
+    for __, value in ipairs(values(field)) do
         for part in value:gmatch("[^;,/]+") do
             part = StringUtil.trim(part)
             local name = languageNames()[part:lower()] or part
@@ -389,7 +392,7 @@ function IaSearch.parseResults(body, file_types)
     end
 
     local books = {}
-    for _, doc in ipairs(response.docs) do
+    for __, doc in ipairs(response.docs) do
         local book = parseBook(doc, file_types)
         if book then
             table.insert(books, book)
@@ -402,12 +405,12 @@ end
 -- what went wrong when Internet Archive answered with body, or didn't answer
 local function explainFailure(body, err, status)
     if body and status and status >= 400 then
-        return string.format("%s answered with an error (HTTP %d), try again later", IaSearch.NAME, status)
+        return T(_("%1 answered with an error (HTTP %2), try again later"), IaSearch.NAME, status)
     end
     if body then
-        return "unexpected response from " .. IaSearch.NAME
+        return T(_("unexpected response from %1"), IaSearch.NAME)
     end
-    return string.format("%s didn't answer (%s)", IaSearch.NAME, err)
+    return T(_("%1 didn't answer (%2)"), IaSearch.NAME, err)
 end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
@@ -447,7 +450,7 @@ function IaSearch:search(query, page)
 
     if #formatTerms(file_types) == 0 then
         LogUtil.warn(self.NAME, "has none of the file types chosen")
-        return nil, string.format("%s doesn't have any of the file types chosen in the settings", self.NAME)
+        return nil, Errors.NO_FILE_TYPES
     end
     local search = IaSearch.buildQuery(query, languages, file_types)
     if not search then
@@ -510,8 +513,8 @@ end
 -- the file of the book in its file type, from the list of the files in its folder. the best of its formats (see
 -- FORMATS), and the first file in that, when there are several (e.g. a book with and without its pictures)
 local function pickFile(files, file_type)
-    for _, format in ipairs(FORMATS[file_type] or {}) do
-        for _, file in ipairs(files) do
+    for __, format in ipairs(FORMATS[file_type] or {}) do
+        for __, file in ipairs(files) do
             if
                 type(file) == "table"
                 and type(file.format) == "string"
@@ -538,7 +541,15 @@ function IaSearch.findDownloadLink(book)
     end
     if not ok or type(data) ~= "table" then
         if body then
-            LogUtil.warn("unexpected list of files from", IaSearch.NAME .. ": HTTP", status, #body, "bytes")
+            LogUtil.warn(
+                "unexpected list of files from",
+                IaSearch.NAME .. ": HTTP",
+                tostring(status),
+                #body,
+                "bytes,",
+                not ok and data and "which couldn't be read (" .. tostring(data) .. "):" or "which isn't a list:",
+                body:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+            )
         end
         return nil, explainFailure(body, err, status)
     end
@@ -547,7 +558,7 @@ function IaSearch.findDownloadLink(book)
     local file = pickFile(type(data.result) == "table" and data.result or {}, book.file_type)
     if not file then
         LogUtil.warn(string.format("found no %s file of %s", book.file_type, book.identifier))
-        return nil, string.format("%s no longer has this book as %s", IaSearch.NAME, book.file_type:upper())
+        return nil, T(_("%1 no longer has this book as %2"), IaSearch.NAME, book.file_type:upper())
     end
     LogUtil.info(
         string.format(

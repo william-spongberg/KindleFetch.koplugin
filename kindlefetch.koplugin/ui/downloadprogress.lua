@@ -174,7 +174,7 @@ end
 -- HTTP, see HttpUtil.canCancel), as taps on them would only arrive once it's over
 function DownloadProgress:setCancellable(cancellable)
     self.cancellable = cancellable
-    for _, button in ipairs({ self.cancel_button, self.hide_button }) do
+    for __, button in ipairs({ self.cancel_button, self.hide_button }) do
         if cancellable then
             button:enable()
         else
@@ -186,6 +186,18 @@ function DownloadProgress:setCancellable(cancellable)
             return "ui", self.frame.dimen
         end)
     end
+end
+
+-- say what's being waited for for now, keeping how far it has got (see HttpUtil.sayStatus), straight away, as what's
+-- waited for may hold KOReader up. nil goes back to what it said before
+function DownloadProgress:setStatus(status_text)
+    if status_text then
+        self.status_before = self.status_before or self.status_text
+    else
+        status_text, self.status_before = self.status_before, nil
+    end
+    self:update(self.percentage or 0, status_text)
+    UIManager:forceRePaint()
 end
 
 -- update percentage text and force repaint

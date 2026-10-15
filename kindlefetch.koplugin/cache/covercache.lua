@@ -157,7 +157,7 @@ function CoverCache:download(id, url)
 
     local success = CurlUtil.download(url, path, false, COVER_MAX_TIME)
     if not success and hasProxy() then
-        LogUtil.debug("retrying cover download through proxy", id)
+        LogUtil.info("retrying the cover download of", id, "through the proxy")
         success = CurlUtil.download(url, path, true, COVER_MAX_TIME)
     end
     if success then
@@ -346,7 +346,7 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
             end
         end
 
-        LogUtil.debug("retrying", #retry_urls, "cover downloads through proxy")
+        LogUtil.info("retrying", #retry_urls, "cover downloads through the proxy, as for searches and books")
         startDownloads(retry_urls, retry_paths, true, parallel_jobs, onProgress, function(retried_paths)
             for _, path in ipairs(retried_paths) do
                 table.insert(downloaded_paths, path)

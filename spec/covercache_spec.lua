@@ -552,6 +552,8 @@ describe("CoverCache", function()
             helper.tick()
             assert.are.same({ 2 }, results)
             assert.is_true(CoverCache:cacheExists("b"))
+            -- as for searches and books, which are retried through the proxy in crash.log too
+            assert.is_truthy(helper.logged("info", "^retrying 2 cover downloads through the proxy"))
         end)
 
         it("does not retry covers without PROXY_URL", function()

@@ -3,6 +3,8 @@ local StringUtil = require("util.stringutil")
 local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
 local ZlibAccount = require("api.zlibaccount")
+local T = require("ffi/util").template
+local _ = require("gettext")
 
 -- searches Z-Library as the account logged into (see ZlibAccount), and finds its books' download links (see Sources)
 local ZlibSearch = {
@@ -27,15 +29,15 @@ function ZlibSearch.buildForm(query, page, languages, file_types)
     local form = { { "message", query } }
     local available = KindleFetchSettings:getAvailableLanguages()
     if #languages < #available then
-        for _, code in ipairs(languages) do
-            for _, language in ipairs(available) do
+        for __, code in ipairs(languages) do
+            for __, language in ipairs(available) do
                 if language.code == code then
                     table.insert(form, { "languages[]", language.text:lower() })
                 end
             end
         end
     end
-    for _, file_type in ipairs(file_types) do
+    for __, file_type in ipairs(file_types) do
         table.insert(form, { "extensions[]", file_type })
     end
     table.insert(form, { "page", page })
@@ -104,12 +106,12 @@ function ZlibSearch.parseResults(data, file_types)
         return nil
     end
     local is_preferred = {}
-    for _, file_type in ipairs(file_types) do
+    for __, file_type in ipairs(file_types) do
         is_preferred[file_type] = true
     end
 
     local books = {}
-    for _, book in ipairs(data.books) do
+    for __, book in ipairs(data.books) do
         book = parseBook(book, is_preferred)
         if book then
             table.insert(books, book)
@@ -161,7 +163,7 @@ function ZlibSearch:search(query, page)
     local books = ZlibSearch.parseResults(data, file_types)
     if not books then
         LogUtil.warn("Z-Library's answer to a search had no books in it")
-        return nil, "unexpected response from " .. self.NAME
+        return nil, T(_("unexpected response from %1"), self.NAME)
     end
 
     local pagination = type(data.pagination) == "table" and data.pagination or {}
@@ -194,7 +196,7 @@ end
 -- the account has any left (each one it gives counts, whether or not the book downloads, but not the same book's
 -- again the same day). when the book failed to download from failed_url, a link to another of its servers. otherwise
 -- nil, and why not (HttpUtil.CANCELLED when called off)
-function ZlibSearch.findDownloadLink(book, _, failed_url)
+function ZlibSearch.findDownloadLink(book, __, failed_url)
     local profile, err = ZlibAccount:request("/eapi/user/profile")
     if not profile then
         return nil, err
@@ -206,8 +208,8 @@ function ZlibSearch.findDownloadLink(book, _, failed_url)
         if downloaded >= limit and not failed_url then
             LogUtil.warn(string.format("the account has downloaded the %d books a day Z-Library allows", limit))
             return nil,
-                string.format(
-                    "Z-Library lets this account download %d books a day, which it has today, so try again tomorrow",
+                T(
+                    _("Z-Library lets this account download %1 books a day, which it has today, so try again tomorrow"),
                     limit
                 )
         end
@@ -216,7 +218,7 @@ function ZlibSearch.findDownloadLink(book, _, failed_url)
 
     local failed_site = failed_url and LogUtil.site(failed_url)
     local link
-    for _ = 1, failed_site and LINK_ASKS or 1 do
+    for __ = 1, failed_site and LINK_ASKS or 1 do
         local data
         data, err = ZlibAccount:request(string.format("/eapi/book/%d/%s/file", book.zlib_id, book.hash))
         if not data then
@@ -224,8 +226,14 @@ function ZlibSearch.findDownloadLink(book, _, failed_url)
         end
         link = type(data.file) == "table" and data.file.downloadLink
         if not StringUtil.isSafeUrl(link) then
-            LogUtil.warn("Z-Library didn't give a download link that can be used")
-            return nil, "Z-Library didn't give a download link"
+            -- (without the link itself, which carries a key)
+            LogUtil.warn(
+                "Z-Library didn't give a download link that can be used, answering with",
+                type(data.file) ~= "table" and "no file"
+                    or type(link) == "string" and "a link to " .. LogUtil.site(link)
+                    or "a link that's a " .. type(link)
+            )
+            return nil, _("Z-Library didn't give a download link")
         end
         if LogUtil.site(link) ~= failed_site then
             break

@@ -1,8 +1,9 @@
 local HttpUtil = require("util.httputil")
+local CurlUtil = require("util.curlutil")
 local UrlCache = require("cache.urlcache")
 local LogUtil = require("util.logutil")
-local NotifyUtil = require("util.notifyutil")
 local Errors = require("util.errors")
+local T = require("ffi/util").template
 local _ = require("gettext")
 
 local UrlApi = {}
@@ -87,9 +88,11 @@ function UrlApi:getUrls(key, url, parse, refresh, name)
         end
     end
 
-    -- this takes a while, especially on the first search, so say what's happening
-    NotifyUtil.info(string.format(_("Looking up %s mirrors..."), name or "Library Genesis"))
+    -- this takes a while, especially on the first search, so say what's happening, where what's waiting can
+    LogUtil.info("looking up", name or "Library Genesis", "mirrors on", LogUtil.site(url))
+    HttpUtil.sayStatus(T(_("Looking up %1 mirrors..."), name or "Library Genesis"))
     local html, err, status = HttpUtil.getBody(url)
+    HttpUtil.sayStatus(nil)
     if not html then
         if err ~= HttpUtil.CANCELLED then
             LogUtil.warn("could not look up mirrors on", url, "error:", err)
@@ -105,8 +108,44 @@ function UrlApi:getUrls(key, url, parse, refresh, name)
         return urls
     end
 
-    LogUtil.warn("found no mirrors on", url, "(" .. #html .. " bytes)")
-    return nil, "no mirrors listed", true
+    LogUtil.warn(
+        "found no mirrors on",
+        url,
+        "(HTTP",
+        tostring(status) .. ",",
+        #html,
+        "bytes):",
+        html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
+    )
+    return nil, _("no mirrors listed"), true
+end
+
+-- why a site's mirrors couldn't be looked up on Wikipedia, which didn't answer (it answering without any falls back to
+-- those known when KindleFetch was written, see getSiteUrls): that there's no internet connection, when its name
+-- couldn't be looked up or it couldn't be connected to, otherwise what went wrong, such as a secure connection failing,
+-- as it does when the device's clock is wrong, which was said to be there being no internet connection
+function UrlApi.explainLookupFailure(err)
+    if err == HttpUtil.CANCELLED then
+        return err
+    end
+    if
+        err == nil
+        or err == HttpUtil.UNRESOLVED
+        or err == CurlUtil.getErrorMeaning(7)
+        or err == CurlUtil.getErrorMeaning(28)
+    then
+        return UrlApi.NO_CONNECTION_ERROR
+    end
+    if CurlUtil.isTlsFailure(err) then
+        return T(
+            _(
+                "Wikipedia, where the mirrors are looked up, couldn't be connected to securely (%1): check the "
+                    .. "device's date and time"
+            ),
+            err
+        )
+    end
+    return T(_("the mirrors couldn't be looked up on Wikipedia (%1)"), err)
 end
 
 -- a site's urls, looked up on its Wikipedia page again when refresh is set (see getUrls), or the ones known when
@@ -121,7 +160,7 @@ function UrlApi:getSiteUrls(key, url, parse, fallback, refresh, name)
     -- once they stop working or are due to be looked up again, rather than for every page of every search
     LogUtil.warn("using the mirrors known when KindleFetch was written, as Wikipedia didn't list any:", err)
     local fallback_urls = {}
-    for _, fallback_url in ipairs(fallback) do
+    for __, fallback_url in ipairs(fallback) do
         table.insert(fallback_urls, fallback_url)
     end
     UrlCache:set(fallback_urls, key)

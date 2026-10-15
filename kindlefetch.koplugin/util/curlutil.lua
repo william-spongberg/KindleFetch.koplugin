@@ -1,9 +1,10 @@
-local NotifyUtil = require("util.notifyutil")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local VersionUtil = require("util.versionutil")
 local Errors = require("util.errors")
+local T = require("ffi/util").template
+local _ = require("gettext")
 local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
 local Device = require("device")
@@ -17,33 +18,40 @@ CurlUtil.MIN_VERSION = "8.21.0"
 -- constants
 local TMP_DIR = DataStorage:getSettingsDir() .. "/tmp/"
 local CURL_ERRORS = {
-    [1] = "unsupported protocol",
-    [3] = "malformed URL",
-    [5] = "could not resolve proxy",
-    [6] = "could not resolve host",
-    [7] = "failed to connect to server",
-    [18] = "partial file transfer (download interrupted)",
-    [19] = "HTTP range request error",
-    [22] = "HTTP error response",
-    [23] = "failed writing downloaded data",
-    [26] = "failed reading local data",
-    [27] = "out of memory",
-    [28] = "request timed out",
-    [33] = "the site can't carry on from where the download stopped",
-    [35] = "TLS/SSL connection failed",
-    [36] = "transfer was stopped",
-    [37] = "failed to open local file",
-    [47] = "too many redirects",
-    [52] = "server returned an empty response",
-    [55] = "failed sending network data",
-    [56] = "failed receiving network data",
-    [60] = "TLS certificate verification failed",
-    [61] = "unsupported TLS/SSL feature",
-    [67] = "authentication failed",
-    [78] = "requested resource was not found",
+    [1] = _("unsupported protocol"),
+    [3] = _("malformed URL"),
+    [5] = _("could not resolve proxy"),
+    [6] = _("could not resolve host"),
+    [7] = _("failed to connect to server"),
+    [16] = _("HTTP/2 error"),
+    [18] = _("partial file transfer (download interrupted)"),
+    [19] = _("HTTP range request error"),
+    [22] = _("HTTP error response"),
+    [23] = _("failed writing downloaded data"),
+    [26] = _("failed reading local data"),
+    [27] = _("out of memory"),
+    [28] = _("request timed out"),
+    [33] = _("the site can't carry on from where the download stopped"),
+    [35] = _("TLS/SSL connection failed"),
+    [36] = _("transfer was stopped"),
+    [37] = _("failed to open local file"),
+    [47] = _("too many redirects"),
+    [51] = _("the site's TLS certificate isn't for its address"),
+    [52] = _("server returned an empty response"),
+    [55] = _("failed sending network data"),
+    [56] = _("failed receiving network data"),
+    [58] = _("problem with the TLS client certificate"),
+    [59] = _("couldn't use the TLS ciphers asked for"),
+    [60] = _("TLS certificate verification failed"),
+    [61] = _("unsupported TLS/SSL feature"),
+    [67] = _("authentication failed"),
+    [77] = _("problem reading the TLS certificates to check sites' against"),
+    [78] = _("requested resource was not found"),
+    [83] = _("TLS certificate issuer check failed"),
+    [92] = _("HTTP/2 stream error"),
     -- from the shell rather than from curl, when it can't run curl or can't find it
-    [126] = "curl can't be run on this device",
-    [127] = "curl isn't installed on this device",
+    [126] = _("curl can't be run on this device"),
+    [127] = _("curl isn't installed on this device"),
 }
 
 local function ensureTmpDir()
@@ -69,12 +77,12 @@ function CurlUtil.removeLeftovers()
     end
 
     local leftovers = {}
-    for _, file in ipairs(FileUtil.listDir(TMP_DIR) or {}) do
+    for __, file in ipairs(FileUtil.listDir(TMP_DIR) or {}) do
         if file:find("^curl_download") then
             table.insert(leftovers, file)
         end
     end
-    for _, file in ipairs(leftovers) do
+    for __, file in ipairs(leftovers) do
         FileUtil.removeFile(TMP_DIR .. file)
     end
     if #leftovers > 0 then
@@ -186,12 +194,23 @@ function CurlUtil.forgetVersion()
 end
 
 function CurlUtil.getErrorMeaning(exit_code)
-    return CURL_ERRORS[exit_code] or "(curl exit code " .. tostring(exit_code) .. ")"
+    return CURL_ERRORS[exit_code] or T(_("(curl exit code %1)"), tostring(exit_code))
 end
 
 -- what a Kindle's own curl fails with when connecting to Library Genesis, which it's too old to
 local TLS_ERRORS = { [35] = true, [51] = true, [58] = true, [59] = true, [60] = true, [77] = true, [83] = true }
 CurlUtil.OUTDATED_ERROR = Errors.OUTDATED_CURL
+
+-- whether what went wrong (as getErrorMeaning says it) was making a secure connection to the site, as happens when the
+-- device's clock is wrong, and the site's certificate seems not to be valid yet, or no longer
+function CurlUtil.isTlsFailure(err)
+    for exit_code in pairs(TLS_ERRORS) do
+        if err == CurlUtil.getErrorMeaning(exit_code) then
+            return true
+        end
+    end
+    return false
+end
 
 -- whether this is a Kindle whose curl is older than the oldest known to connect to Library Genesis
 function CurlUtil.isOutdated()
@@ -376,7 +395,7 @@ end
 -- { { "data", "password=..." } }. nil when a value has a line break in it, which would end the option early
 function CurlUtil.createConfigFile(options)
     local lines = {}
-    for _, option in ipairs(options) do
+    for __, option in ipairs(options) do
         local name, value = option[1], tostring(option[2])
         if value:find("%c") then
             return nil
@@ -508,7 +527,8 @@ local function downloadCommand(download_url, filepath, use_proxy, max_time, opts
     local exit_file = CurlUtil.createExitFile()
     cmd = CurlUtil.saveExitCode(cmd, exit_file)
 
-    LogUtil.debug("curl download command", cmd)
+    -- without the link, which can carry a temporary key
+    LogUtil.debug("curl downloading from", LogUtil.site(download_url), "to", filepath)
     return cmd, exit_file
 end
 
@@ -548,7 +568,7 @@ function CurlUtil.download(download_url, filepath, use_proxy, max_time, opts)
         else
             LogUtil.warn("download from", LogUtil.site(download_url), "to", filepath, "produced an empty file")
             FileUtil.removeFile(filepath)
-            return nil, "download produced empty file"
+            return nil, _("download produced empty file")
         end
     else
         LogUtil.warn(
@@ -607,7 +627,7 @@ function CurlUtil.downloadMultiple(
         LogUtil.warn("could not write curl's list of files to download to", config_file .. ":", write_err)
         FileUtil.removeFile(config_file)
         if background then
-            return nil, nil, nil, "could not write the list of files for curl"
+            return nil, nil, nil, _("could not write the list of files for curl")
         end
         return 0
     end
@@ -678,12 +698,11 @@ function CurlUtil.downloadMultiple(
             exit_code = exit_code,
             reason = reason,
         })
-        NotifyUtil.info("Download failed:" .. reason)
     end
 
     local results = CurlUtil.getTransferResults(results_file)
     local successful_count = 0
-    for _, filepath in ipairs(filepaths) do
+    for __, filepath in ipairs(filepaths) do
         if CurlUtil.isTransferComplete(results, filepath, exit_code) then
             successful_count = successful_count + 1
             LogUtil.debug("file downloaded successfully", filepath)

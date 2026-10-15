@@ -1,6 +1,8 @@
 local StringUtil = require("util.stringutil")
 local lfs = require("libs/libkoreader-lfs")
 local LogUtil = require("util.logutil")
+local T = require("ffi/util").template
+local _ = require("gettext")
 
 local FileUtil = {}
 
@@ -38,11 +40,11 @@ end
 -- (e.g. once the device's storage is full, which may only be said once the file is closed)
 function FileUtil.writeFile(path, content)
     if not StringUtil.assertValidString(path) then
-        return nil, "no file to write to"
+        return nil, _("no file to write to")
     end
 
     if content == nil then
-        return nil, "nothing to write"
+        return nil, _("nothing to write")
     end
 
     local f, open_err = io.open(path, "w")
@@ -91,7 +93,7 @@ end
 -- such folder), or nil and why not
 function FileUtil.removeDir(path)
     if not StringUtil.assertValidString(path) then
-        return nil, "no folder to remove"
+        return nil, _("no folder to remove")
     end
     if lfs.attributes(path, "mode") ~= "directory" then
         return true
@@ -100,7 +102,7 @@ function FileUtil.removeDir(path)
     if not names then
         return nil, err
     end
-    for _, name in ipairs(names) do
+    for __, name in ipairs(names) do
         local child = path .. "/" .. name
         local ok, child_err
         if lfs.symlinkattributes(child, "mode") == "directory" then
@@ -119,13 +121,13 @@ end
 -- on an SD card that has been taken out), or can't be written to
 function FileUtil.checkWritableDir(path)
     if not FileUtil.isValidDirectory(path) then
-        return nil, "it doesn't exist"
+        return nil, _("it doesn't exist")
     end
     local check_path = path .. "/.kindlefetch_write_check"
     local ok, err = FileUtil.writeFile(check_path, "")
     FileUtil.removeFile(check_path)
     if not ok then
-        return nil, string.format("it can't be written to (%s)", tostring(err))
+        return nil, T(_("it can't be written to (%1)"), tostring(err))
     end
     return true
 end

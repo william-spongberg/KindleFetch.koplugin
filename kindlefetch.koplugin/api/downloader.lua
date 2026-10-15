@@ -14,6 +14,7 @@ local Sources = require("api.sources")
 local CoverCache = require("cache.covercache")
 local Errors = require("util.errors")
 local Guard = require("util.guard")
+local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- downloads books from the site they were found on (see Sources), in the background
@@ -152,7 +153,7 @@ local function resumeTransfer(transfer)
     end
     transfer.progress_widget:update(
         transfer.progress_widget.percentage or 0,
-        string.format(_("Waiting for %s..."), Sources[transfer.book.source].NAME)
+        T(_("Waiting for %1..."), Sources[transfer.book.source].NAME)
     )
     return true
 end
@@ -214,7 +215,7 @@ local function pollDownload(transfer)
         local percentage = math.min(bytes_downloaded / total_size, 0.99)
         progress_widget:update(
             percentage,
-            stalled and string.format(_("Stalled at %d%%, retrying..."), math.floor(percentage * 100))
+            stalled and T(_("Stalled at %1%, retrying..."), math.floor(percentage * 100))
                 or string.format(
                     "%d%% · %.1f / %.1f MB",
                     math.floor(percentage * 100),
@@ -227,7 +228,7 @@ local function pollDownload(transfer)
         local megabytes = bytes_downloaded / (1024 * 1024)
         progress_widget:update(
             progress_widget.percentage or 0,
-            stalled and string.format(_("Stalled at %.1f MB, retrying..."), megabytes)
+            stalled and T(_("Stalled at %1 MB, retrying..."), string.format("%.1f", megabytes))
                 or string.format("%.1f MB", megabytes)
         )
     end
@@ -314,7 +315,7 @@ local function pollDownload(transfer)
             if not started then
                 LogUtil.warn("could not start curl to try again:", spawn_err)
                 FileUtil.removeFile(part_path)
-                transfer.on_finish(false, spawn_err or "download failed and could not be tried again")
+                transfer.on_finish(false, spawn_err or _("download failed and could not be tried again"))
                 return
             end
             Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
@@ -332,12 +333,15 @@ local function pollDownload(transfer)
         end
 
         FileUtil.removeFile(part_path)
-        local err = exit_code == 0 and "download produced empty file" or CurlUtil.explainExitCode(exit_code)
+        local err = exit_code == 0 and _("download produced empty file") or CurlUtil.explainExitCode(exit_code)
         if http_status then
             -- its servers failing, as they do while very busy, rather than e.g. the book not being there
             err = http_status >= 500
-                    and Sources[book.source].NAME .. " is too busy to send books right now, try again in a few minutes"
-                or string.format("%s (HTTP %d)", err, http_status)
+                    and T(
+                        _("%1 is too busy to send books right now, try again in a few minutes"),
+                        Sources[book.source].NAME
+                    )
+                or T(_("%1 (HTTP %2)"), err, http_status)
         end
         transfer.on_finish(false, err)
         return
@@ -353,7 +357,7 @@ local function pollDownload(transfer)
             )
         )
         FileUtil.removeFile(part_path)
-        transfer.on_finish(false, "download process ended unexpectedly")
+        transfer.on_finish(false, _("download process ended unexpectedly"))
         return
     end
 
@@ -481,7 +485,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         if ok and not os.rename(part_path, filepath) then
             LogUtil.warn("could not move the downloaded book from", part_path, "to", filepath)
             FileUtil.removeFile(part_path)
-            ok, err = false, "could not save the book"
+            ok, err = false, _("could not save the book")
         end
         UIManager:forceRePaint()
         callback(ok, err, filepath)
@@ -518,12 +522,12 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
         FileUtil.removeFile(headers_file)
         progress_widget:close()
         Downloader:untrack(book.id)
-        callback(false, spawn_err or "failed to spawn curl downloader")
+        callback(false, spawn_err or Errors.START_FAILED)
         return
     end
 
     -- which takes a few seconds, and sometimes many more, before the book starts to arrive
-    progress_widget:update(0, string.format(_("Waiting for %s..."), source.NAME))
+    progress_widget:update(0, T(_("Waiting for %1..."), source.NAME))
     Guard.scheduleIn(DOWNLOAD_POLL_INTERVAL, "checking on a download", function()
         pollDownload(transfer)
     end, transfer.abandon)
@@ -557,16 +561,16 @@ function Downloader:cantDownloadTo(filepath)
     local ok, err = FileUtil.checkWritableDir(folder)
     if not ok then
         LogUtil.warn("can't download to", folder, "as", err)
-        return string.format(_("books can't be saved in %s, as %s, so choose another folder"), folder, err)
+        return T(_("books can't be saved in %1, as %2, so choose another folder"), folder, err)
     end
     local taken = false
-    for _, download in pairs(self.active_downloads) do
+    for __, download in pairs(self.active_downloads) do
         taken = taken or download.filepath == filepath
     end
     if taken then
         LogUtil.warn("another book is already downloading to", filepath)
-        return string.format(
-            _("another book is already downloading as %s, so wait for it to finish, or choose another folder"),
+        return T(
+            _("another book is already downloading as %1, so wait for it to finish, or choose another folder"),
             name
         )
     end
@@ -615,7 +619,7 @@ function Downloader:downloadBook(book, filepath, callback, open_existing)
         -- title, as KOReader does for the books it downloads
         LogUtil.info("asking before downloading over", confirmed_filepath)
         UIManager:show(ConfirmBox:new {
-            text = string.format(_("%s already exists."), confirmed_filepath),
+            text = T(_("%1 already exists."), confirmed_filepath),
             ok_text = _("Overwrite"),
             ok_callback = start,
             other_buttons = open_existing and {
@@ -636,7 +640,7 @@ end
 
 -- each download whose book has started to download, whose curl can be stopped and started again
 local function eachTransfer(active_downloads, fn)
-    for _, download in pairs(active_downloads) do
+    for __, download in pairs(active_downloads) do
         if download.transfer then
             fn(download.transfer)
         end

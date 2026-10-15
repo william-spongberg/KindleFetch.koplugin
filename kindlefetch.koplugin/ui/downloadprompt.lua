@@ -25,6 +25,7 @@ local NotifyUtil = require("util.notifyutil")
 local CoverCache = require("cache.covercache")
 local CoverPlaceholder = require("ui.coverplaceholder")
 local Guard = require("util.guard")
+local T = require("ffi/util").template
 local _ = require("gettext")
 
 local DownloadPrompt = {}
@@ -70,7 +71,7 @@ function DownloadPrompt.new(book, filepath, on_download)
             },
         },
     }
-    function self.outer_container.onTapOutside(_, _, ges)
+    function self.outer_container.onTapOutside(__, __, ges)
         if ges.pos:notIntersectWith(parent_ref.frame.dimen) then
             parent_ref:close()
             return true
@@ -268,7 +269,7 @@ function DownloadPrompt:buildDetails(width)
     local details = self:details()
 
     local label_width = 0
-    for _, detail in ipairs(details) do
+    for __, detail in ipairs(details) do
         local label = TextWidget:new {
             text = detail[1],
             face = LABEL_FACE,
@@ -449,7 +450,7 @@ function DownloadPrompt:choosePath()
             local ok, err = FileUtil.checkWritableDir(dir)
             if not ok then
                 LogUtil.warn("not downloading to", dir, "as", err)
-                NotifyUtil.error(string.format(_("Books can't be downloaded to %s: %s"), dir, err))
+                NotifyUtil.error(T(_("Books can't be downloaded to %1: %2"), dir, err))
                 return
             end
             self.filepath = dir .. "/" .. self:filename()

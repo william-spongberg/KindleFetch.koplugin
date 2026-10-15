@@ -347,6 +347,11 @@ describe("ZlibSearch", function()
             local url, err = ZlibSearch.findDownloadLink(zlib_book)
             assert.is_nil(url)
             assert.are.equal("Z-Library didn't give a download link", err)
+            -- saying what it gave instead, but not the link, which carries a key
+            assert.are.equal(
+                "Z-Library didn't give a download link that can be used, answering with a link to dl.example",
+                helper.logged("warn", "^Z%-Library didn't give a download link")
+            )
         end)
 
         it("says when Z-Library has logged it out, without asking for the link", function()

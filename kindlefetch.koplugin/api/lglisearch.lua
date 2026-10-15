@@ -6,6 +6,8 @@ local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
 local UrlApi = require("api.urlapi")
 local Errors = require("util.errors")
+local T = require("ffi/util").template
+local _ = require("gettext")
 
 -- searches Library Genesis, and finds its books' download links (see Sources)
 local LlgiSearch = {
@@ -130,7 +132,7 @@ end
 -- whether the book matches the preferred languages and file types, which Library Genesis can't filter by
 local function isPreferred(book, language_names, file_types)
     local file_type_ok = false
-    for _, file_type in ipairs(file_types) do
+    for __, file_type in ipairs(file_types) do
         if book.file_type == file_type:lower() then
             file_type_ok = true
             break
@@ -145,7 +147,7 @@ local function isPreferred(book, language_names, file_types)
         return true
     end
     local language = book.language:lower()
-    for _, name in ipairs(language_names) do
+    for __, name in ipairs(language_names) do
         if language:find(name:lower(), 1, true) then
             return true
         end
@@ -155,8 +157,8 @@ end
 
 local function languageNames(codes)
     local names = {}
-    for _, code in ipairs(codes) do
-        for _, language in ipairs(KindleFetchSettings:getAvailableLanguages()) do
+    for __, code in ipairs(codes) do
+        for __, language in ipairs(KindleFetchSettings:getAvailableLanguages()) do
             if language.code == code then
                 table.insert(names, language.text)
             end
@@ -207,7 +209,7 @@ function LlgiSearch.buildParams(query, page, book_types)
         "columns%5B%5D=s",
         "objects%5B%5D=f",
     }
-    for _, book_type in ipairs(book_types) do
+    for __, book_type in ipairs(book_types) do
         if TOPICS[book_type] then
             table.insert(params, "topics%5B%5D=" .. TOPICS[book_type])
         end
@@ -247,13 +249,9 @@ end
 
 -- fetch a page of results from the first mirror that works, returning its html and the mirror
 local function fetchResults(params, refresh)
-    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(refresh)
+    local base_urls, urls_err = UrlApi:getLibgenUrls(refresh)
     if not base_urls then
-        if urls_err == HttpUtil.CANCELLED then
-            return nil, urls_err
-        end
-        return nil,
-            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or "no Library Genesis urls available"
+        return nil, UrlApi.explainLookupFailure(urls_err)
     end
 
     local last_err
@@ -262,9 +260,11 @@ local function fetchResults(params, refresh)
     local unanswered = {}
     local unresolved = 0
     local answered = false
-    -- whether a mirror said Library Genesis' database is too busy, which is no fault of the mirrors
+    -- whether a mirror said Library Genesis' database is too busy, which is no fault of the mirrors, and whether one
+    -- was blocked by its DDoS protection, which is said whichever mirror answered last
     local busy = false
-    for _, url in ipairs(base_urls) do
+    local blocked = false
+    for __, url in ipairs(base_urls) do
         local html, err, status = HttpUtil.getBody(string.format("%s/index.php?%s", url, params))
         -- the search was called off, which says nothing about the mirrors
         if err == HttpUtil.CANCELLED then
@@ -273,7 +273,7 @@ local function fetchResults(params, refresh)
         answered = answered or html ~= nil or status ~= nil
 
         if html and isResultsPage(html) then
-            for _, unanswered_url in ipairs(unanswered) do
+            for __, unanswered_url in ipairs(unanswered) do
                 UrlApi:deleteLibgenUrl(unanswered_url)
             end
             UrlApi:preferLibgenUrl(url)
@@ -289,7 +289,7 @@ local function fetchResults(params, refresh)
                 #html,
                 "bytes)"
             )
-            last_err = BLOCKED_ERROR
+            blocked = true
         elseif html and isBusy(html) then
             LogUtil.warn(
                 "searching",
@@ -311,7 +311,12 @@ local function fetchResults(params, refresh)
                     html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
                 )
             end
-            last_err = err or "unexpected response from Library Genesis"
+            -- with the status it answered with, as for the other sites
+            last_err = status
+                    and status >= 400
+                    and T(_("Library Genesis answered with an error (HTTP %1), try again later"), status)
+                or err
+                or _("unexpected response from Library Genesis")
             UrlApi:deleteLibgenUrl(url)
         else
             table.insert(unanswered, url)
@@ -325,14 +330,14 @@ local function fetchResults(params, refresh)
     -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
     -- are down. otherwise the device may be offline, so keep them
     if answered or refresh then
-        for _, url in ipairs(unanswered) do
+        for __, url in ipairs(unanswered) do
             UrlApi:deleteLibgenUrl(url)
         end
     end
 
     -- look the mirrors up again, in case they've moved, and search again, unless they answered that they can't search
     -- right now, which looking them up again won't change
-    if not refresh and not busy and last_err ~= BLOCKED_ERROR then
+    if not refresh and not busy and not blocked then
         LogUtil.info("every mirror failed, looking them up again")
         return fetchResults(params, true)
     end
@@ -340,7 +345,10 @@ local function fetchResults(params, refresh)
     if busy then
         return nil, BUSY_SEARCH_ERROR
     end
-    return nil, explainUnfound(unresolved, base_urls, refresh) or last_err or "all Library Genesis mirrors failed"
+    if blocked then
+        return nil, BLOCKED_ERROR
+    end
+    return nil, explainUnfound(unresolved, base_urls, refresh) or last_err or _("all Library Genesis mirrors failed")
 end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
@@ -386,7 +394,7 @@ function LlgiSearch:search(query, page)
     local seen = {}
     local next_page = page
     local results_read = 0
-    for _ = 1, MAX_PAGES do
+    for __ = 1, MAX_PAGES do
         local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types))
         if not html then
             -- show the books found so far, carrying on from the page that failed, or that the search was called off
@@ -423,7 +431,7 @@ function LlgiSearch:search(query, page)
             )
         )
         results_read = results_read + results
-        for _, book in ipairs(page_books) do
+        for __, book in ipairs(page_books) do
             if not seen[book.id] then
                 seen[book.id] = true
                 table.insert(books, book)
@@ -463,13 +471,9 @@ end
 -- rather than not having the book
 function LlgiSearch.findDownloadLink(book, retrying)
     -- get urls from cache, or scrape them from wikipedia again when retrying
-    local base_urls, urls_err, wikipedia_answered = UrlApi:getLibgenUrls(retrying)
+    local base_urls, urls_err = UrlApi:getLibgenUrls(retrying)
     if not base_urls then
-        if urls_err == HttpUtil.CANCELLED then
-            return nil, urls_err
-        end
-        return nil,
-            urls_err and not wikipedia_answered and UrlApi.NO_CONNECTION_ERROR or "no Library Genesis urls available"
+        return nil, UrlApi.explainLookupFailure(urls_err)
     end
 
     -- try each libgen url
@@ -482,7 +486,7 @@ function LlgiSearch.findDownloadLink(book, retrying)
     local answered = false
     local mirror_failed = false
     local busy = false
-    for _, url in ipairs(base_urls) do
+    for __, url in ipairs(base_urls) do
         -- load ads page (to get key for download page)
         -- (the book's id is its md5)
         local ads_page = string.format("%s/ads.php?md5=%s", url, book.id)
@@ -510,7 +514,7 @@ function LlgiSearch.findDownloadLink(book, retrying)
                     LogUtil.site(url) .. "'s download page (" .. #html .. " bytes):",
                     html:gsub("<[^>]+>", " "):gsub("%s+", " "):sub(1, 200)
                 )
-                last_err = "no Library Genesis download link found"
+                last_err = _("no Library Genesis download link found")
                 busy = busy or isBusy(html)
             end
         elseif status then
@@ -531,7 +535,7 @@ function LlgiSearch.findDownloadLink(book, retrying)
     -- the internet is working if another mirror answered, or the mirrors were just looked up, so the ones that didn't
     -- are down. otherwise the device may be offline, so keep them
     if answered or retrying then
-        for _, url in ipairs(unanswered) do
+        for __, url in ipairs(unanswered) do
             UrlApi:deleteLibgenUrl(url)
         end
     end
@@ -541,10 +545,9 @@ function LlgiSearch.findDownloadLink(book, retrying)
         return download_url
     end
     return nil,
-        explainUnfound(unresolved, base_urls, retrying)
-            or busy and BUSY_ERROR
-            or last_err
-            or "all Library Genesis mirrors failed",
+        explainUnfound(unresolved, base_urls, retrying) or busy and BUSY_ERROR or last_err or _(
+            "all Library Genesis mirrors failed"
+        ),
         mirror_failed
 end
 

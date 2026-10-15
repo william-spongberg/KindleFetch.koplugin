@@ -322,7 +322,8 @@ describe("IaSearch", function()
 
             local books, err = IaSearch:search("emma", 1)
             assert.is_nil(books)
-            assert.are.equal("Internet Archive doesn't have any of the file types chosen in the settings", err)
+            -- which the search box explains, offering the settings
+            assert.are.equal(require("util.errors").NO_FILE_TYPES, err)
             assert.are.equal(0, #searches())
         end)
 
@@ -397,6 +398,17 @@ describe("IaSearch", function()
             local url, err = IaSearch.findDownloadLink(book)
             assert.is_nil(url)
             assert.are.equal("Internet Archive no longer has this book as PDF", err)
+        end)
+
+        -- for crash.log, which said only how big it was
+        it("logs what Internet Archive answered with when it can't be read", function()
+            web.pages[FILES_URL] = "<html><body>Bad gateway</body></html>"
+
+            local url = IaSearch.findDownloadLink(book)
+            assert.is_nil(url)
+            local logged = helper.logged("warn", "^unexpected list of files from Internet Archive")
+            assert.matches("37 bytes, which", logged, 1, true)
+            assert.matches("Bad gateway", logged, 1, true)
         end)
 
         it("says when Internet Archive doesn't answer, without looking the link up again", function()

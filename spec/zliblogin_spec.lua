@@ -114,7 +114,7 @@ describe("ZlibLogin", function()
 
         assert.are.equal(0, logged_in)
         assert.are.equal(
-            "Couldn't log in to Z-Library: Z-Library says: Incorrect email or password",
+            "Logging in to Z-Library failed: Z-Library says: Incorrect email or password",
             helper.lastError()
         )
 
@@ -158,7 +158,7 @@ describe("ZlibLogin", function()
         logIn("reader@example.com", "p4ssword")
 
         assert.is_true(helper.wasClosed(logins[2]))
-        assert.are.equal("Couldn't log in to Z-Library: something went wrong, see crash.log", helper.lastError())
+        assert.are.equal("Logging in to Z-Library failed: something went wrong, see crash.log", helper.lastError())
     end)
 
     it("turns wifi on first if need be", function()
