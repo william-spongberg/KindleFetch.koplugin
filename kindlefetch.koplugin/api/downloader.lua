@@ -2,11 +2,11 @@ local UIManager = require("ui/uimanager")
 local NetworkMgr = require("ui/network/manager")
 local Device = require("device")
 local PluginShare = require("pluginshare")
-local Trapper = require("ui/trapper")
 local ConfirmBox = require("ui/widget/confirmbox")
 local LogUtil = require("util.logutil")
 local DownloadProgress = require("ui.downloadprogress")
 local DownloadPrompt = require("ui.downloadprompt")
+local BackgroundTask = require("ui.backgroundtask")
 local HttpUtil = require("util.httputil")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
@@ -624,20 +624,26 @@ end
 
 -- start the download without holding KOReader up while its link is looked up, saying so if it goes wrong (see Guard)
 function Downloader:_startDownloadInBackground(book, filepath, callback, retrying, failed_url, hidden)
-    Trapper:wrap(Guard.wrap("starting the download of " .. tostring(book.title), function()
-        self:_startDownload(book, filepath, callback, retrying, failed_url, hidden)
-    end, function(err)
-        local download = Downloader.active_downloads[book.id]
-        if download and download.transfer then
-            download.transfer.abandon(err)
-            return
+    BackgroundTask.run(
+        "starting the download of " .. tostring(book.title),
+        nil,
+        function()
+            self:_startDownload(book, filepath, callback, retrying, failed_url, hidden)
+        end,
+        nil,
+        function(err)
+            local download = Downloader.active_downloads[book.id]
+            if download and download.transfer then
+                download.transfer.abandon(err)
+                return
+            end
+            if download then
+                download.progress_widget:close()
+                Downloader:untrack(book.id)
+            end
+            callback(false, err)
         end
-        if download then
-            download.progress_widget:close()
-            Downloader:untrack(book.id)
-        end
-        callback(false, err)
-    end))
+    )
 end
 
 -- why a book can't download to filepath, or nil: its folder is gone or read-only, or another shares its .part file

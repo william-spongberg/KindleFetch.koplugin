@@ -2,7 +2,6 @@ local MultiInputDialog = require("ui/widget/multiinputdialog")
 local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
 local UIManager = require("ui/uimanager")
-local Trapper = require("ui/trapper")
 local NetworkMgr = require("ui/network/manager")
 local KindleFetchSettings = require("settings.settings")
 local Libraries = require("api.libraries")
@@ -12,7 +11,7 @@ local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local StringUtil = require("util.stringutil")
-local WaitingMessage = require("ui.waitingmessage")
+local BackgroundTask = require("ui.backgroundtask")
 local Errors = require("util.errors")
 local Guard = require("util.guard")
 local T = require("ffi/util").template
@@ -76,41 +75,30 @@ end
 -- look for a catalogue at address with login (see LibrarySites), saying so with a Cancel, then on_found or on_failed
 local function find(address, login, on_found, on_failed)
     NetworkMgr:runWhenConnected(function()
-        local message
-        local function closeMessage()
-            HttpUtil.setTrapWidget(nil)
-            if message and not message.cancelled and not message.closed then
-                message.closed = true
-                UIManager:close(message)
-            end
-        end
-        Trapper:wrap(Guard.wrap("finding a library's catalogue", function()
-            message = WaitingMessage.new(T(_("Looking for a library at %1..."), LogUtil.site(address)))
-            UIManager:show(message)
-            UIManager:forceRePaint()
-            -- logging in to its site while it's looked for, then putting the sites back as the settings have them
-            LibrarySites.add(address, login)
-            HttpUtil.setTrapWidget(message)
-            local ok, found, err = Guard.pcall("finding a library's catalogue", OpdsSearch.discover, address)
-            closeMessage()
-            Libraries.register()
-            if not ok then
-                found, err = nil, Errors.UNEXPECTED
-            end
-            if err == HttpUtil.CANCELLED then
-                LogUtil.info("looking for a library was called off")
-                return
-            end
-            if not found then
-                on_failed(err)
-                return
-            end
-            on_found(found)
-        end, function(err)
-            closeMessage()
-            Libraries.register()
-            Guard.say(err)
-        end))
+        -- logging in to its site while it's looked for, then putting the sites back as the settings have them
+        BackgroundTask.withMessage(
+            "finding a library's catalogue",
+            T(_("Looking for a library at %1..."), LogUtil.site(address)),
+            function()
+                LibrarySites.add(address, login)
+                return Guard.pcall("finding a library's catalogue", OpdsSearch.discover, address)
+            end,
+            function(ok, found, err)
+                if not ok then
+                    found, err = nil, Errors.UNEXPECTED
+                end
+                if err == HttpUtil.CANCELLED then
+                    LogUtil.info("looking for a library was called off")
+                    return
+                end
+                if not found then
+                    on_failed(err)
+                    return
+                end
+                on_found(found)
+            end,
+            Libraries.register
+        )
     end)
 end
 

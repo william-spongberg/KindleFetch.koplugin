@@ -240,6 +240,7 @@ kindlefetch.koplugin/
 │   ├── downloadprompt.lua     # Dialog showing a book's details and cover (full size when tapped), where to save it, and a Download button
 │   ├── diagnostics.lua        # What's known about Kindle Fetch, KOReader and the device, with a test of the connection to the sites and the recent log, to copy or save
 │   ├── waitingmessage.lua     # Message saying what's being waited for, with a Cancel button that calls the wait off
+│   ├── backgroundtask.lua     # Runs what waits on the sites without holding KOReader up, with a message and Cancel where it's shown, saying what went wrong
 │   ├── zliblogin.lua          # Dialog asking for the email and password of a Z-Library account, and logging in with them
 │   ├── librarysettings.lua    # Your Libraries, in the settings: adding a library at its address, and changing or removing those added
 │   └── downloadprogress.lua   # Renders a centered progress widget with cancel and hide buttons

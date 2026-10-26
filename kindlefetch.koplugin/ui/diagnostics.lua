@@ -1,12 +1,11 @@
 local Device = require("device")
 local DataStorage = require("datastorage")
 local UIManager = require("ui/uimanager")
-local Trapper = require("ui/trapper")
 local TextViewer = require("ui/widget/textviewer")
 local KindleFetchSettings = require("settings.settings")
 local UrlApi = require("api.urlapi")
 local ZlibAccount = require("api.zlibaccount")
-local WaitingMessage = require("ui.waitingmessage")
+local BackgroundTask = require("ui.backgroundtask")
 local CurlUtil = require("util.curlutil")
 local HttpUtil = require("util.httputil")
 local FileUtil = require("util.fileutil")
@@ -15,7 +14,6 @@ local StringUtil = require("util.stringutil")
 local NotifyUtil = require("util.notifyutil")
 local PathUtil = require("util.pathutil")
 local ProxyUtil = require("util.proxyutil")
-local Guard = require("util.guard")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
@@ -212,21 +210,8 @@ end
 
 -- test each site (see testUrls) without holding KOReader up, then report how it went, or on Cancel how it went so far
 function Diagnostics.testConnection()
-    local message
-    local function closeMessage()
-        HttpUtil.setTrapWidget(nil)
-        if message and not message.cancelled and not message.closed then
-            message.closed = true
-            UIManager:close(message)
-        end
-    end
-
-    Trapper:wrap(Guard.wrap("testing the connection", function()
-        message = WaitingMessage.new(_("Testing the connection to the sites Kindle Fetch uses..."))
-        UIManager:show(message)
-        UIManager:forceRePaint()
-        HttpUtil.setTrapWidget(message)
-
+    local text = _("Testing the connection to the sites Kindle Fetch uses...")
+    BackgroundTask.withMessage("testing the connection", text, function()
         local results = {}
         for __, url in ipairs(testUrls()) do
             local body, err, status = HttpUtil.getBody(url)
@@ -237,13 +222,11 @@ function Diagnostics.testConnection()
             end
             table.insert(results, result(url, body, err, status))
         end
-        closeMessage()
+        return results
+    end, function(results)
         LogUtil.info("tested the connection:", table.concat(results, "; "))
         Diagnostics.show(results)
-    end, function(err)
-        closeMessage()
-        Guard.say(err)
-    end))
+    end)
 end
 
 return Diagnostics

@@ -1,4 +1,4 @@
-local Trapper = require("ui/trapper")
+local BackgroundTask = require("ui.backgroundtask")
 local Sites = require("api.sites")
 local HttpUtil = require("util.httputil")
 local Guard = require("util.guard")
@@ -123,20 +123,17 @@ function MultiSearch:searchSite(source)
     }
     self.traps[source] = trap
     local what = string.format("search of %s for %q", site.NAME, self.query)
-    Trapper:wrap(Guard.wrap(what, function()
-        HttpUtil.setTrapWidget(trap)
-        local scope = MultiSearch.canNarrow(source, self.scope) and self.scope or nil
-        local ok, books, err, next_page, results_read =
-            Guard.pcall(what, site.search, site, self.query, self.pages[source], scope)
-        HttpUtil.setTrapWidget(nil)
+    local scope = MultiSearch.canNarrow(source, self.scope) and self.scope or nil
+    BackgroundTask.run(what, trap, function()
+        return Guard.pcall(what, site.search, site, self.query, self.pages[source], scope)
+    end, function(ok, books, err, next_page, results_read)
         if not ok then
             books, err, next_page, results_read = nil, Errors.UNEXPECTED, nil, nil
         end
         self:finish(source, books, err, next_page, results_read)
     end, function(err)
-        HttpUtil.setTrapWidget(nil)
         self:finish(source, nil, err)
-    end))
+    end)
 end
 
 -- pass on what the site's search found, or why it didn't, starting the next where they're searched one after another
