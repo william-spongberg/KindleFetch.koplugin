@@ -3,13 +3,14 @@ local LogUtil = require("util.logutil")
 local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
-local SearchCache = require("cache.searchcache")
+local Site = require("api.site")
+local Book = require("api.book")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- searches Project Gutenberg's free ebooks with its catalogue's search (its OPDS feed), and finds their files there
-local GutenbergSearch = {
+local GutenbergSearch = Site:extend {
     NAME = "Project Gutenberg",
     SOURCE = "gutenberg",
 }
@@ -97,90 +98,39 @@ function GutenbergSearch.parseResults(body, languages, file_types)
             results = results + 1
             local language, name = titleLanguage(title)
             if language and wanted[language.code] and file_type then
-                local authors = text(entry:match("<content[^>]*>(.-)</content>"))
-                table.insert(books, {
-                    source = SOURCE,
-                    id = SOURCE .. "_" .. id,
-                    gutenberg_id = id,
-                    -- (or after the book's id, when there's nothing in its title to name its file after)
-                    title = StringUtil.cleanFileName(name) ~= "" and StringUtil.cleanFileName(name)
-                        or SOURCE .. "_" .. id,
-                    display_title = StringUtil.cleanTitle(name),
-                    authors = authors ~= "" and authors or "Unknown author",
-                    language = language.text,
-                    file_type = file_type,
-                    image_url = string.format("%s/cache/epub/%d/pg%d.cover.medium.jpg", SITE, id, id),
-                })
+                -- (named after its id where there's nothing in its title to name its file after)
+                local book_id = SOURCE .. "_" .. id
+                table.insert(
+                    books,
+                    Book.new(SOURCE, {
+                        id = book_id,
+                        gutenberg_id = id,
+                        title = name,
+                        authors = text(entry:match("<content[^>]*>(.-)</content>")),
+                        language = language.text,
+                        file_type = file_type,
+                        image_url = string.format("%s/cache/epub/%d/pg%d.cover.medium.jpg", SITE, id, id),
+                    }, book_id)
+                )
             end
         end
     end
     return books, results, body:find('rel="next"', 1, true) ~= nil
 end
 
--- what went wrong when Project Gutenberg answered with body, or didn't answer
-local function explainFailure(body, err, status)
-    if body and status and status >= 400 then
-        return T(_("%1 answered with an error (HTTP %2), try again later"), GutenbergSearch.NAME, status)
-    end
-    if body then
-        return T(_("unexpected response from %1"), GutenbergSearch.NAME)
-    end
-    return T(_("%1 didn't answer (%2)"), GutenbergSearch.NAME, err)
-end
-
--- whether there are results saved from an earlier search, which can be shown without an internet connection
-function GutenbergSearch:isCached(query, page)
-    return SearchCache:hasPage(self, query, page)
-end
-
--- the books on a page of the catalogue's results, as search returns them
-local function fetchResults(query, page, languages, file_types)
-    if not GutenbergSearch.hasFileTypes(file_types) then
-        LogUtil.warn(GutenbergSearch.NAME, "has none of the file types chosen")
+-- the search's address, or nil and why not where none of the file types chosen are Project Gutenberg's
+function GutenbergSearch:searchUrl(search)
+    if not GutenbergSearch.hasFileTypes(search.file_types) then
+        LogUtil.warn(self.NAME, "has none of the file types chosen")
         return nil, Errors.NO_FILE_TYPES
     end
-
-    local body, err, status = HttpUtil.getBody(GutenbergSearch.buildUrl(query, page, languages))
-    if err == HttpUtil.CANCELLED then
-        return nil, err
-    end
-    local books, results, more
-    if body and not (status and status >= 400) then
-        books, results, more = GutenbergSearch.parseResults(body, languages, file_types)
-    end
-    if not books then
-        if body then
-            LogUtil.warn(
-                "unexpected search results from",
-                GutenbergSearch.NAME .. ": HTTP",
-                status,
-                #body,
-                "bytes:",
-                LogUtil.excerpt(body)
-            )
-        end
-        return nil, explainFailure(body, err, status)
-    end
-
-    local next_page = more and page + 1 or nil
-    LogUtil.info(
-        string.format(
-            "page %d of %s's results: kept %d of its %d%s",
-            page,
-            GutenbergSearch.NAME,
-            #books,
-            results,
-            next_page and "" or ", the last"
-        )
-    )
-    return books, nil, next_page, results
+    return GutenbergSearch.buildUrl(search.query, search.page, search.languages)
 end
 
--- search a page of results, as LibgenSearch:search does, in both titles and authors, as it can't be narrowed to either
-function GutenbergSearch:search(query, page)
-    return SearchCache:search(self, query, page, nil, function(languages, file_types)
-        return fetchResults(query, page, languages, file_types)
-    end)
+-- the books on a page of the catalogue's results, how many it lists and the page after, or nil where it isn't one
+function GutenbergSearch:parsePage(body, __, search)
+    local books, results, more = GutenbergSearch.parseResults(body, search.languages, search.file_types)
+    return books, results, more and search.page + 1 or nil
 end
 
 -- the address and size of the best of the book's files in its file type (see FILES), from its catalogue entry, or nil
@@ -203,19 +153,19 @@ function GutenbergSearch.findFile(body, file_type)
     end
 end
 
--- the book's download link and listed size (see Sites), or nil and why not, e.g. audiobooks aren't in any file type
-function GutenbergSearch.findDownloadLink(book)
+-- the book's download link and listed size (see Site), or nil and why not, e.g. audiobooks aren't in any file type
+function GutenbergSearch:findDownloadLink(book)
     local body, err, status = HttpUtil.getBody(string.format("%s/ebooks/%d.opds", SITE, book.gutenberg_id))
     if err == HttpUtil.CANCELLED then
         return nil, err
     end
     if not body or (status and status >= 400) then
-        return nil, explainFailure(body, err, status)
+        return nil, self:explainFailure(body, err, status)
     end
     local url, bytes = GutenbergSearch.findFile(body, book.file_type)
     if not url then
-        LogUtil.warn(GutenbergSearch.NAME, "lists no", book.file_type, "file for", book.gutenberg_id)
-        return nil, T(_("%1 doesn't have this book as %2"), GutenbergSearch.NAME, book.file_type:upper())
+        LogUtil.warn(self.NAME, "lists no", book.file_type, "file for", book.gutenberg_id)
+        return nil, T(_("%1 doesn't have this book as %2"), self.NAME, book.file_type:upper())
     end
     return url, nil, nil, { bytes = bytes }
 end

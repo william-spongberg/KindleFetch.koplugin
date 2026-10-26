@@ -6,13 +6,17 @@ local CurlUtil = require("util.curlutil")
 local OpdsFeed = require("util.opdsfeed")
 local LanguageCodes = require("util.languagecodes")
 local KindleFetchSettings = require("settings.settings")
+local Site = require("api.site")
+local Book = require("api.book")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- searches the OPDS catalogue of a library the user has added (see Libraries) with its own search, and finds its files
-local OpdsSearch = {}
-OpdsSearch.__index = OpdsSearch
+local OpdsSearch = Site:extend {
+    -- as a library's books change, and they can only be downloaded once connected to it anyway
+    SAVES_SEARCHES = false,
+}
 
 -- the kinds of catalogue, each searched its own way (see kindOf): Calibre's, Calibre-Web's (Automated's too), others
 OpdsSearch.CALIBRE = "calibre"
@@ -84,10 +88,6 @@ function OpdsSearch.new(source, library)
         -- the addresses of later pages of results, by search (see searchKey), as each page links to the next
         next_urls = {},
     }, OpdsSearch)
-    -- which is called by itself (see Downloader), rather than as the site's
-    site.findDownloadLink = function(book)
-        return site:downloadLink(book)
-    end
     return site
 end
 
@@ -149,13 +149,26 @@ function OpdsSearch.calibreSearch(query, scope, languages, file_types)
     return table.concat(clauses, " and ")
 end
 
--- the search's address from its OpenSearch template: the words and first page filled in, the rest left empty, or nil
-function OpdsSearch:searchUrl(query, scope, languages, file_types)
+-- what's searched for, for the address of the page after (see next_urls in new)
+local function searchKey(search, page)
+    return table.concat({ search.query, search.scope or "", tostring(page) }, "\n")
+end
+
+-- the search's address from its OpenSearch template (words and first page filled in, the rest empty), or nil
+function OpdsSearch:searchUrl(search)
+    if search.page > 1 then
+        local url = self.next_urls[searchKey(search, search.page)]
+        if not url then
+            LogUtil.warn("there's no address for page", search.page, "of", self.NAME .. "'s results")
+            return nil, Errors.UNEXPECTED
+        end
+        return url
+    end
     local terms
     if self.library.kind == OpdsSearch.CALIBRE then
-        terms = OpdsSearch.calibreSearch(query, scope, languages, file_types)
+        terms = OpdsSearch.calibreSearch(search.query, search.scope, search.languages, search.file_types)
     else
-        terms = StringUtil.trim(query)
+        terms = StringUtil.trim(search.query)
     end
     if not terms or terms == "" then
         return nil
@@ -183,17 +196,6 @@ local function titleFileType(title)
             return file_type
         end
     end
-end
-
--- how big a file of this many bytes is, as the sites say it (see BookFilter), e.g. "752 kB" or "2.1 MB"
-local function formatSize(bytes)
-    if not bytes or bytes <= 0 then
-        return nil
-    end
-    if bytes < 1024 * 1024 then
-        return string.format("%d kB", math.max(1, math.floor(bytes / 1024 + 0.5)))
-    end
-    return string.format("%.1f MB", bytes / (1024 * 1024))
 end
 
 -- the year a book was published: its issued date, or published date (not Calibre's, which is when it was added)
@@ -258,23 +260,20 @@ function OpdsSearch:parseBook(entry, base_url, wanted, file_types)
     end
     local file = files[file_type]
     -- named after its entry's id, as its cover is (see CoverCache), or its file's address, where it has none
-    local id = (entry.id or file.url):gsub("[^%w%-]", "_"):sub(1, 100)
-    local title = StringUtil.cleanFileName(entry.title)
-    return {
-        source = self.SOURCE,
-        id = self.SOURCE .. "_" .. id,
-        title = title ~= "" and title or self.SOURCE .. "_" .. id,
-        display_title = StringUtil.cleanTitle(entry.title),
-        authors = authors ~= "" and authors or "Unknown author",
+    local id = self.SOURCE .. "_" .. (entry.id or file.url):gsub("[^%w%-]", "_"):sub(1, 100)
+    return Book.new(self.SOURCE, {
+        id = id,
+        title = entry.title,
+        authors = authors,
         year = yearOf(kind, entry),
         language = #languages > 0 and table.concat(languages, ", ") or nil,
         file_type = file_type,
-        file_size = formatSize(file.bytes),
+        file_size = Book.formatSize(file.bytes),
         bytes = file.bytes,
         download_url = file.url,
         image_url = thumbnail or image,
         full_image_url = image,
-    }
+    }, id)
 end
 
 -- the feed's books in the file types and languages chosen, its number of entries and next page's address, or nil
@@ -330,92 +329,32 @@ local function explainFailure(name, body, err, status)
     return T(_("%1 didn't answer (%2)"), name, err)
 end
 
--- library searches aren't saved, as a library's books change, and they can only be downloaded once connected anyway
-function OpdsSearch:isCached()
-    return false
+-- what went wrong when the library answered with body (and status), or didn't answer at all (err)
+function OpdsSearch:explainFailure(body, err, status)
+    return explainFailure(self.NAME, body, err, status)
 end
 
--- what's searched for, for the address of the page after (see next_urls in new)
-local function searchKey(query, scope, page)
-    return table.concat({ query, scope or "", tostring(page) }, "\n")
+-- which Calibre's content server answers a search that finds nothing with, as it does one it can't make sense of
+function OpdsSearch:foundNothing(status)
+    return status == 404 and self.library.kind == OpdsSearch.CALIBRE
 end
 
--- search a page of the library's results, narrowed down by scope where given, as LibgenSearch:search does
-function OpdsSearch:search(query, page, scope)
-    local languages = KindleFetchSettings:getPreferredLanguages()
-    local file_types = KindleFetchSettings:getPreferredFileTypes()
-    LogUtil.info(
-        string.format(
-            "searching %s for %q%s from page %d, in %s, as %s",
-            self.NAME,
-            query,
-            scope and " by " .. scope or "",
-            page,
-            table.concat(languages, "/"),
-            table.concat(file_types, "/")
-        )
-    )
-    local url
-    if page == 1 then
-        url = self:searchUrl(query, scope, languages, file_types)
-        if not url then
-            return {}, nil, nil, 0
-        end
-    else
-        url = self.next_urls[searchKey(query, scope, page)]
-        if not url then
-            LogUtil.warn("there's no address for page", page, "of", self.NAME .. "'s results")
-            return nil, Errors.UNEXPECTED
-        end
-    end
-
-    local body, err, status = HttpUtil.getBody(url)
-    if err == HttpUtil.CANCELLED then
-        return nil, err
-    end
-    -- which Calibre's content server answers a search that finds nothing with, as it does one it can't make sense of
-    if status == 404 and self.library.kind == OpdsSearch.CALIBRE then
-        LogUtil.info(string.format("%s found no books for %q", self.NAME, query))
-        return {}, nil, nil, 0
-    end
-    local books, results, next_url
-    if body and not (status and status >= 400) then
-        books, results, next_url = self:parseResults(body, url, languages, file_types)
-    end
+-- the books on a page of the library's results, how many entries it had and the page after, or nil if it isn't a feed
+function OpdsSearch:parsePage(body, url, search)
+    local books, results, next_url = self:parseResults(body, url, search.languages, search.file_types)
     if not books then
-        if body then
-            LogUtil.warn(
-                "unexpected search results from",
-                self.NAME .. ": HTTP",
-                status,
-                #body,
-                "bytes:",
-                LogUtil.excerpt(body)
-            )
-        end
-        return nil, explainFailure(self.NAME, body, err, status)
+        return nil
     end
-
     local next_page
     if next_url then
-        next_page = page + 1
-        self.next_urls[searchKey(query, scope, next_page)] = next_url
+        next_page = search.page + 1
+        self.next_urls[searchKey(search, next_page)] = next_url
     end
-    LogUtil.info(
-        string.format(
-            "page %d of %s's results: kept %d of its %d%s",
-            page,
-            self.NAME,
-            #books,
-            results,
-            next_page and "" or ", the last"
-        )
-    )
-    return books, nil, next_page, results
+    return books, results, next_page
 end
 
--- the book's download link from its catalogue entry, then nil, nil and its listed size, as Sites says
-function OpdsSearch:downloadLink(book)
+-- the book's download link from its catalogue entry, then nil, nil and its listed size, as Site says
+function OpdsSearch:findDownloadLink(book)
     if not StringUtil.isSafeUrl(book.download_url) then
         return nil, T(_("%1 doesn't have this book as %2"), self.NAME, tostring(book.file_type):upper())
     end

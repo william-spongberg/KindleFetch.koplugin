@@ -515,7 +515,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     end
     HttpUtil.setTrapWidget(progress_widget)
     local looked_up, download_url, lookup_err, mirror_failed, listed =
-        Guard.pcall("looking up the download link", source.findDownloadLink, book, retrying, failed_url)
+        Guard.pcall("looking up the download link", source.findDownloadLink, source, book, retrying, failed_url)
     HttpUtil.setTrapWidget(nil)
     progress_widget.dismiss_callback = nil
     if not can_cancel then

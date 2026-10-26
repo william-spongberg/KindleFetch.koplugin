@@ -4,14 +4,15 @@ local LogUtil = require("util.logutil")
 local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
-local SearchCache = require("cache.searchcache")
+local Site = require("api.site")
+local Book = require("api.book")
 local LanguageCodes = require("util.languagecodes")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- searches the books on Internet Archive that anyone can download, rather than only borrow, and finds their files
-local IaSearch = {
+local IaSearch = Site:extend {
     NAME = "Internet Archive",
     SOURCE = "archive",
 }
@@ -75,7 +76,7 @@ local function quote(term)
     return '"' .. term:gsub('[\\"]', "\\%0") .. '"'
 end
 
--- what a search can be narrowed to (see Sites): only the books' titles, the names of their authors, or their ISBNs
+-- what a search can be narrowed to (see Site): only the books' titles, the names of their authors, or their ISBNs
 IaSearch.SCOPES = { "title", "author", "isbn" }
 local SCOPE_FIELDS = {
     title = "title",
@@ -253,21 +254,18 @@ local function parseBook(doc, file_types)
         return nil
     end
 
-    local authors = authorNames(doc.creator)
     local year = (values(doc.year)[1] or ""):match("^%d%d%d%d$")
-    return {
-        source = SOURCE,
+    -- (named after its identifier where there's nothing in its title to name its file after)
+    return Book.new(SOURCE, {
         id = SOURCE .. "_" .. identifier,
         identifier = identifier,
-        -- (or after the book's identifier, when there's nothing in its title to name its file after)
-        title = StringUtil.cleanFileName(title) ~= "" and StringUtil.cleanFileName(title) or identifier,
-        display_title = StringUtil.cleanTitle(title),
-        authors = authors ~= "" and authors or "Unknown author",
+        title = title,
+        authors = authorNames(doc.creator),
         year = year ~= "0000" and year or nil,
         language = languageName(doc.language),
         file_type = file_type,
         image_url = string.format("%s/services/img/%s", SITE, identifier),
-    }
+    }, identifier)
 end
 
 -- the books in the preferred file types, the number of results on the page and in all, from the search's JSON, or nil
@@ -289,75 +287,23 @@ function IaSearch.parseResults(body, file_types)
     return books, #response.docs, tonumber(response.numFound) or 0
 end
 
--- what went wrong when Internet Archive answered with body, or didn't answer
-local function explainFailure(body, err, status)
-    if body and status and status >= 400 then
-        return T(_("%1 answered with an error (HTTP %2), try again later"), IaSearch.NAME, status)
-    end
-    if body then
-        return T(_("unexpected response from %1"), IaSearch.NAME)
-    end
-    return T(_("%1 didn't answer (%2)"), IaSearch.NAME, err)
-end
-
--- whether there are results saved from an earlier search, which can be shown without an internet connection
-function IaSearch:isCached(query, page, scope)
-    return SearchCache:hasPage(self, query, page, scope)
-end
-
--- the books on a page of Internet Archive's results, as search returns them
-local function fetchResults(query, page, scope, languages, file_types)
-    if #formatTerms(file_types) == 0 then
-        LogUtil.warn(IaSearch.NAME, "has none of the file types chosen")
+-- the search's address, or nil where there's nothing in the query to find, or nil and why not
+function IaSearch:searchUrl(search)
+    if #formatTerms(search.file_types) == 0 then
+        LogUtil.warn(self.NAME, "has none of the file types chosen")
         return nil, Errors.NO_FILE_TYPES
     end
-    local search = IaSearch.buildQuery(query, languages, file_types, scope)
-    if not search then
-        return {}, nil, nil, 0
-    end
-
-    local body, err, status = HttpUtil.getBody(SITE .. "/advancedsearch.php?" .. IaSearch.buildParams(search, page))
-    if err == HttpUtil.CANCELLED then
-        return nil, err
-    end
-    local books, results, total
-    if body and not (status and status >= 400) then
-        books, results, total = IaSearch.parseResults(body, file_types)
-    end
-    if not books then
-        if body then
-            LogUtil.warn(
-                "unexpected search results from",
-                IaSearch.NAME .. ": HTTP",
-                status,
-                #body,
-                "bytes:",
-                LogUtil.excerpt(body)
-            )
-        end
-        return nil, explainFailure(body, err, status)
-    end
-
-    local next_page = page * RESULTS_PER_PAGE < total and page + 1 or nil
-    LogUtil.info(
-        string.format(
-            "page %d of %s's %d results: kept %d of its %d%s",
-            page,
-            IaSearch.NAME,
-            total,
-            #books,
-            results,
-            next_page and "" or ", the last"
-        )
-    )
-    return books, nil, next_page, results
+    local terms = IaSearch.buildQuery(search.query, search.languages, search.file_types, search.scope)
+    return terms and SITE .. "/advancedsearch.php?" .. IaSearch.buildParams(terms, search.page)
 end
 
--- search a page of Internet Archive's results, narrowed down by scope where given, as LibgenSearch:search does
-function IaSearch:search(query, page, scope)
-    return SearchCache:search(self, query, page, scope, function(languages, file_types)
-        return fetchResults(query, page, scope, languages, file_types)
-    end)
+-- the books on a page of results, how many it had, the page after (or nil) and how many in all, or nil if it isn't one
+function IaSearch:parsePage(body, __, search)
+    local books, results, total = IaSearch.parseResults(body, search.file_types)
+    if not books then
+        return nil
+    end
+    return books, results, search.page * RESULTS_PER_PAGE < total and search.page + 1 or nil, total
 end
 
 -- a file's path in a book's folder, for its address: each folder's name and the file's name escaped as need be
@@ -389,8 +335,8 @@ local function pickFile(files, file_type)
     end
 end
 
--- the book's download link from its folder's list of files, and what it lists it as (see Sites), or nil and why not
-function IaSearch.findDownloadLink(book)
+-- the book's download link from its folder's list of files, and what it lists it as (see Site), or nil and why not
+function IaSearch:findDownloadLink(book)
     local body, err, status = HttpUtil.getBody(string.format("%s/metadata/%s/files", SITE, book.identifier))
     if err == HttpUtil.CANCELLED then
         return nil, err
@@ -403,7 +349,7 @@ function IaSearch.findDownloadLink(book)
         if body then
             LogUtil.warn(
                 "unexpected list of files from",
-                IaSearch.NAME .. ": HTTP",
+                self.NAME .. ": HTTP",
                 tostring(status),
                 #body,
                 "bytes,",
@@ -411,14 +357,14 @@ function IaSearch.findDownloadLink(book)
                 LogUtil.excerpt(body)
             )
         end
-        return nil, explainFailure(body, err, status)
+        return nil, self:explainFailure(body, err, status)
     end
 
     -- none when it has been taken down since it was found, which leaves its folder empty
     local file = pickFile(type(data.result) == "table" and data.result or {}, book.file_type)
     if not file then
         LogUtil.warn(string.format("found no %s file of %s", book.file_type, book.identifier))
-        return nil, T(_("%1 no longer has this book as %2"), IaSearch.NAME, book.file_type:upper())
+        return nil, T(_("%1 no longer has this book as %2"), self.NAME, book.file_type:upper())
     end
     LogUtil.info(
         string.format(

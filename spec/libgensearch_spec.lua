@@ -746,7 +746,7 @@ describe("LibgenSearch", function()
                     return "<html>Service Unavailable</html>", nil, 503
                 end
                 web.pages[mirrors[2] .. "/ads.php?md5=" .. fixtures.DUNE.md5] = fixtures.libgenAds(fixtures.DUNE.md5)
-                LibgenSearch.findDownloadLink({ id = fixtures.DUNE.md5 })
+                LibgenSearch:findDownloadLink({ id = fixtures.DUNE.md5 })
 
                 assert.are.equal(
                     string.format(

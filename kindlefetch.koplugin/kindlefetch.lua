@@ -14,6 +14,7 @@ local util = require("util")
 local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
 local Sites = require("api.sites")
+local Book = require("api.book")
 local MultiSearch = require("api.multisearch")
 local Downloader = require("api.downloader")
 local HttpUtil = require("util.httputil")
@@ -1504,9 +1505,7 @@ function KindleFetch:changeChoices(change)
 end
 
 local function buildDownloadPath(book)
-    local download_dir = KindleFetchSettings:getDownloadDir()
-    local filename = util.getSafeFilename(book.title .. "." .. book.file_type, download_dir)
-    return download_dir .. "/" .. filename
+    return Book.path(book, KindleFetchSettings:getDownloadDir())
 end
 
 -- whether it's downloaded already, remembered until a download finishes, as naming it reads the file systems mounted

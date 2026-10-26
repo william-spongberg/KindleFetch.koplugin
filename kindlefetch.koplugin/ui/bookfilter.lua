@@ -1,4 +1,5 @@
 local Sites = require("api.sites")
+local Book = require("api.book")
 local MultiSearch = require("api.multisearch")
 local StringUtil = require("util.stringutil")
 local T = require("ffi/util").template
@@ -45,19 +46,11 @@ local function inOrder(first)
     end
 end
 
--- how many bytes a book is, from the size its site says, e.g. "2.06 MB" or "752 kB", or nil where it doesn't say
-local UNITS = { [""] = 1, k = 1024, m = 1024 * 1024, g = 1024 * 1024 * 1024 }
-local function bytes(size)
-    local number, unit = tostring(size or ""):lower():match("^%s*([%d%.]+)%s*([kmg]?)i?b%s*$")
-    number = tonumber(number)
-    return number and number > 0 and number * UNITS[unit] or nil
-end
-
 -- the sizes the books are grouped by, each smaller than below, but for the last
 local SIZES = {
-    { code = "1", below = bytes("1 MB"), text = _("Under 1 MB") },
-    { code = "2", below = bytes("10 MB"), text = _("1 to 10 MB") },
-    { code = "3", below = bytes("100 MB"), text = _("10 to 100 MB") },
+    { code = "1", below = Book.parseSize("1 MB"), text = _("Under 1 MB") },
+    { code = "2", below = Book.parseSize("10 MB"), text = _("1 to 10 MB") },
+    { code = "3", below = Book.parseSize("100 MB"), text = _("10 to 100 MB") },
     { code = "4", text = _("Over 100 MB") },
 }
 
@@ -134,7 +127,7 @@ BookFilter.FILTERS = {
         name = _("Sizes"),
         -- which only Library Genesis, Z-Library and libraries' catalogues say
         valuesOf = function(book)
-            local size = bytes(book.file_size)
+            local size = Book.parseSize(book.file_size)
             if not size then
                 return { unknown() }
             end

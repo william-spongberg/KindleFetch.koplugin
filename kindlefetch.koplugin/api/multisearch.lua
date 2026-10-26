@@ -44,7 +44,7 @@ function MultiSearch.removeSite(source)
     end
 end
 
--- whether the site can narrow a search down to scope, e.g. "author" (see SCOPES in Sites)
+-- whether the site can narrow a search down to scope, e.g. "author" (see SCOPES in Site)
 function MultiSearch.canNarrow(source, scope)
     for __, site_scope in ipairs(Sites[source].SCOPES or {}) do
         if site_scope == scope then

@@ -1,14 +1,15 @@
 local LogUtil = require("util.logutil")
 local StringUtil = require("util.stringutil")
 local KindleFetchSettings = require("settings.settings")
-local SearchCache = require("cache.searchcache")
+local Site = require("api.site")
+local Book = require("api.book")
 local ZlibAccount = require("api.zlibaccount")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- searches Z-Library as the account logged into (see ZlibAccount), and finds its books' download links (see Sites)
-local ZlibSearch = {
+-- searches Z-Library as the account logged into (see ZlibAccount), and finds its books' download links (see Site)
+local ZlibSearch = Site:extend {
     NAME = "Z-Library",
     -- searching it needs an account, logged into before searching (see ZlibLogin)
     NEEDS_LOGIN = true,
@@ -89,22 +90,21 @@ local function parseBook(book, is_preferred)
     local authors = StringUtil.cleanTitle(text(book.author) or ""):gsub("[,;&%s]+$", "")
     local year = tonumber(book.year)
     local cover = text(book.cover)
-    return {
-        source = SOURCE,
-        id = SOURCE .. "_" .. id,
+    -- (named after its id where there's nothing in its title to name its file after)
+    local book_id = SOURCE .. "_" .. id
+    return Book.new(SOURCE, {
+        id = book_id,
         zlib_id = id,
         hash = hash,
-        -- (or after the book's id, when there's nothing in its title to name its file after)
-        title = StringUtil.cleanFileName(title) ~= "" and StringUtil.cleanFileName(title) or SOURCE .. "_" .. id,
-        display_title = StringUtil.cleanTitle(title),
-        authors = authors ~= "" and authors or "Unknown author",
+        title = title,
+        authors = authors,
         year = year and year > 0 and tostring(year) or nil,
         language = text(book.language),
         file_type = file_type,
         file_size = text(book.filesizeString),
         -- the book is shown without a cover rather than asking curl for an address that isn't just an address
         image_url = StringUtil.isSafeUrl(cover) and cover or nil,
-    }
+    }, book_id)
 end
 
 -- the books in the preferred file types from Z-Library's answer, and how many could be read (the results read), or nil
@@ -131,21 +131,18 @@ function ZlibSearch.parseResults(data, file_types)
     return books, read
 end
 
--- whether there are results saved from an earlier search, which can be shown without an internet connection
-function ZlibSearch:isCached(query, page)
-    return SearchCache:hasPage(self, query, page)
-end
-
--- the books on a page of Z-Library's results, as search returns them
-local function fetchResults(query, page, languages, file_types)
-    local data, err = ZlibAccount:request("/eapi/book/search", ZlibSearch.buildForm(query, page, languages, file_types))
+-- the books on the search's page of Z-Library's results, as Site:search returns them, asked for as a form
+function ZlibSearch:fetchResults(search)
+    local page, file_types = search.page, search.file_types
+    local data, err =
+        ZlibAccount:request("/eapi/book/search", ZlibSearch.buildForm(search.query, page, search.languages, file_types))
     if not data then
         return nil, err
     end
     local books, read = ZlibSearch.parseResults(data, file_types)
     if not books then
         LogUtil.warn("Z-Library's answer to a search had no books in it")
-        return nil, T(_("unexpected response from %1"), ZlibSearch.NAME)
+        return nil, T(_("unexpected response from %1"), self.NAME)
     end
     -- none of them could be read, as when Z-Library has changed what it answers with
     if read == 0 and #data.books > 0 then
@@ -157,29 +154,12 @@ local function fetchResults(query, page, languages, file_types)
     if next_page and next_page <= page then
         next_page = nil
     end
-    LogUtil.info(
-        string.format(
-            "page %d of %s's %s results: kept %d of its %d%s",
-            page,
-            ZlibSearch.NAME,
-            tostring(tonumber(pagination.total_items) or "unknown"),
-            #books,
-            #data.books,
-            next_page and "" or ", the last"
-        )
-    )
+    self:logPage(page, #books, #data.books, next_page, tostring(tonumber(pagination.total_items) or "unknown"))
     return books, nil, next_page, read
 end
 
--- search a page of Z-Library's results, as LibgenSearch:search does
-function ZlibSearch:search(query, page)
-    return SearchCache:search(self, query, page, nil, function(languages, file_types)
-        return fetchResults(query, page, languages, file_types)
-    end)
-end
-
 -- the book's link, only asked for with downloads left today, as each link counts; with failed_url, another server's
-function ZlibSearch.findDownloadLink(book, __, failed_url)
+function ZlibSearch:findDownloadLink(book, __, failed_url)
     local profile, err = ZlibAccount:request("/eapi/user/profile")
     if not profile then
         return nil, err

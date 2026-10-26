@@ -244,7 +244,12 @@ describe("OpdsSearch", function()
 
         it("finds the books in the file types chosen, the first chosen of those each is in", function()
             local site = calibreLibrary()
-            local url = site:searchUrl("austen", nil, { "en" }, { "mobi", "epub", "pdf" })
+            local url = site:searchUrl({
+                query = "austen",
+                page = 1,
+                languages = { "en" },
+                file_types = { "mobi", "epub", "pdf" },
+            })
             web.pages[url] = CALIBRE_SEARCH
             Settings:setPreferredFileTypes({ "mobi", "epub", "pdf" })
 
@@ -275,7 +280,13 @@ describe("OpdsSearch", function()
 
         it("asks for the next page at the address the one before links to", function()
             local site = calibreLibrary()
-            web.pages[site:searchUrl("austen", nil, { "en" }, { "epub", "mobi", "pdf" })] = CALIBRE_SEARCH
+            web.pages[site:searchUrl({
+                query = "austen",
+                page = 1,
+                languages = { "en" },
+                file_types = { "epub", "mobi", "pdf" },
+            })] =
+                CALIBRE_SEARCH
             web.pages["http://127.0.0.1:8089/opds/search/%22austen%22?library_id=Books&offset=1"] =
                 CALIBRE_SEARCH:gsub('<link%s[^>]*rel="next"[^>]*/>', "")
             site:search("austen", 1)
@@ -289,7 +300,12 @@ describe("OpdsSearch", function()
         -- which it answers a search that finds nothing with, as it does one it can't make sense of
         it("takes being told nothing was found (HTTP 404) as no books", function()
             local site = calibreLibrary()
-            web.pages[site:searchUrl("zzz", nil, { "en" }, { "epub", "mobi", "pdf" })] = function()
+            web.pages[site:searchUrl({
+                query = "zzz",
+                page = 1,
+                languages = { "en" },
+                file_types = { "epub", "mobi", "pdf" },
+            })] = function()
                 return "<html>No books found</html>", nil, 404
             end
             local books, err, next_page, results = site:search("zzz", 1)
@@ -303,7 +319,7 @@ describe("OpdsSearch", function()
             assert.are.equal(
                 "http://127.0.0.1:8089/opds/search/%28%22dune%22%29%20and%20%28formats%3A%22%3DEPUB%22%29%20and%20"
                     .. "%28languages%3A%22%3Deng%22%20or%20languages%3Afalse%29?library_id=Books",
-                calibreLibrary():searchUrl("dune", nil, { "en" }, { "epub" })
+                calibreLibrary():searchUrl({ query = "dune", page = 1, languages = { "en" }, file_types = { "epub" } })
             )
         end)
     end)
@@ -355,7 +371,12 @@ describe("OpdsSearch", function()
         it("asks for the search as it's written, escaped", function()
             assert.are.equal(
                 "http://nas:8083/opds/search/dune%20messiah",
-                calibreWebLibrary():searchUrl("  dune messiah ", nil, { "en" }, { "epub" })
+                calibreWebLibrary():searchUrl({
+                    query = "  dune messiah ",
+                    page = 1,
+                    languages = { "en" },
+                    file_types = { "epub" },
+                })
             )
         end)
 
@@ -381,7 +402,7 @@ describe("OpdsSearch", function()
         })
         assert.are.equal(
             "https://books.example/search?q=watchmen&page=1&n=&l=",
-            site:searchUrl("watchmen", nil, { "en" }, { "cbz" })
+            site:searchUrl({ query = "watchmen", page = 1, languages = { "en" }, file_types = { "cbz" } })
         )
     end)
 
@@ -426,7 +447,7 @@ describe("OpdsSearch", function()
     end)
 
     it("downloads a book from its entry's link, checking it's as big as the catalogue says", function()
-        local url, err, mirror_failed, listed = calibreLibrary().findDownloadLink({
+        local url, err, mirror_failed, listed = calibreLibrary():findDownloadLink({
             title = "Emma",
             file_type = "epub",
             bytes = 494782,

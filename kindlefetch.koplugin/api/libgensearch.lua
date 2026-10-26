@@ -3,14 +3,15 @@ local LogUtil = require("util.logutil")
 local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
-local SearchCache = require("cache.searchcache")
+local Site = require("api.site")
+local Book = require("api.book")
 local UrlApi = require("api.urlapi")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- searches Library Genesis, and finds its books' download links (see Sites)
-local LibgenSearch = {
+-- searches Library Genesis, and finds its books' download links (see Site)
+local LibgenSearch = Site:extend {
     NAME = "Library Genesis",
     -- searches are narrowed down to the book types chosen in the settings, which are Library Genesis' topics
     HAS_BOOK_TYPES = true,
@@ -82,44 +83,38 @@ local function parseBook(row, base_url)
     end
 
     -- the file's md5, which is how Library Genesis finds it again for downloading
-    local book = {
-        source = SOURCE,
-    }
-    book.id = cells[10]:match("md5=(%x+)")
-    book.id = book.id and book.id:lower()
+    local md5 = cells[10]:match("md5=(%x+)")
 
+    local image_url
     local image_path = cells[1]:match('src="([^"]+)"')
     if image_path then
-        book.image_url = image_path:match("^https?://") and image_path or base_url .. "/" .. image_path:gsub("^/", "")
+        image_url = image_path:match("^https?://") and image_path or base_url .. "/" .. image_path:gsub("^/", "")
         -- the book is shown without a cover rather than asking curl for an address that isn't just an address
-        if not StringUtil.isSafeUrl(book.image_url) then
-            LogUtil.warn("left out a cover whose address can't be used:", book.image_url)
-            book.image_url = nil
+        if not StringUtil.isSafeUrl(image_url) then
+            LogUtil.warn("left out a cover whose address can't be used:", image_url)
+            image_url = nil
         end
     end
 
-    -- the title to name the book's file after, and as it's written, for the screen (what shows it shortens it to fit)
-    local raw_title = parseTitle(cells[2])
-    if raw_title then
-        book.title = StringUtil.cleanFileName(raw_title)
-        book.display_title = StringUtil.cleanTitle(raw_title)
-    end
-
     local authors = stripTags(cells[3]):gsub("[,;%s]+$", "")
-    book.authors = StringUtil.assertValidString(authors) and authors or "Unknown author"
-
     local year = stripTags(cells[5])
-    book.year = year ~= "" and year ~= "0" and year or nil
     local language = stripTags(cells[6])
-    book.language = language ~= "" and language or nil
-    book.book_type = cells[2]:match('badge%-primary"><a[^>]-title="([^"]+)">%w+</a>')
     local file_type = stripTags(cells[9]):lower()
-    book.file_type = file_type ~= "" and file_type or nil
     local file_size = stripTags(cells[8])
-    book.file_size = file_size ~= "" and file_size or "0"
+    local book = Book.new(SOURCE, {
+        id = md5 and md5:lower(),
+        image_url = image_url,
+        title = parseTitle(cells[2]),
+        authors = authors,
+        year = year ~= "" and year ~= "0" and year or nil,
+        language = language ~= "" and language or nil,
+        book_type = cells[2]:match('badge%-primary"><a[^>]-title="([^"]+)">%w+</a>'),
+        file_type = file_type ~= "" and file_type or nil,
+        file_size = file_size ~= "" and file_size or "0",
+    })
 
     -- at minimum need title + id + file type for a valid book
-    if not (book.title and book.title ~= "" and book.id and book.file_type) then
+    if not (book.title ~= "" and book.id and book.file_type) then
         LogUtil.warn("skipped book with missing features")
         return nil
     end
@@ -203,7 +198,7 @@ function LibgenSearch.hasMorePages(html, page, results)
     return results >= FULL_PAGE
 end
 
--- what a search can be narrowed to (see Sites): only its box ticked on the search page, not titles, authors and series
+-- what a search can be narrowed to (see Site): only its box ticked on the search page, not titles, authors and series
 LibgenSearch.SCOPES = { "title", "author", "isbn" }
 local SCOPE_COLUMNS = {
     title = { "t" },
@@ -395,13 +390,10 @@ local function fetchResults(params)
     return nil, explainUnfound(unresolved, tried_count) or last_err or _("all Library Genesis mirrors failed")
 end
 
--- whether there are results saved from an earlier search, which can be shown without an internet connection
-function LibgenSearch:isCached(query, page, scope)
-    return SearchCache:hasPage(self, query, page, scope)
-end
-
--- the books on Library Genesis' results from page on, as search returns them, reading pages until enough are found
-local function searchPages(query, page, scope, languages, file_types, book_types)
+-- the books on Library Genesis' results from the search's page on, as Site:search returns them, until enough are found
+function LibgenSearch:fetchResults(search)
+    local query, page, scope = search.query, search.page, search.scope
+    local languages, file_types, book_types = search.languages, search.file_types, search.book_types
     local books = {}
     -- Library Genesis can list the same file more than once, e.g. for each edition it's in
     local seen = {}
@@ -473,15 +465,8 @@ local function searchPages(query, page, scope, languages, file_types, book_types
     return books, nil, next_page, results_read
 end
 
--- search from page on, returning the books, the next page or nil, and how many results were read (nil when cached)
-function LibgenSearch:search(query, page, scope)
-    return SearchCache:search(self, query, page, scope, function(languages, file_types, book_types)
-        return searchPages(query, page, scope, languages, file_types, book_types)
-    end)
-end
-
 -- the book's download link from the first mirror with one, or nil, why not, and whether a mirror failed
-function LibgenSearch.findDownloadLink(book, retrying)
+function LibgenSearch:findDownloadLink(book, retrying)
     -- get urls from cache, or scrape them from wikipedia again when retrying
     local base_urls, urls_err = UrlApi:getLibgenUrls(retrying)
     if not base_urls then

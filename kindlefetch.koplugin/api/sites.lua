@@ -1,4 +1,4 @@
--- sites by source name; findDownloadLink returns a link, nil, nil and the file's listed md5 and bytes, or nil and why
+-- the sites (see Site) by the name their books' source is saved as, and those added while it runs (see MultiSearch)
 return {
     libgen = require("api.libgensearch"),
     archive = require("api.iasearch"),
