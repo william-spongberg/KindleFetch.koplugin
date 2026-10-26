@@ -1,31 +1,28 @@
 local Device = require("device")
 local DataStorage = require("datastorage")
 local UIManager = require("ui/uimanager")
-local Trapper = require("ui/trapper")
 local TextViewer = require("ui/widget/textviewer")
 local KindleFetchSettings = require("settings.settings")
 local UrlApi = require("api.urlapi")
 local ZlibAccount = require("api.zlibaccount")
-local WaitingMessage = require("ui.waitingmessage")
-local CurlUtil = require("util.curlutil")
+local BackgroundTask = require("ui.backgroundtask")
+local CurlVersion = require("util.curlversion")
 local HttpUtil = require("util.httputil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
+local StringUtil = require("util.stringutil")
 local NotifyUtil = require("util.notifyutil")
 local PathUtil = require("util.pathutil")
 local ProxyUtil = require("util.proxyutil")
-local Guard = require("util.guard")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- what's known about Kindle Fetch, KOReader, the device and its connection to the sites, with what Kindle Fetch logged
--- recently, to copy or save for whoever's helping with a problem
+-- what's known about Kindle Fetch, KOReader, the device and its connection, and what it logged, for whoever's helping
 local Diagnostics = {}
 
--- the file it's saved as (see save), in KOReader's own folder, where it can be copied from over USB without showing
--- up among the books
+-- the file it's saved as (see save), in KOReader's folder, to copy over USB without it showing up among the books
 local REPORT_NAME = "kindlefetch-diagnostics.txt"
--- Internet Archive's search, asked for a single book, to test connecting to it
+-- a book's entry in Project Gutenberg's catalogue, and Internet Archive's search for one book, to test connecting
 local GUTENBERG_TEST_URL = "https://www.gutenberg.org/ebooks/1342.opds"
 local ARCHIVE_TEST_URL =
     "https://archive.org/advancedsearch.php?q=identifier%3Aemma00aust&fl%5B%5D=identifier&rows=1&output=json"
@@ -56,14 +53,12 @@ function Diagnostics.summary()
         ok and koreader_version or "unknown",
         deviceKind(),
         tostring(Device.model),
-        CurlUtil.getVersion() or "not found",
+        CurlVersion.getVersion() or "not found",
         ProxyUtil.get() and ", through KOReader's HTTP proxy" or ""
     )
 end
 
--- the report: what's known about Kindle Fetch, KOReader and the device, the results of testing the connection, where
--- it has been (tested, see testConnection), then what Kindle Fetch has logged this session. it's in English, as it's
--- for whoever helps, and has nothing in it that would let them into the Z-Library account
+-- the report, with tested's results (see testConnection), in English for whoever helps, and no way into Z-Library
 function Diagnostics.report(tested)
     local lines = { Diagnostics.summary() }
     local function add(label, value)
@@ -77,7 +72,7 @@ function Diagnostics.report(tested)
     end
 
     add("Time", os.date("%Y-%m-%d %H:%M") .. " (secure connections fail when it's far off)")
-    add("Fetching with", CurlUtil.canFetch() and "curl" or "KOReader's own HTTP, as curl can't")
+    add("Fetching with", CurlVersion.canFetch() and "curl" or "KOReader's own HTTP, as curl can't")
     local folder = KindleFetchSettings:getDownloadDir()
     local writable, err = FileUtil.checkWritableDir(folder)
     add("Download folder", folder .. (writable and "" or " (which can't be written to: " .. tostring(err) .. ")"))
@@ -86,13 +81,28 @@ function Diagnostics.report(tested)
         "Z-Library",
         (ZlibAccount:isLoggedIn() and "logged in" or "not logged in") .. ", at " .. list(UrlApi:peekZlibUrls())
     )
+    -- by their names and kinds, rather than their addresses, and whether they're logged into, but never how
+    local libraries = {}
+    for __, library in ipairs(KindleFetchSettings:getLibraries()) do
+        table.insert(
+            libraries,
+            string.format(
+                "%s (%s, %s%s)",
+                library.name,
+                library.kind,
+                StringUtil.isLocalUrl(library.url) and "on the local network" or "on the internet",
+                library.username ~= "" and ", logged into" or ""
+            )
+        )
+    end
+    add("Libraries", list(libraries))
     add("Languages", list(KindleFetchSettings:getPreferredLanguages()))
     add("File types", list(KindleFetchSettings:getPreferredFileTypes()))
     add("Book types", list(KindleFetchSettings:getPreferredBookTypes()))
     add(
         "Encrypted DNS",
         onOff(KindleFetchSettings:getEncryptedDns())
-            .. (CurlUtil.canUseEncryptedDns() and "" or " (which curl can't do)")
+            .. (CurlVersion.canUseEncryptedDns() and "" or " (which curl can't do)")
     )
     add("Covers", onOff(KindleFetchSettings:getShowBookCovers()))
     add("Update checks", onOff(KindleFetchSettings:getCheckForUpdates()))
@@ -164,10 +174,10 @@ function Diagnostics.show(tested)
     UIManager:show(viewer)
 end
 
--- what to test connecting to: Wikipedia, where the mirrors are looked up, Library Genesis' mirrors and Z-Library's
--- addresses as they are (without looking them up again, or changing them, see UrlApi.peekLibgenUrls), Internet Archive
--- and Project Gutenberg's catalogue. Z-Library's at its API, as Kindle Fetch asks it, which answers without a cookie,
--- where its home page sends what hasn't one back to it, again and again
+-- the names of the libraries whose catalogues are tested, by their addresses (see testUrls)
+local library_names = {}
+
+-- what to test: mirrors as they are (see UrlApi.peekLibgenUrls), and Z-Library's API, which answers without a cookie
 local function testUrls()
     local urls = { UrlApi.LIBGEN_PAGE }
     for __, url in ipairs(UrlApi:peekLibgenUrls()) do
@@ -178,12 +188,18 @@ local function testUrls()
     for __, url in ipairs(UrlApi:peekZlibUrls()) do
         table.insert(urls, url .. "/eapi/info/languages")
     end
+    -- and each library's catalogue, said by the library's name rather than its address (see result)
+    library_names = {}
+    for __, library in ipairs(KindleFetchSettings:getLibraries()) do
+        table.insert(urls, library.url)
+        library_names[library.url] = library.name
+    end
     return urls
 end
 
 -- how asking url went, as a line of the report: whatever it answered with, it can be connected to
 local function result(url, body, err, status)
-    local site = LogUtil.site(url)
+    local site = library_names[url] or LogUtil.site(url)
     if status then
         return string.format("%s answered (HTTP %s)", site, tostring(status))
     elseif body then
@@ -192,25 +208,10 @@ local function result(url, body, err, status)
     return string.format("%s didn't answer: %s", site, tostring(err))
 end
 
--- test connecting to each of the sites Kindle Fetch uses (see testUrls), one after another, without holding KOReader
--- up while they answer, where that's possible (see HttpUtil), then show the report with how it went. Cancel calls it
--- off, showing how it went with those tested by then, as each that doesn't answer is waited on for a while
+-- test each site (see testUrls) without holding KOReader up, then report how it went, or on Cancel how it went so far
 function Diagnostics.testConnection()
-    local message
-    local function closeMessage()
-        HttpUtil.setTrapWidget(nil)
-        if message and not message.cancelled and not message.closed then
-            message.closed = true
-            UIManager:close(message)
-        end
-    end
-
-    Trapper:wrap(Guard.wrap("testing the connection", function()
-        message = WaitingMessage.new(_("Testing the connection to the sites Kindle Fetch uses..."))
-        UIManager:show(message)
-        UIManager:forceRePaint()
-        HttpUtil.setTrapWidget(message)
-
+    local text = _("Testing the connection to the sites Kindle Fetch uses...")
+    BackgroundTask.withMessage("testing the connection", text, function()
         local results = {}
         for __, url in ipairs(testUrls()) do
             local body, err, status = HttpUtil.getBody(url)
@@ -221,13 +222,11 @@ function Diagnostics.testConnection()
             end
             table.insert(results, result(url, body, err, status))
         end
-        closeMessage()
+        return results
+    end, function(results)
         LogUtil.info("tested the connection:", table.concat(results, "; "))
         Diagnostics.show(results)
-    end, function(err)
-        closeMessage()
-        Guard.say(err)
-    end))
+    end)
 end
 
 return Diagnostics

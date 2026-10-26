@@ -3,16 +3,17 @@ local H = require("helpers")
 describe("Searching", function()
     after_each(H.closeAll)
 
-    it("falls back to other mirrors when some fail, and forgets the ones that failed", function()
+    it("falls back to other mirrors when some fail, forgetting one that isn't Library Genesis", function()
         local broken = H.breakMirrors()
 
         local menu = H.search(H.SEARCH_QUERY)
         assert(#H.books(menu) > 0, "no books found")
-        for _, mirror in ipairs(require("api.urlapi"):getLibgenUrls()) do
-            for _, url in ipairs(broken) do
-                assert(mirror ~= url, url .. " is still one of the mirrors")
-            end
+        -- and trying the one that couldn't be found after the others, as it may only not have been for a moment
+        local mirrors = require("api.urlapi"):getLibgenUrls()
+        for _, mirror in ipairs(mirrors) do
+            assert(mirror ~= broken[2], broken[2] .. " is still one of the mirrors")
         end
+        H.eq(broken[1], mirrors[#mirrors], "last mirror")
     end)
 
     it("finds books on Library Genesis", function()

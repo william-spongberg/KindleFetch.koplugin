@@ -41,6 +41,29 @@ describe("LogUtil", function()
         assert.are.equal("libgen.li", LogUtil.site("https://libgen.li"))
         assert.are.equal("nil", LogUtil.site(nil))
     end)
+
+    -- e.g. a library's password, wherever it turns up in what's logged
+    it("never logs what's hidden, in crash.log or the lines kept for the diagnostics", function()
+        local LogUtil = require("util.logutil")
+        LogUtil.hide("p4ss.w(rd")
+        LogUtil.warn("could not fetch http://will:p4ss.w(rd@nas/opds", 401)
+        LogUtil.debug("logging in with p4ss.w(rd")
+
+        assert.are.same(
+            { "warn", "KindleFetch:", "could not fetch http://will:***@nas/opds", 401 },
+            helper.state.logs[1]
+        )
+        assert.are.same({ "dbg", "KindleFetch:", "logging in with ***" }, helper.state.logs[2])
+        assert.is_nil(LogUtil.recent()[1]:find("p4ss", 1, true))
+    end)
+
+    -- which would be found in the words of nearly everything logged
+    it("hides nothing shorter than a few characters", function()
+        local LogUtil = require("util.logutil")
+        LogUtil.hide("abc")
+        LogUtil.info("abcdef")
+        assert.are.same({ "info", "KindleFetch:", "abcdef" }, helper.state.logs[1])
+    end)
 end)
 
 describe("NotifyUtil", function()

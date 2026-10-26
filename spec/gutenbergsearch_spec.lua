@@ -224,7 +224,7 @@ describe("GutenbergSearch", function()
 
         it("downloads the best file in the book's file type, with how many bytes it is", function()
             web.pages["https://www.gutenberg.org/ebooks/1342.opds"] = catalogueEntry(PRIDE_FILES)
-            local url, err, mirror_failed, listed = GutenbergSearch.findDownloadLink(book("epub"))
+            local url, err, mirror_failed, listed = GutenbergSearch:findDownloadLink(book("epub"))
             assert.are.equal("https://www.gutenberg.org/ebooks/1342.epub3.images", url)
             assert.is_nil(err)
             assert.is_nil(mirror_failed)
@@ -233,24 +233,24 @@ describe("GutenbergSearch", function()
             -- rather than a KF8, which KOReader can't open
             assert.are.equal(
                 "https://www.gutenberg.org/ebooks/1342.kindle.images",
-                GutenbergSearch.findDownloadLink(book("mobi"))
+                GutenbergSearch:findDownloadLink(book("mobi"))
             )
             assert.are.equal(
                 "https://www.gutenberg.org/ebooks/1342.txt.utf-8",
-                GutenbergSearch.findDownloadLink(book("txt"))
+                GutenbergSearch:findDownloadLink(book("txt"))
             )
         end)
 
         -- as its audiobooks aren't in any
         it("says when the book isn't in its file type", function()
             web.pages["https://www.gutenberg.org/ebooks/1342.opds"] = catalogueEntry({})
-            local url, err = GutenbergSearch.findDownloadLink(book("epub"))
+            local url, err = GutenbergSearch:findDownloadLink(book("epub"))
             assert.is_nil(url)
             assert.are.equal("Project Gutenberg doesn't have this book as EPUB", err)
         end)
 
         it("says when the catalogue didn't answer", function()
-            local url, err = GutenbergSearch.findDownloadLink(book("epub"))
+            local url, err = GutenbergSearch:findDownloadLink(book("epub"))
             assert.is_nil(url)
             assert.are.equal("Project Gutenberg didn't answer (failed to connect to server)", err)
         end)
@@ -271,7 +271,7 @@ describe("GutenbergSearch", function()
                 assert.matches("^gutenberg_%d+$", b.id)
                 assert.are.equal("epub", b.file_type)
             end
-            local url, link_err = GutenbergSearch.findDownloadLink(books[1])
+            local url, link_err = GutenbergSearch:findDownloadLink(books[1])
             assert.is_nil(link_err)
             assert.matches("^https://www%.gutenberg%.org/ebooks/%d+%.epub", url)
         end)

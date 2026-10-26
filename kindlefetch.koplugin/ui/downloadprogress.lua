@@ -24,8 +24,7 @@ DownloadProgress.__index = DownloadProgress
 -- fixed width for the whole widget's contents to prevent overdrawing
 local CONTENT_WIDTH = Screen:scaleBySize(280)
 
--- on_cancel: function called when the user taps Cancel. hidden: whether it starts out hidden, as when it's for the
--- download of a book whose progress was hidden, which is trying again
+-- on_cancel is called on Cancel; hidden starts it hidden, as when retrying a download whose progress was hidden
 function DownloadProgress.new(title, on_cancel, hidden)
     local self = setmetatable({}, DownloadProgress)
 
@@ -127,8 +126,7 @@ function DownloadProgress:build()
         },
     }
 
-    -- with keys to move between its buttons and press them, on devices with them, and Back to hide it, which
-    -- couldn't be reached on those devices
+    -- with keys to move between and press its buttons, and Back to hide it, as devices with keys couldn't reach it
     local progress = self
     self.container = FocusManager:new {
         dimen = Geom:new {
@@ -156,8 +154,7 @@ function DownloadProgress:build()
     end
 end
 
--- show the widget, refreshing only the part of the screen it takes up, as a download refreshes it twice a second
--- and an e-ink screen is slow to
+-- show the widget, refreshing only where it is, as a download refreshes it twice a second and e-ink is slow to
 function DownloadProgress:_show()
     UIManager:show(self.container)
     UIManager:setDirty(self.container, function()
@@ -192,8 +189,7 @@ function DownloadProgress:toggleVisibility()
     end
 end
 
--- whether Cancel and Hide can be tapped, which they can't while what's waited for holds KOReader up (KOReader's own
--- HTTP, see HttpUtil.canCancel), as taps on them would only arrive once it's over
+-- whether Cancel and Hide can be tapped: not while KOReader is held up (see HttpUtil.canCancel), as taps arrive after
 function DownloadProgress:setCancellable(cancellable)
     self.cancellable = cancellable
     for __, button in ipairs({ self.cancel_button, self.hide_button }) do
@@ -210,8 +206,7 @@ function DownloadProgress:setCancellable(cancellable)
     end
 end
 
--- say what's being waited for for now, keeping how far it has got (see HttpUtil.sayStatus), straight away, as what's
--- waited for may hold KOReader up. nil goes back to what it said before
+-- say what's waited for now (see HttpUtil.sayStatus) at once, as it may hold KOReader up; nil goes back to before
 function DownloadProgress:setStatus(status_text)
     if status_text then
         self.status_before = self.status_before or self.status_text
@@ -262,8 +257,7 @@ function DownloadProgress:cancel()
 
     self:close()
 
-    -- and stop waiting on what was being waited for, such as the download link being looked up. set by
-    -- Trapper:dismissablePopen, when the widget is what calls the wait off (see HttpUtil.setTrapWidget)
+    -- and stop waiting on what was waited for (set by Trapper:dismissablePopen, see HttpUtil.setTrapWidget)
     local dismiss = self.dismiss_callback
     self.dismiss_callback = nil
     if dismiss then

@@ -36,8 +36,7 @@ function FileUtil.readFile(path)
     return content and StringUtil.trim(content) or nil
 end
 
--- write content to a small text file, returning true, or nil and why not: it couldn't be opened, or written in full
--- (e.g. once the device's storage is full, which may only be said once the file is closed)
+-- write content to a small text file: true, or nil and why not (when storage is full, it may only be said on closing)
 function FileUtil.writeFile(path, content)
     if not StringUtil.assertValidString(path) then
         return nil, _("no file to write to")
@@ -89,8 +88,7 @@ function FileUtil.isValidDirectory(path)
     return lfs.attributes(path, "mode") == "directory"
 end
 
--- remove a folder and everything in it, without following links out of it, returning true (also when there's no
--- such folder), or nil and why not
+-- remove a folder and all in it, without following links out of it: true (also if there's none), or nil and why not
 function FileUtil.removeDir(path)
     if not StringUtil.assertValidString(path) then
         return nil, _("no folder to remove")
@@ -117,8 +115,7 @@ function FileUtil.removeDir(path)
     return os.remove(path)
 end
 
--- whether files can be saved in a folder, returning true, or nil and why not: it doesn't exist (e.g. once deleted, or
--- on an SD card that has been taken out), or can't be written to
+-- whether files can be saved in a folder: true, or nil and why not (gone, e.g. with its SD card out, or unwritable)
 function FileUtil.checkWritableDir(path)
     if not FileUtil.isValidDirectory(path) then
         return nil, _("it doesn't exist")
@@ -132,8 +129,7 @@ function FileUtil.checkWritableDir(path)
     return true
 end
 
--- the names of what's in a folder (without . and ..), or nil and why not, e.g. when it can't be read: lfs.dir raises
--- an error for that rather than returning it, which KOReader would exit on
+-- the names in a folder (without . and ..), or nil and why not, as lfs.dir raises errors, which KOReader would exit on
 function FileUtil.listDir(path)
     local names = {}
     local ok, err = pcall(function()

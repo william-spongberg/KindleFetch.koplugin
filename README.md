@@ -2,16 +2,17 @@
 
 <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/stars/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github star tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/downloads/william-spongberg/KindleFetch.koplugin/total.svg" height="25px" alt="Github downloads tracker"></a> <a href="https://github.com/william-spongberg/KindleFetch.koplugin"><img src="https://img.shields.io/github/v/release/william-spongberg/KindleFetch.koplugin" height="25px" alt="Github release version tracker"></a>
 
-Download books from Library Genesis, Internet Archive, Project Gutenberg and Z-Library directly to your Kindle (or any e-reader running KOReader), entirely within the KOReader app.
+Download books from Library Genesis, Internet Archive, Project Gutenberg, Z-Library and your own Calibre library directly to your Kindle (or any e-reader running KOReader), entirely within the KOReader app.
 
 ## Overview
 
-KindleFetch integrates Library Genesis, Internet Archive, Project Gutenberg and Z-Library into KOReader, allowing you to search for and download books without leaving your e-reader. The plugin handles the entire workflow - from search queries to file downloads - with an intuitive interface and robust error handling.
+KindleFetch integrates Library Genesis, Internet Archive, Project Gutenberg, Z-Library and your own libraries, such as Calibre's, into KOReader, allowing you to search for and download books without leaving your e-reader. The plugin handles the entire workflow - from search queries to file downloads - with an intuitive interface and robust error handling.
 
 ## Features
 
 - **Four sites, searched at once**: Z-Library (with your account), Library Genesis, Internet Archive and Project Gutenberg, each site's books shown as soon as it finds them
-- **Narrower searches**: search only titles, authors or ISBNs (Library Genesis and Internet Archive)
+- **Your own libraries**: Calibre, Calibre-Web and other OPDS catalogues, searched along with the sites
+- **Narrower searches**: search only titles, authors or ISBNs (Library Genesis, Internet Archive and Calibre)
 - **Filters**: search in the languages, file types and book types you choose, then narrow the books found down by site, language, decade, size and more, without searching again
 - **Search from your books**: find more by a book's author, or search for text you've highlighted
 - **Covers**: in the results, and full size with a tap
@@ -104,6 +105,8 @@ The menu says what each one shows, such as "Sites: Z-Library, Internet Archive",
 
 - **Z-Library Account**: Log in to the Z-Library account to search it with, or out of the one logged into. Kindle Fetch keeps the key Z-Library logs it in with, rather than your password
 
+- **Your Libraries**: Add your own libraries to search, such as Calibre's content server, or edit or remove those added (see [Your own libraries](#your-own-libraries)). Kindle Fetch keeps their usernames and passwords in its settings, as they ask for them every time
+
 - **Preferred Languages**: Choose the languages of the books shown in search results (default: English)
 
 <img width="350" alt="Preferred languages" src="docs/screenshots/19-settings-languages.png" />
@@ -136,6 +139,20 @@ When a search finds books, but none in the languages and file types chosen, Kind
 - **Clear Cache**: Forget the searches (and the recent ones the search box offers), mirrors and book covers that have been saved, e.g. if results look out of date
 - **Go back to v…**: After an update, while the version before it is kept, go back to that version, if the new one doesn't work on your device
 
+### Your own libraries
+
+#### Search → Kindle Fetch → Settings → Your Libraries
+
+Kindle Fetch searches your own books too, on a server of your own with an OPDS catalogue, as Calibre's content server, Calibre-Web and most others have. Tap Add a library…, then type its address, e.g. `192.168.1.10:8080`, and its username and password, if it asks for them. Kindle Fetch finds the catalogue there (at `/opds`, for Calibre's and Calibre-Web's), and adds the library by its name, ticked in Sites, where it's listed first. Where Calibre has several libraries, it asks which to add.
+
+<img width="350" alt="Your Libraries in the settings, with a Calibre library added" src="docs/screenshots/24-libraries.png" /> <img width="350" alt="Adding a library at its address, with its username and password" src="docs/screenshots/25-library-add.png" /> <img width="350" alt="Pride and Prejudice and Emma, with their covers, found in a Calibre library" src="docs/screenshots/26-library-search-results.png" />
+
+- Calibre's content server is started in Calibre, with **Connect/share → Start Content server**, at port 8080 of the computer it's on by default. Its searches can be narrowed down to titles, authors or ISBNs. Calibre doesn't say which language each book is in, so they show as Unknown in Languages, though only those in the languages chosen in the settings are found
+- Calibre-Web is at port 8083 by default
+- A book in AZW3, as Calibre makes them for Kindles, is downloaded as an AZW, which KOReader opens
+- A library that's only on your home network can't be searched away from it. Where the other sites find books, Kindle Fetch only says so over them the first time, until KOReader is restarted
+- Tap a library to change its name, address or login, or to remove it
+
 ## Troubleshooting
 
 ### None of Library Genesis' sites can be found on this network
@@ -146,6 +163,14 @@ Kindle Fetch looks Library Genesis' sites up on Wikipedia, then searches them in
 - another Wi-Fi network, such as a phone's hotspot
 - another DNS server on your router, such as 1.1.1.1 or 8.8.8.8, as the Kindle uses the one its Wi-Fi network gives it
 - a proxy (HTTP Proxy in the [settings](#settings)) or VPN
+
+### Your library can't be added or reached
+
+- Check its server is running (for Calibre, **Connect/share → Start Content server**), and that the e-reader is on the same network
+- Check the address and port: open the address on a phone or computer on that network, e.g. `http://192.168.1.10:8080` for Calibre, whose content server says its address in **Connect/share**
+- Allow the port through the computer's firewall, as it may only let the computer itself in
+- Where it "didn't accept the username and password", check them in Calibre's **Preferences → Sharing over the net → User accounts**, or Calibre-Web's users. Calibre can be set up to stop letting a device log in for a while after several wrong passwords
+- An HTTPS address whose certificate isn't trusted, such as one a home server made itself, can't be used, so use its `http://` address on your home network instead
 
 ### Updating curl fails
 
@@ -175,9 +200,9 @@ To put the old curl back, run `mntroot rw`, then `cp /usr/bin/curl.system.bak /u
 
 ### Anything else
 
-Kindle Fetch → Diagnostics shows what's needed to work out what went wrong: the versions of Kindle Fetch, KOReader and curl, the device, the settings, the mirrors, and what Kindle Fetch has logged since KOReader started. Tap Test connection to see which of the sites (Wikipedia, each of Library Genesis' mirrors, Internet Archive, Project Gutenberg and Z-Library) the device can reach, then Copy or Save (to `kindlefetch-diagnostics.txt` in KOReader's folder) to attach it to an [issue](https://github.com/william-spongberg/KindleFetch.koplugin/issues). It has nothing in it that would let anyone into your Z-Library account.
+Kindle Fetch → Diagnostics shows what's needed to work out what went wrong: the versions of Kindle Fetch, KOReader and curl, the device, the settings, the mirrors, your libraries (by their names), and what Kindle Fetch has logged since KOReader started. Tap Test connection to see which of the sites (Wikipedia, each of Library Genesis' mirrors, Internet Archive, Project Gutenberg, Z-Library and your libraries) the device can reach, then Copy or Save (to `kindlefetch-diagnostics.txt` in KOReader's folder) to attach it to an [issue](https://github.com/william-spongberg/KindleFetch.koplugin/issues). It has nothing in it that would let anyone into your Z-Library account or your libraries.
 
-<img width="350" alt="Kindle Fetch's diagnostics" src="docs/screenshots/24-diagnostics.png" />
+<img width="350" alt="Kindle Fetch's diagnostics" src="docs/screenshots/27-diagnostics.png" />
 
 KOReader's `crash.log`, in its `koreader` folder, says what Kindle Fetch was doing when something went wrong too.
 
@@ -188,34 +213,47 @@ KOReader's `crash.log`, in its `koreader` folder, says what Kindle Fetch was doi
 ``` architecture
 kindlefetch.koplugin/
 ├── main.lua                   # Loads Kindle Fetch, or when it can't be loaded or started, what safemode.lua leaves
-├── kindlefetch.lua            # The plugin itself; manages search UI, results display, and download initiation
+├── kindlefetch.lua            # The plugin itself: its menus, starting searches one at a time and saying what they found, and downloading and opening books
 ├── safemode.lua               # What's left when Kindle Fetch can't start (e.g. after an update that doesn't work with your KOReader): its menu, saying why, and going back to the version before
 ├── _meta.lua                  # Plugin metadata and KOReader integration
 ├── settings/
 │   ├── settings.lua           # Persistent storage and management of user preferences
+│   ├── savedlibrary.lua       # A library you've added, as it's saved: its catalogue, how it's searched, and its login
+│   ├── savedzlibaccount.lua   # The Z-Library account logged into, as it's saved: its email, user id and key
 │   └── settingspage.lua       # UI for configuring user preferences, and clearing the caches
 ├── api/
-│   ├── downloader.lua         # Downloads books from the site they were found on, with progress tracking and error recovery
-│   ├── sources.lua            # The sites books can be searched for and downloaded from
+│   ├── downloader.lua         # Downloads books from the site they were found on, finding each one's link, keeping the device awake while they download
+│   ├── transfer.lua           # A book downloading: its link found, downloading (paused while Wi-Fi is off), checked, then done or failed, with what it tries again
+│   ├── site.lua               # What every site does: searching it a page at a time, saving the results and explaining failures, so each site only says how to search it and read its results
+│   ├── book.lua               # The books the sites find: the names their files download as, their titles and authors as shown, and their sizes
+│   ├── sites.lua              # The sites books can be searched for and downloaded from
+│   ├── searchsession.lua      # A search and what it has found: its books, each site's next page, and which of the books are shown
 │   ├── multisearch.lua        # Searches the sites ticked at once, each in a coroutine of its own, passing on each one's books as soon as it has found them
-│   ├── lglisearch.lua         # Searches Library Genesis and finds its download links; parses HTML, filters by preferences and caches results
+│   ├── libgensearch.lua       # Searches Library Genesis and finds its download links, reading its pages of results until enough books are found
 │   ├── iasearch.lua           # Searches Internet Archive's books that anyone can download, and finds their files, with its search API
 │   ├── gutenbergsearch.lua    # Searches Project Gutenberg's free ebooks with its catalogue's search, and finds their files in the catalogue
+│   ├── opdssearch.lua         # Finds the OPDS catalogue of a library of your own, such as Calibre's content server's or Calibre-Web's, and searches it in its own way, finding its books' files
+│   ├── libraries.lua          # The libraries you've added, each searched as a site of its own, before the others
 │   ├── zlibaccount.lua        # Logs in to Z-Library, keeping the key it logs in with rather than the password, and asks its API as the account
 │   ├── zlibsearch.lua         # Searches Z-Library and finds its download links with the API its app uses, while the account can download more today
 │   └── urlapi.lua             # Scrapes Wikipedia to discover the current Library Genesis mirrors and Z-Library addresses
 ├── ui/
+│   ├── searchbox.lua          # The search box: what's searched for, on which sites, and narrowed down to what
+│   ├── resultsview.lua        # The menu of a search's books, with looking through them, showing only some, and searching again
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination
 │   ├── bookfilter.lua         # What the books found can be shown by without searching again (their sites, languages, file types, book types, decades, sizes, and whether they're downloaded), with how many have each
 │   ├── coverplaceholder.lua   # Placeholder shown in place of a cover while it downloads
 │   ├── downloadprompt.lua     # Dialog showing a book's details and cover (full size when tapped), where to save it, and a Download button
 │   ├── diagnostics.lua        # What's known about Kindle Fetch, KOReader and the device, with a test of the connection to the sites and the recent log, to copy or save
 │   ├── waitingmessage.lua     # Message saying what's being waited for, with a Cancel button that calls the wait off
+│   ├── errorfixes.lua         # The buttons offered with an error for what fixes it, such as logging in again or turning on Wi-Fi
+│   ├── backgroundtask.lua     # Runs what waits on the sites without holding KOReader up, with a message and Cancel where it's shown, saying what went wrong
 │   ├── zliblogin.lua          # Dialog asking for the email and password of a Z-Library account, and logging in with them
+│   ├── librarysettings.lua    # Your Libraries, in the settings: adding a library at its address, and changing or removing those added
 │   └── downloadprogress.lua   # Renders a centered progress widget with cancel and hide buttons
 ├── cache/
 │   ├── cache.lua              # Generic caching system with expiry, size limits, and timestamp-based cleanup
-│   ├── searchcache.lua        # Caches each site's search results by query, page, and filter preferences, searching the site for those it hasn't (2 weeks by default, 100-entry limit)
+│   ├── searchcache.lua        # Caches each site's search results by query, page, and filter preferences (2 weeks by default, 100-entry limit)
 │   ├── urlcache.lua           # Caches mirror URLs to minimise Wikipedia scraping (1 week by default)
 │   └── covercache.lua         # Downloads and caches book covers and full-size covers by book (500-entry limit, persists across sessions, removing the oldest covers' files once full)
 ├── updater/
@@ -223,11 +261,20 @@ kindlefetch.koplugin/
 │   ├── curlupdater.lua        # Checks curl version on Kindles and offers to install static curl (8.21.0) if it's older, downloading it with KOReader's own HTTP, checking it's the build that was released, and that it runs
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes, unzipping the update with KOReader's own archiver (or unzip, where it has none) next to the plugin, and keeping the installed version until the new one is in place
 └── util/
-    ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
-    ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from
+    ├── curlutil.lua           # Builds curl's commands for fetching pages and downloading files (one or many at once), and says what its exit codes mean
+    ├── curlversion.lua        # Which curl is installed and what it can do (fetch pages securely, ask for them compressed, use encrypted DNS), looked up once a session
+    ├── backgroundprocess.lua  # What runs in the background (curl in a shell, or a process of KOReader's own): whether it's running, its exit code once done, stopping it, and collecting it
+    ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from, with the kind of fix each has
     ├── guard.lua              # Runs what KOReader runs later (scheduled tasks, Trapper's functions, event handlers), catching errors, logging where they happened and cleaning up
     ├── httpdownload.lua       # Downloads books and covers with KOReader's own HTTP in a process of its own, where curl can't, followed and stopped as curl's downloads are
-    ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback; posts forms and sends cookies, giving them to curl in a file rather than on its command line; downloads files with curl, or KOReader's own HTTP where curl can't connect
+    ├── request.lua            # How each site is asked for something, decided in one place from its address: through the proxy and with encrypted DNS where they're on, but not on the local network, logged in to a library's site, with shorter timeouts there
+    ├── httputil.lua           # Fetches pages and downloads files by the transport that works on the device, falling back to KOReader's own HTTP where curl can't connect securely, and says what's being waited for
+    ├── curltransport.lua      # Fetches pages and downloads files with curl, without holding KOReader up, giving it forms, cookies and logins in a file rather than on its command line
+    ├── koreadertransport.lua  # Fetches pages and downloads files with KOReader's own HTTP where curl can't, logging in to libraries' sites, and following bot checks that set a cookie
+    ├── httplogin.lua          # Logs in to your libraries' sites with KOReader's own HTTP, the Basic or the Digest way, following where they send requests itself, so the login only goes to its own site
+    ├── librarysites.lua       # Your libraries' sites, with the logins for each, which are only sent to their own site, and never logged
+    ├── opdsfeed.lua           # Reads OPDS catalogues' feeds, as each server writes them its own way
+    ├── languagecodes.lua      # The codes sites give books' languages in, as Internet Archive's, Calibre-Web's and other OPDS catalogues' are
     ├── fileutil.lua           # File operations (size, reading, writing and deleting files, listing folders) and directory checks
     ├── filecheck.lua          # Tells what a file that has downloaded is by how it starts (a book in its file type, an image, or a web page sent in its place), and works out its MD5 a piece at a time
     ├── stringutil.lua         # String utilities (trimming, validation, cleaning titles and file names, HTML entity conversion, checking web addresses)
@@ -235,7 +282,7 @@ kindlefetch.koplugin/
     ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed
     ├── pathutil.lua           # Plugin install location and temporary download directory
     ├── proxyutil.lua          # The proxy everything goes through: KOReader's HTTP proxy, where it's on
-    ├── shellutil.lua          # Runs a step of installing an update with shell commands, saying what went wrong in the command's own words
+    ├── shellutil.lua          # Quotes what's given to the shell, and runs a step of installing an update with shell commands, saying what went wrong in the command's own words
     └── versionutil.lua        # Version parsing and comparison utilities
 ```
 
@@ -257,7 +304,7 @@ kindlefetch.koplugin/
    - Book cover loading can be toggled on/off (for efficiency)
    - All settings are persisted and applied to future searches
 
-2. **Search Phase** (`MultiSearch`, `LlgiSearch`, `IaSearch`, `GutenbergSearch`, `ZlibSearch`)
+2. **Search Phase** (`SearchBox`, `MultiSearch`, `SearchSession`, `ResultsView`, and each `Site`: `LibgenSearch`, `IaSearch`, `GutenbergSearch`, `ZlibSearch`, `OpdsSearch`)
    - User enters a search query via InputDialog, or chooses one of the last 10 from its Recent button
    - The sites ticked in the search box (`MultiSearch`) are searched at once, each in a coroutine of its own, so each one's books are shown as soon as it has found them, with the sites still being searched listed at the end. Where pages are fetched with KOReader's own HTTP, which holds KOReader up, they're searched one after another instead, with what has been found shown in between. A site that fails is said to have over the books the others found, Load more carries on from each site that has more, and Cancel calls them all off
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)
@@ -272,6 +319,7 @@ kindlefetch.koplugin/
    - Z-Library (`ZlibSearch`) is searched with the API its own app uses, as the account logged into, in the preferred languages and file types, 50 books at a time. As it moves between addresses as they're taken down, they're looked up on its Wikipedia page, like Library Genesis' mirrors (kept for a week by default), and the next is asked when one doesn't answer
    - Internet Archive (`IaSearch`) is searched with its search API for the books with each word searched for in their title or author's name, in the preferred languages (or no known language) and the formats of the preferred file types, that anyone can download, the most downloaded first, 50 at a time. Each is given the first of the preferred file types it's in, as most are in several
    - Project Gutenberg (`GutenbergSearch`) is searched with its catalogue's search (its OPDS feed), 25 books at a time, in the one language chosen, where only one is. Otherwise the books are kept to the languages chosen by the language the catalogue adds after the titles of those not in English. Each is given the first of the preferred file types of EPUB, MOBI and TXT, and once it's chosen, its file in that type is looked up in the catalogue, with how big it is, which what arrives is checked against
+   - Your libraries (`OpdsSearch`) are searched with the search their OPDS catalogues give, found once when each is added: a link with `{searchTerms}` in it, or its OpenSearch description. Calibre's content server is searched in Calibre's own search syntax, narrowed down there to the file types and languages chosen (or no language), and to titles, authors or ISBNs where asked, with its "not found" (HTTP 404) taken as no books. The others' books are kept to the file types chosen, and to the languages chosen where they say. Each book is given the first of the preferred file types it's in, with how big its file is. Load more follows each page's link to the next, and the searches aren't saved, as a library's books change
 
 3. **Cover Loading**
    - Covers for the page of results showing are downloaded in the background, in parallel using curl's `--parallel` flag, with placeholders shown until they arrive. A connection is opened for each cover at once (with curl 7.68 or later), rather than curl waiting to see whether they can share one, which Library Genesis doesn't allow, so a page of covers arrives in about a third of the time
@@ -281,7 +329,7 @@ kindlefetch.koplugin/
    - If a cover can't be downloaded, or what arrives isn't an image, its book is shown without one
    - Tapping a cover in the download prompt downloads the full-size cover, showing the thumbnail until it arrives
 
-4. **Download Phase** (`Downloader`)
+4. **Download Phase** (`Downloader`, `Transfer`)
    - User selects a book and optionally changes the save location via DownloadPrompt
    - If a file of that name is already there, the plugin asks whether to overwrite it or read the existing book
    - Before the book's link is looked up, the folder is checked: that it's there and can be written to (downloading to the default folder for now when the one chosen in the settings is missing, as on an SD card that has been taken out), and that no other book is downloading to the same name
@@ -290,6 +338,7 @@ kindlefetch.koplugin/
    - Curl fetches the ads page using the book's MD5 hash to obtain a download URL, in the background (where pages are fetched with curl), so KOReader carries on while the mirrors answer, and Cancel calls it off
    - For a book on Z-Library, its API is asked how many more books the account can download today, and then for the book's download link, which counts as one of them. Each link goes to one of Z-Library's servers, picked at random, some of which can fail for a while, so if the one it went to fails, Z-Library is asked for links until one goes to another server (which doesn't count again)
    - For a book on Internet Archive, the list of its files is fetched instead, and the file in the best format for its file type is downloaded, e.g. a PDF of a scan's text rather than one of only its pictures
+   - For a book in one of your libraries, its file's link in the catalogue is downloaded, logging in to its site where it asks to, and checked against how big the catalogue says it is
    - File size is read from the headers of the download itself for progress calculation, without a separate request
    - A curl process is spawned to download the file in the background, to a `.part` file next to where the book will be saved, so half a book never shows up in your library
    - A download that receives nothing for 30 seconds is tried again, carrying on from where it stopped rather than starting the book again, and given up on after two more tries
@@ -303,6 +352,8 @@ kindlefetch.koplugin/
    - When something fails for a reason with a fix, the message offers it, then tries again: Log in, Update curl, Use encrypted DNS, Turn on Wi-Fi, or Try again. The other sites are offered when a search finds nothing or fails
    - A download waits while the device sleeps or Wi-Fi is off, rather than failing as if the site had, then carries on from what had arrived, with the same link, once Wi-Fi is back (so Z-Library isn't asked for another, which can count as another download)
    - Everything goes through KOReader's HTTP proxy, where it's turned on (in KOReader's network settings or Kindle Fetch's), given to curl in a file rather than on its command line, as it can have a password in it. Empty or failed downloads are deleted
+   - A library's login is only ever sent to its own site. It's given to curl in a file, never on its command line or in an address, with curl logging in whichever way the site asks: the Basic way, or the Digest way, as Calibre's content server does without HTTPS. KOReader's own HTTP can only log in the Basic way, so Kindle Fetch logs in the Digest way itself, following where the site sends requests itself, so the login doesn't go on with them. Covers on a library's site are downloaded apart from the rest, and passwords are never logged
+   - A library on the network the device is on (e.g. at 192.168.1.10, or nas.local) is reached without encrypted DNS or the proxy, which can't find or reach it, and, with curl, given up on after 5 seconds without connecting, as it can be one that's only there at home. A library's site whose HTTPS certificate curl can't check isn't fetched with KOReader's own HTTP instead, as other sites are
    - Mirrors that answer with something other than Library Genesis are removed from cache; one that doesn't answer is tried after the others for an hour (and from then on, until it answers again), rather than removed, as it may only not have for a moment; if all cached URLs fail they are re-scraped from Wikipedia
    - When none of Library Genesis' sites can be found, though Wikipedia can, as when the network is blocking them, the plugin says so, rather than only that the last couldn't be found (see [Troubleshooting](#troubleshooting))
    - When Library Genesis' database is too busy for its mirrors to search or give download links, which they all say at once as they share it, the plugin says so, keeping the mirrors rather than looking them up again
@@ -324,7 +375,7 @@ MIT
 
 ## Disclaimer
 
-This plugin facilitates downloading books from Library Genesis, Internet Archive, Project Gutenberg and Z-Library. Ensure you have the legal right to download any content and respect copyright laws in your jurisdiction. The authors assume no liability for misuse.
+This plugin facilitates downloading books from Library Genesis, Internet Archive, Project Gutenberg, Z-Library and your own libraries. Ensure you have the legal right to download any content and respect copyright laws in your jurisdiction. The authors assume no liability for misuse.
 
 ## Contributing
 

@@ -1,15 +1,13 @@
 local H = require("helpers")
 
--- Z-Library can only be searched once logged into, so these need an account, given by KINDLEFETCH_ZLIB_EMAIL and
--- KINDLEFETCH_ZLIB_PASSWORD
+-- Z-Library can only be searched once logged into, so these need an account: KINDLEFETCH_ZLIB_EMAIL and _PASSWORD
 local email, password = os.getenv("KINDLEFETCH_ZLIB_EMAIL"), os.getenv("KINDLEFETCH_ZLIB_PASSWORD")
 -- each download counts towards the few books a day Z-Library lets an account download, so only one device downloads
 local DOWNLOADS_ON = "kindle-paperwhite"
 
 describe("Z-Library", function()
     after_each(H.closeAll)
-    -- the book downloaded, which is removed once it has been read, as other tests find the book they download by
-    -- looking for one in the folder
+    -- the book downloaded, removed once read, as other tests find the book they download by looking in the folder
     local downloaded
     after_each(function()
         if downloaded then
@@ -18,7 +16,7 @@ describe("Z-Library", function()
         end
     end)
 
-    if not (email and password) then
+    if not (email and email ~= "" and password and password ~= "") then
         pending("needs KINDLEFETCH_ZLIB_EMAIL and KINDLEFETCH_ZLIB_PASSWORD")
         return
     end

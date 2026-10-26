@@ -149,8 +149,7 @@ describe("KindleFetchCache", function()
         assert.are.equal("third", cache:get("c"))
     end)
 
-    -- as an e-reader's can be when its battery runs flat: what was stored after that would have expired as it was
-    -- stored, or been the first to be pushed out
+    -- as when an e-reader's battery runs flat: what was stored since would expire at once or be pushed out first
     describe("once the clock has been put back", function()
         it("takes what was stored before to have expired, as how long ago can't be known", function()
             local cache = newCache { expiry = 60 }

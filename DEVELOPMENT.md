@@ -72,7 +72,9 @@ Then, from the repository root:
 
 The end-to-end tests in `e2e/` run KindleFetch in the KOReader Flatpak without a window, tapping through its menus and dialogs as a user would: searching Library Genesis, Internet Archive and Z-Library, cancelling a search, searching for a kind of file there are none of, loading covers and more results, downloading Jane Austen's *Pride and Prejudice* (it's in the public domain) from each and reading it, hiding, showing and cancelling downloads, changing settings, and checking for updates. They run once for each emulated device in `e2e/profiles.lua`: a basic Kindle, a Kindle Paperwhite, a Kobo Aura One and an Android phone, emulating each one's screen size and resolution. They only load the repository's copy of KindleFetch, even if you've also copied it into the Flatpak.
 
-They use the real sites, so they need internet access, take a few minutes, and aren't run by CI. The Z-Library tests are skipped unless `KINDLEFETCH_ZLIB_EMAIL` and `KINDLEFETCH_ZLIB_PASSWORD` give an account to log in with, and only the Kindle Paperwhite downloads a book from it, as each download counts towards the few the account can download a day:
+They use the real sites, so they need internet access, take a few minutes, and aren't run by CI. The Z-Library tests are skipped unless `KINDLEFETCH_ZLIB_EMAIL` and `KINDLEFETCH_ZLIB_PASSWORD` give an account to log in with, and only the Kindle Paperwhite downloads a book from it, as each download counts towards the few the account can download a day.
+
+The tests of the libraries you add (`e2e/library_e2e.lua`) search a library of your own: Calibre's content server, which `run.sh` starts on a library holding *Pride and Prejudice* (kept in `e2e/.tmp/calibre`), needing a login, as Calibre asks for it without HTTPS (the Digest way). They're skipped unless Calibre is installed (e.g. `sudo dnf install calibre`), and while Calibre itself is open, as only one of its programs can run at a time:
 
 ```bash
 e2e/run.sh                          # every device

@@ -43,7 +43,7 @@ describe("CoverCache", function()
             error("cannot open " .. path .. ": Permission denied")
         end
         CoverCache:clear()
-        CurlUtil.canFetch = function()
+        require("util.curlversion").canFetch = function()
             return true
         end
         CurlUtil.downloadMultiple = function()
@@ -112,7 +112,7 @@ describe("CoverCache", function()
 
         it("is false once the cover couldn't be downloaded, until it's tried again", function()
             local a = book("a", "https://covers.example/a.jpg")
-            CurlUtil.canFetch = function()
+            require("util.curlversion").canFetch = function()
                 return true
             end
             CurlUtil.downloadMultiple = function()
@@ -157,7 +157,7 @@ describe("CoverCache", function()
 
     -- which KOReader exited on, with every cover on the page left waiting for
     it("takes the placeholders away when the covers can't be downloaded, as the device's storage is full", function()
-        CurlUtil.canFetch = function()
+        require("util.curlversion").canFetch = function()
             return true
         end
         local results = {}
@@ -212,7 +212,7 @@ describe("CoverCache", function()
 
         before_each(function()
             runs, results = {}, {}
-            CurlUtil.canFetch = function()
+            require("util.curlversion").canFetch = function()
                 return true
             end
             CurlUtil.downloadMultiple = function(urls, paths, background, parallel_jobs, _, _, opts)
@@ -228,7 +228,7 @@ describe("CoverCache", function()
                 table.insert(runs, run)
                 return run.pid, run.exit_file, data_dir .. "/settings/curl_config.txt"
             end
-            CurlUtil.isPidRunning = function()
+            require("util.backgroundprocess").isPidRunning = function()
                 return true
             end
         end)
@@ -282,6 +282,32 @@ describe("CoverCache", function()
             assert.are.equal(covers_dir .. "new.jpg", CoverCache:get("new"))
             -- so every open search result can show them
             assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
+        end)
+
+        -- as curl is given a library's login once for all of a download's files, which mustn't go to the other sites
+        it("downloads the covers on each library's site apart from the rest, finishing once they all have", function()
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            local books = {
+                book("a", "https://covers.example/a.jpg"),
+                book("b", "http://nas:8080/get/thumb/2"),
+                book("c", "https://covers.example/c.jpg"),
+                book("d", "http://nas:8080/get/thumb/4"),
+            }
+
+            assert.is_true(CoverCache:downloadMultiple(books, 6, onDone))
+            assert.are.equal(2, #runs)
+            assert.are.same({ "https://covers.example/a.jpg", "https://covers.example/c.jpg" }, runs[1].urls)
+            assert.are.same({ "http://nas:8080/get/thumb/2", "http://nas:8080/get/thumb/4" }, runs[2].urls)
+            assert.are.same({ covers_dir .. "b.jpg", covers_dir .. "d.jpg" }, runs[2].paths)
+
+            finishRun(runs[2], { true, true })
+            helper.tick()
+            assert.are.same({}, results)
+            finishRun(runs[1], { true, false })
+            helper.tick()
+            assert.are.same({ 3 }, results)
+            assert.is_true(CoverCache:cacheExists("d"))
+            assert.is_false(CoverCache:isComing(books[3]))
         end)
 
         -- rather than once the slowest has, which curl can wait on for a while before giving up
@@ -438,6 +464,16 @@ describe("CoverCache", function()
         end)
 
         describe("full-size", function()
+            -- as a library's catalogue gives them (see OpdsSearch)
+            it("are downloaded from the address the site gives for them, where it gives one", function()
+                local b = book("emma", "http://nas:8080/get/thumb/2/Books?sz=200x300")
+                b.full_image_url = "http://nas:8080/get/cover/2/Books"
+
+                assert.is_true(CoverCache:downloadFullSize(b))
+                assert.are.same({ "http://nas:8080/get/cover/2/Books" }, runs[1].urls)
+                assert.are.same({ covers_dir .. "emma_full.jpg" }, runs[1].paths)
+            end)
+
             it("are downloaded from the thumbnail's address without _small, and kept apart from it", function()
                 local b = book("abc", "https://libgen.example/fictioncovers/1000/abc_small.jpg")
                 assert.is_nil(CoverCache:getFullSize(b))
@@ -512,7 +548,7 @@ describe("CoverCache", function()
         -- curl can finish just after its exit code was checked, before checking whether it's running
         it("reads the exit code again once curl has stopped", function()
             CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone)
-            CurlUtil.isPidRunning = function()
+            require("util.backgroundprocess").isPidRunning = function()
                 finishRun(runs[1], { true })
                 return false
             end
@@ -522,7 +558,7 @@ describe("CoverCache", function()
         end)
 
         it("stops when curl stops without reporting back", function()
-            CurlUtil.isPidRunning = function()
+            require("util.backgroundprocess").isPidRunning = function()
                 return false
             end
             CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone)
@@ -534,7 +570,7 @@ describe("CoverCache", function()
         -- which KOReader would have exited on, rather than taking the placeholders away
         it("gives up on the covers when checking on them goes wrong", function()
             CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone)
-            CurlUtil.getExitCode = function()
+            require("util.backgroundprocess").getExitCode = function()
                 error("unexpected")
             end
             helper.runScheduled()

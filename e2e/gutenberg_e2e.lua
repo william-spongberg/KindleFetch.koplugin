@@ -2,8 +2,7 @@ local H = require("helpers")
 
 describe("Project Gutenberg", function()
     after_each(H.closeAll)
-    -- the book downloaded, which is removed once it has been read, as other tests find the book they download by
-    -- looking for one in the folder
+    -- the book downloaded, removed once read, as other tests find the book they download by looking in the folder
     local downloaded
     after_each(function()
         if downloaded then

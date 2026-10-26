@@ -3,8 +3,7 @@ local helper = require("helper")
 describe("MultiSearch", function()
     local MultiSearch, sites, searches, results, statuses, done, can_cancel
 
-    -- a site whose searches wait, as curl's do (see Trapper:dismissablePopen), until answered (see answer) or called
-    -- off with the stand-in they wait with
+    -- a site whose searches wait as curl's do (see Trapper:dismissablePopen) until answered (see answer) or called off
     local function fakeSite(name, scopes)
         local site = { NAME = name, SCOPES = scopes }
         function site:search(query, page, scope)
@@ -82,7 +81,7 @@ describe("MultiSearch", function()
             archive = fakeSite("Internet Archive", { "title", "author" }),
             zlib = fakeSite("Z-Library"),
         }
-        helper.stub("api.sources", sites)
+        helper.stub("api.sites", sites)
         MultiSearch = require("api.multisearch")
     end)
 
@@ -206,6 +205,44 @@ describe("MultiSearch", function()
 
         assert.are.equal(require("util.errors").UNEXPECTED, results[1].err)
         assert.are.equal(1, done)
+    end)
+
+    -- e.g. a library the user has added
+    describe("sites added while KOReader runs", function()
+        it("offers them first, and searches them", function()
+            local library = fakeSite("Home library")
+            MultiSearch.addSite("library_1", library)
+            assert.are.same({ "library_1", "zlib", "libgen", "archive", "gutenberg" }, MultiSearch.sources())
+            assert.are.equal(library, sites.library_1)
+
+            local search = MultiSearch.start("dune", { libgen = 1, library_1 = 1 }, nil, handlers)
+            helper.runScheduled()
+            assert.are.equal(1, #searched("Home library"))
+            assert.are.same({ "library_1", "libgen" }, search:pendingSources())
+        end)
+
+        -- e.g. once the library's address has been changed
+        it("puts a site added again in place of the one before, offering it once", function()
+            MultiSearch.addSite("library_1", fakeSite("Home library"))
+            local changed = fakeSite("Books")
+            MultiSearch.addSite("library_1", changed)
+            assert.are.same({ "library_1", "zlib", "libgen", "archive", "gutenberg" }, MultiSearch.sources())
+            assert.are.equal(changed, sites.library_1)
+        end)
+
+        -- so the books found on it that are showing can still be downloaded
+        it("stops offering one removed, keeping it for the books found on it", function()
+            local library = fakeSite("Home library")
+            MultiSearch.addSite("library_1", library)
+            MultiSearch.addSite("library_2", fakeSite("Comics"))
+            MultiSearch.removeSite("library_1")
+            assert.are.same({ "library_2", "zlib", "libgen", "archive", "gutenberg" }, MultiSearch.sources())
+            assert.are.equal(library, sites.library_1)
+
+            MultiSearch.start("dune", { library_1 = 1, libgen = 1 }, nil, handlers)
+            helper.runScheduled()
+            assert.are.same({}, searched("Home library"))
+        end)
     end)
 
     it("finishes straight away when there are no sites to search", function()

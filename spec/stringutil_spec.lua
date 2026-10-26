@@ -109,6 +109,99 @@ describe("StringUtil", function()
         assert.are.equal("Mr. Mercedes", StringUtil.cleanFileName("Mr. Mercedes"))
     end)
 
+    -- which a library's login is only ever sent to (see LibrarySites)
+    describe("siteOf", function()
+        it("gives an address's scheme, host and port, in small letters", function()
+            assert.are.equal("http://192.168.1.10:8080", StringUtil.siteOf("http://192.168.1.10:8080/opds?x=1"))
+            assert.are.equal("https://books.example:443", StringUtil.siteOf("HTTPS://Books.Example/calibre/opds"))
+            assert.are.equal("http://nas.local:80", StringUtil.siteOf("http://nas.local"))
+            assert.are.equal("http://[fd00::1]:8083", StringUtil.siteOf("http://[fd00::1]:8083/opds"))
+        end)
+
+        it("leaves out who an address logs into its site as", function()
+            assert.are.equal("http://nas:8080", StringUtil.siteOf("http://will:secret@nas:8080/opds"))
+        end)
+
+        it("is nil for what isn't a web address", function()
+            assert.is_nil(StringUtil.siteOf("ftp://nas/books"))
+            assert.is_nil(StringUtil.siteOf("/opds"))
+            assert.is_nil(StringUtil.siteOf("http://:8080/"))
+            assert.is_nil(StringUtil.siteOf(nil))
+        end)
+    end)
+
+    it("gives what's asked for at an address on its site", function()
+        assert.are.equal("/opds/search/dune?offset=30", StringUtil.pathOf("http://nas:8080/opds/search/dune?offset=30"))
+        assert.are.equal("/", StringUtil.pathOf("http://nas:8080"))
+        assert.are.equal("/?q=1", StringUtil.pathOf("http://nas:8080?q=1#top"))
+    end)
+
+    -- which encrypted DNS can't look up, and a proxy on the internet can't reach
+    describe("isLocalUrl", function()
+        it("knows the addresses kept for a home network, and the device itself", function()
+            for _, url in ipairs({
+                "http://192.168.1.10:8080",
+                "http://10.0.0.5/opds",
+                "http://172.20.1.2",
+                "http://127.0.0.1:8083",
+                "http://169.254.3.4",
+                "http://100.101.102.103",
+                "http://[::1]:8080",
+                "http://[fd12:3456::1]/",
+                "http://[fe80::1]/",
+            }) do
+                assert.is_true(StringUtil.isLocalUrl(url), url)
+            end
+        end)
+
+        it("knows the names a home network's DNS gives its devices", function()
+            for _, url in ipairs({
+                "http://nas:8080",
+                "http://calibre.local",
+                "https://books.lan/opds",
+                "http://nas.home.arpa",
+                "http://library.internal",
+                "http://localhost:8083",
+            }) do
+                assert.is_true(StringUtil.isLocalUrl(url), url)
+            end
+        end)
+
+        it("knows the rest are on the internet", function()
+            for _, url in ipairs({
+                "https://libgen.li",
+                "https://books.example.com/calibre",
+                "http://8.8.8.8",
+                "http://172.32.0.1",
+                "http://100.128.0.1",
+                "https://[2001:db8::1]/",
+                "not an address",
+            }) do
+                assert.is_false(StringUtil.isLocalUrl(url), url)
+            end
+        end)
+    end)
+
+    -- e.g. an OPDS catalogue's links, or where a site sends a request on to
+    describe("absoluteUrl", function()
+        local base = "http://nas:8080/opds/search/dune?offset=30"
+
+        it("gives the address a link gives, as written on the page at an address", function()
+            assert.are.equal("http://nas:8080/opds/search/x", StringUtil.absoluteUrl(base, "x"))
+            assert.are.equal("http://nas:8080/opds/cover/1", StringUtil.absoluteUrl(base, "../cover/1"))
+            assert.are.equal("http://nas:8080/get/epub/1", StringUtil.absoluteUrl(base, "/get/epub/1"))
+            assert.are.equal("http://nas:8080/opds/search/dune?offset=60", StringUtil.absoluteUrl(base, "?offset=60"))
+            assert.are.equal("http://covers.example/1.jpg", StringUtil.absoluteUrl(base, "//covers.example/1.jpg"))
+            assert.are.equal("https://other.example/a", StringUtil.absoluteUrl(base, "https://other.example/a"))
+            assert.are.equal("http://nas:8080/opds/x/", StringUtil.absoluteUrl(base, "./../x/"))
+        end)
+
+        it("is nil without a web address to go from", function()
+            assert.is_nil(StringUtil.absoluteUrl("/opds", "x"))
+            assert.is_nil(StringUtil.absoluteUrl(base, nil))
+        end)
+    end)
+
     it("turns the line breaks in github's release notes into new lines", function()
         assert.are.equal("line 1\nline 2\n", StringUtil.replaceCarriageReturns("line 1\r\nline 2\r\n"))
     end)

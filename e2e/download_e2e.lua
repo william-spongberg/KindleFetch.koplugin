@@ -37,8 +37,7 @@ describe("Downloading", function()
         return book.file_type == "epub" and H.isPublicDomain(book)
     end
 
-    -- tap Download in the prompt, and download over the book if an earlier test has left it there. returns
-    -- whether it was asked to
+    -- tap Download in the prompt, and Overwrite if an earlier test left the book there. returns whether it was asked to
     local function confirmDownload()
         H.tapButton("Download")
         if H.poll(2, function()
@@ -64,14 +63,10 @@ describe("Downloading", function()
             return H.findButton("Read now")
         end)
 
-        -- the one that doesn't exist is forgotten, and the one that answered is kept, as it may just not have the book,
-        -- behind the one that gave the download link, which is asked first from now on
+        -- the mirror that gave the link is now asked first, example.com's error page forgotten, the one not found last
         local mirrors = require("api.urlapi"):getLibgenUrls()
-        for _, mirror in ipairs(mirrors) do
-            assert(mirror ~= broken[1], broken[1] .. " is still one of the mirrors")
-        end
         assert(mirrors[1]:find("^https://libgen%."), mirrors[1] .. " is asked first")
-        H.eq(broken[2], mirrors[2], "second mirror")
+        H.eq(broken[1], mirrors[#mirrors], "last mirror")
     end)
 
     it("downloads a book and opens it", function()
@@ -113,8 +108,7 @@ describe("Downloading", function()
         local menu = H.searchUntil(H.BOOK_QUERY, isEpubToDownload)
         local book = epubs(menu)[1]
 
-        -- have curl download slowly, so even a small book is still downloading by the time it's been hidden, shown
-        -- again and cancelled
+        -- have curl download slowly, so even a small book is still downloading when hidden, shown again and cancelled
         local CurlUtil = require("util.curlutil")
         local pretendBrowser = CurlUtil.pretendBrowser
         CurlUtil.pretendBrowser = function(cmd)

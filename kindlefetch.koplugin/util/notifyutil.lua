@@ -16,8 +16,7 @@ function NotifyUtil.message(text)
     })
 end
 
--- say that something went wrong, in a message that stays until it's dismissed. a notification is gone after a
--- couple of seconds, whether or not it was read, and what went wrong may only be known after a wait
+-- say what went wrong in a message that stays until dismissed, as a notification is gone in seconds, read or not
 function NotifyUtil.error(text)
     UIManager:show(InfoMessage:new {
         text = text,

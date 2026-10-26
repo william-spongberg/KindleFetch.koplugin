@@ -299,7 +299,7 @@ describe("IaSearch", function()
             assert.are.equal(1, #searches())
             assert.are.equal("emma00aust", books[1].identifier)
             -- unlike Library Genesis' results for the same search
-            assert.is_false(require("api.lglisearch"):isCached("emma", 1))
+            assert.is_false(require("api.libgensearch"):isCached("emma", 1))
         end)
 
         it("doesn't save a search that found nothing, which may have been an error", function()
@@ -384,7 +384,7 @@ describe("IaSearch", function()
                 { name = "emma00aust.epub", format = "EPUB", size = "900000" },
             })
 
-            local url, err = IaSearch.findDownloadLink(book)
+            local url, err = IaSearch:findDownloadLink(book)
             assert.is_nil(err)
             assert.are.equal("https://archive.org/download/emma00aust/emma00aust_text.pdf", url)
             assert.is_truthy(
@@ -403,7 +403,7 @@ describe("IaSearch", function()
                 },
             })
 
-            local url, err, _, listed = IaSearch.findDownloadLink(book)
+            local url, err, _, listed = IaSearch:findDownloadLink(book)
             assert.is_nil(err)
             assert.are.equal("https://archive.org/download/emma00aust/emma00aust_text.pdf", url)
             assert.are.same({ md5 = "0123456789abcdef0123456789abcdef", bytes = "9000000" }, listed)
@@ -416,12 +416,12 @@ describe("IaSearch", function()
                 { name = "emma_lending.epub", format = "EPUB", private = "true" },
                 { name = "emma.epub", format = "EPUB" },
             })
-            assert.are.equal("https://archive.org/download/emma00aust/emma.epub", IaSearch.findDownloadLink(book))
+            assert.are.equal("https://archive.org/download/emma00aust/emma.epub", IaSearch:findDownloadLink(book))
 
             web.pages[FILES_URL] = fixtures.archiveFiles({
                 { name = "emma_lending.epub", format = "EPUB", private = "true" },
             })
-            local url, err = IaSearch.findDownloadLink(book)
+            local url, err = IaSearch:findDownloadLink(book)
             assert.is_nil(url)
             assert.are.equal("Internet Archive no longer has this book as EPUB", err)
         end)
@@ -435,7 +435,7 @@ describe("IaSearch", function()
 
             assert.are.equal(
                 "https://archive.org/download/emma00aust/pg158-images.epub",
-                IaSearch.findDownloadLink(book)
+                IaSearch:findDownloadLink(book)
             )
         end)
 
@@ -447,7 +447,7 @@ describe("IaSearch", function()
 
             assert.are.equal(
                 "https://archive.org/download/emma00aust/texts/Emma%20%281816%29%20%26%20more.txt",
-                IaSearch.findDownloadLink(book)
+                IaSearch:findDownloadLink(book)
             )
         end)
 
@@ -455,7 +455,7 @@ describe("IaSearch", function()
         it("says when the book isn't there in its file type any more", function()
             web.pages[FILES_URL] = "{}"
 
-            local url, err = IaSearch.findDownloadLink(book)
+            local url, err = IaSearch:findDownloadLink(book)
             assert.is_nil(url)
             assert.are.equal("Internet Archive no longer has this book as PDF", err)
         end)
@@ -464,7 +464,7 @@ describe("IaSearch", function()
         it("logs what Internet Archive answered with when it can't be read", function()
             web.pages[FILES_URL] = "<html><body>Bad gateway</body></html>"
 
-            local url = IaSearch.findDownloadLink(book)
+            local url = IaSearch:findDownloadLink(book)
             assert.is_nil(url)
             local logged = helper.logged("warn", "^unexpected list of files from Internet Archive")
             assert.matches("37 bytes, which", logged, 1, true)
@@ -472,7 +472,7 @@ describe("IaSearch", function()
         end)
 
         it("says when Internet Archive doesn't answer, without looking the link up again", function()
-            local url, err, look_again = IaSearch.findDownloadLink(book)
+            local url, err, look_again = IaSearch:findDownloadLink(book)
             assert.is_nil(url)
             assert.are.equal("Internet Archive didn't answer (failed to connect to server)", err)
             assert.is_falsy(look_again)
@@ -483,7 +483,7 @@ describe("IaSearch", function()
                 return "<html>Bad gateway</html>", nil, 502
             end
 
-            local url, err = IaSearch.findDownloadLink(book)
+            local url, err = IaSearch:findDownloadLink(book)
             assert.is_nil(url)
             assert.are.equal("Internet Archive answered with an error (HTTP 502), try again later", err)
         end)
@@ -493,7 +493,7 @@ describe("IaSearch", function()
                 return nil, require("util.httputil").CANCELLED
             end
 
-            local url, err = IaSearch.findDownloadLink(book)
+            local url, err = IaSearch:findDownloadLink(book)
             assert.is_nil(url)
             assert.are.equal(require("util.httputil").CANCELLED, err)
         end)
@@ -521,7 +521,7 @@ describe("IaSearch", function()
             end
 
             local url
-            url, err = IaSearch.findDownloadLink(books[1])
+            url, err = IaSearch:findDownloadLink(books[1])
             assert.is_nil(err)
             assert.matches("^https://archive%.org/download/" .. books[1].identifier:gsub("%p", "%%%0") .. "/.+", url)
         end)

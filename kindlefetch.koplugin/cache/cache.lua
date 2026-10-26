@@ -14,8 +14,7 @@ function KindleFetchCache:new(opts)
         end,
         -- optionally called with the key and value of an entry that has expired or been pushed out by newer ones
         onEvict = opts.onEvict,
-        -- whether entries are kept once they've expired, for when there's nothing newer (see peek), rather than
-        -- deleted
+        -- whether expired entries are kept rather than deleted, for when there's nothing newer (see peek)
         keep_expired = opts.keep_expired,
         cache = nil,
     }
@@ -62,9 +61,7 @@ function KindleFetchCache:evict(key)
     end
 end
 
--- how long ago an entry was stored, in seconds, or nil when that can't be known: it was saved without a time (e.g.
--- by hand, or by a file that was cut short), or the time is still to come, as the clock has been put back since, as
--- an e-reader's can be when its battery runs flat. those are taken to have expired, as they may have long ago
+-- seconds since an entry was stored, or nil (taken as expired) when its time is missing or ahead of a clock put back
 local function age(entry, now)
     local timestamp = type(entry) == "table" and tonumber(entry.timestamp)
     if not timestamp or timestamp > now then
@@ -73,8 +70,7 @@ local function age(entry, now)
     return now - timestamp
 end
 
--- the order each entry was stored in, which, unlike the time it was stored, doesn't go back when the clock does:
--- covers stored after it had, as the oldest, were pushed out by the next ones
+-- the order entries were stored in, as their time goes back with the clock, which had the newest covers pushed out
 function KindleFetchCache:lastSeq()
     if not self.last_seq then
         self.last_seq = 0
@@ -88,8 +84,7 @@ function KindleFetchCache:lastSeq()
     return self.last_seq
 end
 
--- push out the entry stored before the others, those that can't be told apart (stored by older versions, or saved
--- wrongly) first
+-- push out the oldest entry, those that can't be told apart (stored by older versions, or saved wrongly) first
 function KindleFetchCache:removeOldest()
     local oldest_key, oldest_seq, oldest_timestamp
     for key, entry in pairs(self.cache) do
@@ -175,8 +170,7 @@ function KindleFetchCache:get(...)
     return entry.value
 end
 
--- what's stored for the key, however long ago, where entries are kept once they've expired (see keep_expired), e.g.
--- the mirrors looked up before, for when they can't be looked up again
+-- what's stored for the key, however long ago, where expired entries are kept (see keep_expired)
 function KindleFetchCache:peek(...)
     self:load()
     local entry = self.cache[self.makeKey(...)]

@@ -6,10 +6,7 @@ local _ = require("gettext")
 
 local WaitingMessage = {}
 
--- say on the message what's being waited for now (see HttpUtil.sayStatus), e.g. which of a site's mirrors is being
--- tried, beneath what it said, so a wait that takes a while doesn't look stuck. rebuild has the message laid out again
--- with its new text. nil keeps the last said, as the message is about to say something else or close, and laying it
--- out again in between would only flash on an e-reader's screen
+-- say what's waited for under the text (see HttpUtil.sayStatus); nil keeps the last, as redrawing would flash
 local function addStatus(message, text, field, rebuild)
     function message:setStatus(status)
         if not status or self.closed or self.cancelled then
@@ -24,9 +21,7 @@ local function addStatus(message, text, field, rebuild)
     return message
 end
 
--- a message saying what's being waited for, with a Cancel button where the wait can be called off (see
--- HttpUtil.setTrapWidget), rather than any tap calling it off, as a tap may have been meant for something else. once
--- Cancel has been tapped, the message's cancelled is set
+-- a message saying what's waited for, with Cancel where it can be called off, as taps may be meant for something else
 function WaitingMessage.new(text)
     if not HttpUtil.canCancel() then
         return addStatus(

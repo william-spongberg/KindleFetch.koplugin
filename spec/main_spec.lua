@@ -9,25 +9,24 @@ describe("KindleFetch", function()
     -- whether Z-Library is logged into, and what to do once the login dialog shown since has logged in
     local zlib_logged_in, zlib_logins
     local cancelled_downloads, curl_check_user_requested, leftovers_removed
+    -- how many times the libraries in the settings were opened (see SettingsPage:changeLibraries)
+    local libraries_shown
     -- the downloads the downloader says are in progress, and those it was asked to show the progress of
     local active_downloads, downloads_shown
     -- whether searches can be called off, and the widget that calls each one off when tapped (false without one)
     local can_cancel, trap_widgets
     -- pages of results saved from earlier searches, as "query page"
     local saved
-    -- the settings' menus for choosing languages, file types and book types that were opened, and what each calls once
-    -- closed, and the lists of what the books found have to tick (see SettingsPage:tickSeveral)
+    -- the language, file and book type menus opened, and the tick lists of what the books found have (see tickSeveral)
     local choosers, tick_lists
     -- whether curl can look names up with encrypted DNS
     local can_use_encrypted_dns
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
     local opened
-    -- KOReader's file manager and reader, of which one is open at a time (the file manager here, until a spec
-    -- opens a book with readBook)
+    -- KOReader's file manager and reader, one open at a time: the file manager until a spec calls readBook
     local FileManager, ReaderUI
-    -- how many times the file manager was refreshed, and the files the buttons from KOReader's file browser were
-    -- tapped for: to show their folders, add to collections and show the information of
+    -- file manager refreshes, and the files the file browser's folder, collections and info buttons were tapped for
     local refreshes, folders_shown, collections_chosen, info_shown
 
     -- KOReader's collections for the file manager or a book, noting the files added to them in chosen
@@ -113,9 +112,7 @@ describe("KindleFetch", function()
         error("no button " .. id)
     end
 
-    -- do what starts a search (e.g. tapping Search or Load more), then let it run: each site's search starts once
-    -- KOReader has shown what's on screen (see MultiSearch), leaving what was waiting from before (e.g. checking for
-    -- updates) to wait
+    -- do what starts a search, then run only what it scheduled (sites search once the screen's shown, see MultiSearch)
     local function andSearch(fn, ...)
         local from = #helper.state.scheduled
         fn(...)
@@ -225,6 +222,13 @@ describe("KindleFetch", function()
                 settings.encrypted_dns = on
                 return true
             end,
+            getLibraries = function()
+                return settings.libraries or {}
+            end,
+            setLibraries = function(_, libraries)
+                settings.libraries = libraries
+                return true
+            end,
         })
 
         cleared = {
@@ -258,6 +262,9 @@ describe("KindleFetch", function()
             showSettings = function()
                 settings_shown = settings_shown + 1
             end,
+            changeLibraries = function()
+                libraries_shown = libraries_shown + 1
+            end,
             changeLanguages = chooser("languages"),
             changeFileTypes = chooser("file types"),
             changeBookTypes = chooser("book types"),
@@ -286,15 +293,14 @@ describe("KindleFetch", function()
                 return trap_widget
             end,
         })
-        helper.stub("api.lglisearch", {
+        helper.stub("api.libgensearch", {
             NAME = "Library Genesis",
             HAS_BOOK_TYPES = true,
             SCOPES = { "title", "author", "isbn" },
             search = function(_, query, page, scope)
                 table.insert(searches, { query, page, scope })
                 table.insert(trap_widgets, require("util.httputil").getTrapWidget() or false)
-                -- books, error, the page to carry on from and how many results were read (or a function to run in
-                -- place of the search)
+                -- books, error, page to carry on from and how many results were read (or a function to run instead)
                 local result = search_results[page] or { {} }
                 if type(result) == "function" then
                     return result()
@@ -362,6 +368,7 @@ describe("KindleFetch", function()
             end,
         })
         cancelled_downloads = 0
+        libraries_shown = 0
         curl_check_user_requested = nil
         active_downloads, downloads_shown = {}, {}
 
@@ -437,8 +444,7 @@ describe("KindleFetch", function()
                         self.close_callback()
                     end
                 end
-                -- like KOReader's menu, show other entries, turning to the page with the given one (2 to a page here)
-                -- (or staying on the page that's showing for a negative one)
+                -- like KOReader's, turn to the given entry's page (2 to a page here), or stay put for a negative one
                 function menu:switchItemTable(title, item_table, item_number)
                     self.title = title or self.title
                     self.item_table = item_table
@@ -453,13 +459,15 @@ describe("KindleFetch", function()
         helper.stub("cache.covercache", {})
         leftovers_removed = 0
         can_use_encrypted_dns = true
-        helper.stub("util.curlutil", {
+        helper.stub("util.curlversion", {
             getVersion = function()
                 return "8.17.0"
             end,
             canUseEncryptedDns = function()
                 return can_use_encrypted_dns
             end,
+        })
+        helper.stub("util.curlutil", {
             removeLeftovers = function()
                 leftovers_removed = leftovers_removed + 1
             end,
@@ -512,8 +520,7 @@ describe("KindleFetch", function()
             assert.are.same({ "onSuspend", "onResume", "onNetworkDisconnected", "onNetworkConnected" }, told)
         end)
 
-        -- as when the device is powered off or restarted, or its storage is shared over USB, which curl carried on
-        -- writing to
+        -- as when the device powers off or restarts, or shares its storage over USB, which curl carried on writing to
         it("cancels downloads when KOReader closes without exiting", function()
             active_downloads = { { id = "dune", title = "Dune" } }
             assert.is_nil(openUI():onClose())
@@ -702,8 +709,7 @@ describe("KindleFetch", function()
             assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
         end)
 
-        -- even when the latest release couldn't be looked up, as on a Kindle whose curl is too old to, which offered to
-        -- update curl every time KOReader started (#57)
+        -- a Kindle whose curl was too old to look up releases offered to update curl every time KOReader started (#57)
         it("waits a day after checking for updates, whether or not they could be looked up", function()
             helper.state.time = 2000000
             openUI()
@@ -830,7 +836,7 @@ describe("KindleFetch", function()
             )
         end)
 
-        -- where the sites are chosen (see chooseSites)
+        -- where the sites are chosen (see SearchBox.chooseSites)
         it("has the one Search, rather than one for each site", function()
             local plugin = openUI()
             assert.is_nil(menuItem(plugin, "Search Library Genesis"))
@@ -1296,6 +1302,25 @@ describe("KindleFetch", function()
                 assert.are.same({ "Dune" }, itemTexts(menus[1]))
             end)
 
+            it("opens the libraries in the settings, where a library turned its login down", function()
+                search_results[1] = { nil, require("util.errors").LIBRARY_LOGIN }
+                search(openUI(), "dune")
+
+                local libraries = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Your Libraries…", libraries.text)
+                libraries.callback()
+                assert.are.equal(1, libraries_shown)
+            end)
+
+            it("tries a library that can't be reached again", function()
+                search_results[1] = { nil, require("util.errors").LIBRARY_UNREACHABLE }
+                search(openUI(), "dune")
+                local again = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Try again", again.text)
+                andSearch(again.callback)
+                assert.are.equal(2, #searches)
+            end)
+
             -- where the network's own DNS may be what's blocking them (#55)
             it(
                 "looks the sites up with encrypted DNS, then searches again, where the network can't find them",
@@ -1569,6 +1594,21 @@ describe("KindleFetch", function()
             assert.are.equal("Searching Internet Archive failed: request timed out", helper.lastError())
         end)
 
+        -- as it can be one that's only there at home, say
+        it("says a site that can't be reached, as a library away from it, only once a session", function()
+            local unreachable = require("util.errors").LIBRARY_UNREACHABLE
+            search_results[1] = { { book("Dune") } }
+            site_results.archive = { { nil, unreachable }, { nil, unreachable } }
+            searchSites("x")
+            assert.are.equal("Searching Internet Archive failed: " .. unreachable, helper.lastError())
+
+            local shown = #helper.state.shown
+            searchSites("y")
+            for i = shown + 1, #helper.state.shown do
+                assert.are_not.equal("notice-warning", helper.state.shown[i].icon)
+            end
+        end)
+
         -- once there are books to say so over
         it("says a site that failed before any books were found did, once they are", function()
             search_results[1] = { nil, "request timed out" }
@@ -1762,6 +1802,84 @@ describe("KindleFetch", function()
             local plugin = openUI()
             plugin:setupUI()
             assert.are.equal("Sites: All", buttonWithId(plugin.search_box, "sites").text)
+        end)
+
+        -- e.g. a library the user has added (see MultiSearch.addSite), returning what it's asked to search for
+        local function addLibrary()
+            local library_searches = {}
+            require("api.multisearch").addSite("library_1", {
+                NAME = "Home library",
+                search = function(_, query, page, scope)
+                    table.insert(library_searches, { query, page, scope })
+                    return {}, nil, nil, 0
+                end,
+                isCached = function()
+                    return false
+                end,
+            })
+            return library_searches
+        end
+
+        it("offers the sites added while KOReader runs first, searching them once ticked", function()
+            local plugin = openUI()
+            local library_searches = addLibrary()
+            plugin:setupUI()
+            local menu = sitesMenu(plugin)
+            assert.are.same(
+                { "Home library", "Z-Library", "✓ Library Genesis", "Internet Archive", "Project Gutenberg" },
+                rowTexts(menu)
+            )
+
+            menu.buttons[1][1].callback()
+            assert.are.same({ "library_1", "libgen" }, settings.search_sources)
+            assert.are.equal("Sites: Home library and Library Genesis", buttonWithId(plugin.search_box, "sites").text)
+            plugin.search_box.input_text = "emma"
+            andSearch(button(plugin.search_box, "Search").callback)
+            assert.are.same({ { "emma", 1 } }, library_searches)
+            assert.are.same({ { "emma", 1 } }, searches)
+        end)
+
+        it("offers the libraries in the settings once KOReader has started", function()
+            settings.libraries = {
+                {
+                    id = "a1",
+                    name = "Books",
+                    url = "http://nas:8080/opds?library_id=Books",
+                    kind = "calibre",
+                    search_url = "http://nas:8080/opds/search/{searchTerms}?library_id=Books",
+                    username = "",
+                    password = "",
+                },
+            }
+            local plugin = openUI()
+            plugin:setupUI()
+            assert.are.equal("Books", rowTexts(sitesMenu(plugin))[1])
+        end)
+
+        it("says when they're all ticked, with the sites added", function()
+            settings.search_sources = { "zlib", "gutenberg", "libgen", "archive", "library_1" }
+            local plugin = openUI()
+            addLibrary()
+            plugin:setupUI()
+            assert.are.equal("Sites: All", buttonWithId(plugin.search_box, "sites").text)
+        end)
+
+        it("stops offering or searching a site that has been removed, though it was ticked", function()
+            settings.search_sources = { "library_1", "libgen" }
+            local plugin = openUI()
+            local library_searches = addLibrary()
+            require("api.multisearch").removeSite("library_1")
+            plugin:setupUI()
+            assert.are.equal("Sites: Library Genesis", buttonWithId(plugin.search_box, "sites").text)
+            assert.are.same(
+                { "Z-Library", "✓ Library Genesis", "Internet Archive", "Project Gutenberg" },
+                rowTexts(sitesMenu(plugin))
+            )
+
+            plugin.search_box.input_text = "emma"
+            andSearch(button(plugin.search_box, "Search").callback)
+            assert.are.same({}, library_searches)
+            assert.are.same({ { "emma", 1 } }, searches)
         end)
 
         -- as it can only be searched with an account
@@ -2204,8 +2322,7 @@ describe("KindleFetch", function()
             return texts
         end
 
-        -- show only the books with the codes of what the button's list has, as if they were all that was ticked once
-        -- it was closed, returning what saving it did: it's closed, with what's ticked changed, unless that's false
+        -- show only books with these codes, returning what saving the list did (it's closed unless that's false)
         local function show(start, codes)
             filterButton(start).callback()
             local list = tick_lists[#tick_lists]
@@ -2780,8 +2897,7 @@ describe("KindleFetch", function()
             assert.are.same({ "switchDocument", "/mnt/us/books/Dune.epub" }, opened)
         end)
 
-        -- the download may have been hidden, and finish after what it was started from has closed. opening the
-        -- book from there crashed KOReader when that was a book, as only the file manager can open files
+        -- hidden downloads can outlast what started them; opening the book from a closed reader crashed KOReader
         it("opens the book from what's open by then, rather than what the download was started from", function()
             selectBook("Dune")
             readBook()

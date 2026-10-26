@@ -2,10 +2,7 @@
 
 local fixtures = {}
 
--- Mirrors are scraped from the live Wikipedia pages, while every other page is served from web.pages
--- (url -> html, or a function given the request's form and cookies, see HttpUtil.getBody, returning html, and the
--- HTTP status or what went wrong when it says) so specs don't contact the sites themselves, unless web.live is set.
--- web.requests keeps each request's form and cookies too
+-- serves web.pages so specs don't contact the sites (unless web.live is set), but scrapes mirrors from live Wikipedia
 function fixtures.fakeWeb(helper)
     local web = {
         pages = {},
@@ -19,13 +16,13 @@ function fixtures.fakeWeb(helper)
     local fetchLive = HttpUtil.getBody
     -- live, with luasocket (see helper.useLiveHttp), whatever curl can do in the spec
     local function fetchWithLuasocket(url, opts)
-        local CurlUtil = require("util.curlutil")
-        local canFetch = CurlUtil.canFetch
-        CurlUtil.canFetch = function()
+        local CurlVersion = require("util.curlversion")
+        local canFetch = CurlVersion.canFetch
+        CurlVersion.canFetch = function()
             return false
         end
         local body, err, status = fetchLive(url, opts)
-        CurlUtil.canFetch = canFetch
+        CurlVersion.canFetch = canFetch
         return body, err, status
     end
     HttpUtil.getBody = function(url, opts)
@@ -98,8 +95,7 @@ function fixtures.scrapeMirrors(web, getUrls, site)
     return mirrors
 end
 
--- the website row of the infobox on Wikipedia's Z-Library page, linking to each of the sites given (e.g.
--- "z-lib.example"), as it does to its addresses, along with those on Tor and I2P, as the real page does
+-- the website row of Wikipedia's Z-Library infobox, linking to the sites given and, as the real one does, Tor and I2P
 function fixtures.wikipediaZlib(sites)
     local items = {}
     for _, site in ipairs(sites) do
@@ -207,9 +203,7 @@ function fixtures.libgenRow(book)
     return "<tr>\n" .. table.concat(cells) .. "</tr>\n"
 end
 
--- a page of Library Genesis' search results, with the books in its table. pages optionally gives how many pages of
--- results it says there are, in the script that shows links to them (which it leaves out when there's only one), and
--- page the one these are on
+-- a page of Library Genesis' results, with pages and page for its paging script, which it leaves out for one page
 function fixtures.libgenResults(books, pages, page)
     local rows = {}
     for _, book in ipairs(books) do
@@ -234,9 +228,7 @@ function fixtures.libgenResults(books, pages, page)
         .. "</tbody></table></body></html>"
 end
 
--- Library Genesis' search page when there are no results on it to list, as for a search that found nothing, or a
--- page past its last: there's no table of results (only its style), but it says how many files were found, in a tab
--- that pages with results have too
+-- Library Genesis' page with no results (as past its last): no table, only its style, but a tab counting the files
 function fixtures.libgenNoResults(files)
     return "<html><head><title>Library Genesis</title><style>#tablelibgen td { margin: 0; }</style></head><body>"
         .. '<ul class="nav nav-tabs"><li class="nav-item"> <a class="nav-link active " '
@@ -245,8 +237,7 @@ function fixtures.libgenNoResults(files)
         .. "</span></a> </li></ul></body></html>"
 end
 
--- what Library Genesis' mirrors send in place of their search results while its database is refusing connections,
--- as it does while it's very busy (with HTTP 500), word for word
+-- what Library Genesis' mirrors send in place of results (with HTTP 500) while very busy, word for word
 fixtures.LIBGEN_BUSY = "\u{FEFF} Could not connect to the database 3306. User 'libgen_read' has exceeded the "
     .. "'max_user_connections' resource (current value: 300) <a href=''>Report an error</a>."
 
@@ -281,8 +272,7 @@ function fixtures.libgenAds(md5)
         .. [[&key=ABC123"><h2>GET</h2></a></td></tr></table></body></html>]]
 end
 
--- Internet Archive's answer to a search (advancedsearch.php), with the books as its docs, and how many results
--- there are altogether
+-- Internet Archive's answer to a search (advancedsearch.php): the books as its docs, and how many there are in all
 function fixtures.archiveResults(docs, total)
     return require("dkjson").encode({
         responseHeader = { status = 0 },

@@ -1,12 +1,12 @@
 local helper = require("helper")
 
 describe("WaitingMessage", function()
-    local WaitingMessage, CurlUtil
+    local WaitingMessage, CurlVersion
 
     before_each(function()
         helper.reset()
         helper.state.data_dir = helper.tmpdir("data")
-        CurlUtil = require("util.curlutil")
+        CurlVersion = require("util.curlversion")
         WaitingMessage = require("ui.waitingmessage")
     end)
 
@@ -15,7 +15,7 @@ describe("WaitingMessage", function()
     -- e.g. which of a site's mirrors is being tried, so a wait that takes a while doesn't look stuck
     describe("says what's being waited for now beneath what it says", function()
         it("with a Cancel button, where the wait can be called off", function()
-            CurlUtil.canFetch = function()
+            CurlVersion.canFetch = function()
                 return true
             end
             local message = WaitingMessage.new("Searching Library Genesis...")
@@ -25,7 +25,7 @@ describe("WaitingMessage", function()
         end)
 
         it("without one, where it can't", function()
-            CurlUtil.canFetch = function()
+            CurlVersion.canFetch = function()
                 return false
             end
             local message = WaitingMessage.new("Searching Library Genesis...")
@@ -37,7 +37,7 @@ describe("WaitingMessage", function()
 
     -- as it's about to say something else or close, and laying it out again in between would only flash
     it("keeps saying the last, rather than going back to what it said before", function()
-        CurlUtil.canFetch = function()
+        CurlVersion.canFetch = function()
             return true
         end
         local message = WaitingMessage.new("Searching Library Genesis...")
@@ -48,7 +48,7 @@ describe("WaitingMessage", function()
     end)
 
     it("says nothing more once it has closed", function()
-        CurlUtil.canFetch = function()
+        CurlVersion.canFetch = function()
             return true
         end
         local message = WaitingMessage.new("Searching Library Genesis...")

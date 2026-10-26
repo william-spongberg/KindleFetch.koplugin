@@ -1,5 +1,4 @@
--- Lints the plugin and its tests: luacheck (from the repository root)
--- Based on KOReader's own .luacheckrc (koreader/.luacheckrc)
+-- lints the plugin and its tests (run luacheck from the repository root), based on KOReader's own .luacheckrc
 
 std = "luajit"
 unused_args = false

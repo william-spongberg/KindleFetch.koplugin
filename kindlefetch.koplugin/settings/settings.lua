@@ -4,26 +4,12 @@ local Device = require("device")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local LogUtil = require("util.logutil")
+local SavedLibrary = require("settings.savedlibrary")
+local SavedZlibAccount = require("settings.savedzlibaccount")
 local lfs = require("libs/libkoreader-lfs")
 local _ = require("gettext")
 
 local KindleFetchSettings = {}
-
--- default settings
-local DEFAULTS = {
-    show_book_covers = true,
-    check_for_updates = true,
-    -- looking the sites up with DNS over HTTPS (see CurlUtil.applyEncryptedDns), for networks whose own DNS blocks them
-    encrypted_dns = false,
-    search_cache_expiry_days = 14,
-    mirror_cache_expiry_days = 7,
-    download_dir = nil,
-    -- and every file type and book type, set below
-    preferred_languages = { "en" },
-    -- the sites the search box searches (see Sources), until others are ticked in it: all of them, Z-Library once
-    -- logged into
-    search_sources = { "zlib", "libgen", "archive", "gutenberg" },
-}
 
 -- available settings
 local AVAILABLE_LANGUAGES = {
@@ -473,14 +459,10 @@ local AVAILABLE_BOOK_TYPES = {
         code = "standards",
     },
 }
--- by default, every kind of book in every file type KOReader can open (in English)
-DEFAULTS.preferred_file_types = {}
-for __, file_type in ipairs(AVAILABLE_FILE_TYPES) do
-    table.insert(DEFAULTS.preferred_file_types, file_type)
-end
-DEFAULTS.preferred_book_types = {}
+-- the codes they're saved as
+local BOOK_TYPE_CODES = {}
 for __, book_type in ipairs(AVAILABLE_BOOK_TYPES) do
-    table.insert(DEFAULTS.preferred_book_types, book_type.code)
+    table.insert(BOOK_TYPE_CODES, book_type.code)
 end
 
 -- how long searches and mirrors can be cached for
@@ -491,6 +473,43 @@ local OLD_BOOK_TYPES = {
     book_nonfiction = "nonfiction",
     book_comic = "comics",
     standards_document = "standards",
+}
+
+-- the settings each given a getter and setter below: the type each is saved as (a table being a list), and its default
+local SCHEMA = {
+    show_book_covers = { type = "boolean", default = true, fill = true },
+    -- looking the sites up with DNS over HTTPS (see CurlUtil.applyEncryptedDns), for networks whose own DNS blocks them
+    encrypted_dns = { type = "boolean", default = false },
+    -- automatically, once per session
+    check_for_updates = { type = "boolean", default = true, fill = true },
+    search_cache_expiry_days = { type = "number", default = 14, fill = true },
+    mirror_cache_expiry_days = { type = "number", default = 7, fill = true },
+    -- the plugin version the last time KOReader was started
+    last_version = { type = "string" },
+    -- when the latest release was last looked up, as the time in seconds
+    last_update_check = { type = "number" },
+    -- the plugin version that updating to was turned down, so it isn't offered again automatically
+    skipped_version = { type = "string" },
+    -- the sites the search box searches (see Sites) until others are ticked: all of them, Z-Library once logged into
+    search_sources = { type = "table", default = { "zlib", "libgen", "archive", "gutenberg" }, at_least_one = true },
+    -- what was last searched for, most recent first (see addRecentSearch)
+    recent_searches = { type = "table", default = {} },
+    preferred_languages = { type = "table", default = { "en" }, fill = true },
+    -- every file type KOReader can open by default, and only those still offered, dropping azw3 and the others it can't
+    preferred_file_types = {
+        type = "table",
+        default = AVAILABLE_FILE_TYPES,
+        allowed = AVAILABLE_FILE_TYPES,
+        fill = true,
+    },
+    -- every kind of book by default, and only those still offered, with those saved searching Anna's Archive renamed
+    preferred_book_types = {
+        type = "table",
+        default = BOOK_TYPE_CODES,
+        allowed = BOOK_TYPE_CODES,
+        renamed = OLD_BOOK_TYPES,
+        fill = true,
+    },
 }
 
 local function settingsPath()
@@ -506,23 +525,135 @@ local function getSettingsFile()
     return cached_file
 end
 
+-- whether two settings are the same, tables by what's in them, such as the libraries, each a table in a list
 local function sameSetting(a, b)
     if type(a) ~= "table" or type(b) ~= "table" then
         return a == b
     end
-    if #a ~= #b then
-        return false
+    for key, value in pairs(a) do
+        if not sameSetting(value, b[key]) then
+            return false
+        end
     end
-    for i, value in ipairs(a) do
-        if value ~= b[i] then
+    for key in pairs(b) do
+        if a[key] == nil then
             return false
         end
     end
     return true
 end
 
--- fill in the settings that aren't saved yet, or were saved by an older version. this runs every time the file
--- manager or a book is opened, so the file is only written when something changed
+-- a list of its own, so that changing a list that's handed out can't change a default
+local function copy(value)
+    return type(value) == "table" and { unpack(value) } or value
+end
+
+-- the strings in a list, leaving out anything else, which a list of languages or searches is never saved with
+local function strings(list)
+    local kept = {}
+    for __, value in ipairs(list) do
+        if type(value) == "string" then
+            table.insert(kept, value)
+        end
+    end
+    return kept
+end
+
+local function contains(list, value)
+    for __, item in ipairs(list) do
+        if item == value then
+            return true
+        end
+    end
+    return false
+end
+
+-- a setting as saved, or its default if unsaved or of the wrong type, as that could leave the plugin out of the menu
+function KindleFetchSettings:getSetting(name)
+    local value = getSettingsFile():readSetting(name)
+    -- (nil for those read by methods of their own, such as the libraries, which are given as they were saved)
+    local setting = SCHEMA[name]
+
+    if value == nil then
+        return setting and copy(setting.default)
+    end
+
+    if setting and type(value) ~= setting.type then
+        LogUtil.warn("ignoring", name, "as it's saved as a", type(value), "rather than a", setting.type)
+        return copy(setting.default)
+    end
+    -- the lists of languages, file types, book types and searches
+    if setting and setting.type == "table" then
+        return strings(value)
+    end
+
+    return value
+end
+-- save data as name, then read it back, as LuaSettings doesn't say when it can't: true, or nil and why not
+local function save(name, data)
+    local settings_file = getSettingsFile()
+    settings_file:saveSetting(name, data)
+    settings_file:flush()
+    if not sameSetting(LuaSettings:open(settingsPath()):readSetting(name), data) then
+        LogUtil.warn("could not save", name, "in", settingsPath())
+        return nil, _("Kindle Fetch's settings couldn't be saved")
+    end
+    return true
+end
+
+function KindleFetchSettings:setSetting(name, data)
+    local ok, err = save(name, data)
+    if not ok then
+        return nil, err
+    end
+
+    if type(data) ~= "table" then
+        LogUtil.debug("updated", name, "to", data)
+    else
+        LogUtil.debug("updated", name, "to", table.concat(data, ", "))
+    end
+
+    return true
+end
+
+-- a setting in SCHEMA as it's used: as saved or its default, a list keeping only the values it can still have
+local function read(name, setting)
+    local value = KindleFetchSettings:getSetting(name)
+    if setting.type ~= "table" then
+        return value
+    end
+    local list = {}
+    for __, item in ipairs(value) do
+        -- e.g. a book type as it was saved when searching Anna's Archive
+        item = setting.renamed and setting.renamed[item] or item
+        if not setting.allowed or contains(setting.allowed, item) then
+            table.insert(list, item)
+        end
+    end
+    -- none of those chosen are offered any more, rather than every one being turned off, or none are where one must be
+    if #list == 0 and (#value > 0 or setting.at_least_one) then
+        return copy(setting.default)
+    end
+    return list
+end
+
+-- the end of a setting's getter and setter's names, e.g. ShowBookCovers for show_book_covers
+local function accessorName(name)
+    return (("_" .. name):gsub("_(%l)", string.upper))
+end
+
+-- getShowBookCovers and setShowBookCovers, and the same for each setting in SCHEMA
+for name, setting in pairs(SCHEMA) do
+    KindleFetchSettings["get" .. accessorName(name)] = function()
+        return read(name, setting)
+    end
+    -- returning true, or nil and why not (see save)
+    KindleFetchSettings["set" .. accessorName(name)] = function(__, value)
+        return KindleFetchSettings:setSetting(name, value)
+    end
+end
+
+-- fill in missing or outdated settings, writing only on change, as this runs whenever the file manager or a book opens
 function KindleFetchSettings:load()
     local settings_file = getSettingsFile()
     local changed = false
@@ -540,13 +671,12 @@ function KindleFetchSettings:load()
             fill("download_dir", download_dir)
         end
     end
-    fill("show_book_covers", self:getShowBookCovers())
-    fill("check_for_updates", self:getCheckForUpdates())
-    fill("search_cache_expiry_days", self:getSearchCacheExpiryDays())
-    fill("mirror_cache_expiry_days", self:getMirrorCacheExpiryDays())
-    fill("preferred_languages", self:getPreferredLanguages())
-    fill("preferred_file_types", self:getPreferredFileTypes())
-    fill("preferred_book_types", self:getPreferredBookTypes())
+    -- each SCHEMA says to fill, as it's used, e.g. with old book types renamed (the others are saved once changed)
+    for name, setting in pairs(SCHEMA) do
+        if setting.fill then
+            fill(name, read(name, setting))
+        end
+    end
 
     if changed then
         settings_file:flush()
@@ -554,143 +684,11 @@ function KindleFetchSettings:load()
     end
 end
 
--- the type each setting is saved as, besides those with a default, which are saved as the default is
-local TYPES = {
-    last_version = "string",
-    last_update_check = "number",
-    skipped_version = "string",
-    recent_searches = "table",
-}
-
--- the strings in a list, leaving out anything else, which a list of languages or searches is never saved with
-local function strings(list)
-    local kept = {}
-    for __, value in ipairs(list) do
-        if type(value) == "string" then
-            table.insert(kept, value)
-        end
-    end
-    return kept
-end
-
--- util
--- a setting as it's saved, or its default when it isn't, or is saved as something it can't be (e.g. by hand), which
--- what reads it would fail on, possibly when KOReader starts, leaving the plugin out of the menu
-function KindleFetchSettings:getSetting(name)
-    local settings_file = getSettingsFile()
-    local value = settings_file:readSetting(name)
-
-    if value == nil then
-        return DEFAULTS[name]
-    end
-
-    local expected = DEFAULTS[name] ~= nil and type(DEFAULTS[name]) or TYPES[name]
-    if expected and type(value) ~= expected then
-        LogUtil.warn("ignoring", name, "as it's saved as a", type(value), "rather than a", expected)
-        return DEFAULTS[name]
-    end
-    -- the lists of languages, file types, book types and searches
-    if expected == "table" then
-        return strings(value)
-    end
-
-    return value
-end
--- write the settings, with name set to data, returning true, or nil and why not. LuaSettings doesn't say when it
--- couldn't write them (e.g. once the storage is full, or read-only), and they're read as they were before next time,
--- so they're read back to tell
-local function flush(settings_file, name, data)
-    settings_file:flush()
-    if not sameSetting(LuaSettings:open(settingsPath()):readSetting(name), data) then
-        LogUtil.warn("could not save", name, "in", settingsPath())
-        return nil, _("Kindle Fetch's settings couldn't be saved")
-    end
-    return true
-end
-
-function KindleFetchSettings:setSetting(name, data)
-    local settings_file = getSettingsFile()
-    settings_file:saveSetting(name, data)
-    local ok, err = flush(settings_file, name, data)
-    if not ok then
-        return nil, err
-    end
-
-    if type(data) ~= "table" then
-        LogUtil.debug("updated", name, "to", data)
-    else
-        LogUtil.debug("updated", name, "to", table.concat(data, ", "))
-    end
-
-    return true
-end
-
--- show_book_covers
-function KindleFetchSettings:getShowBookCovers()
-    return KindleFetchSettings:getSetting("show_book_covers")
-end
-function KindleFetchSettings:setShowBookCovers(bool)
-    return KindleFetchSettings:setSetting("show_book_covers", bool)
-end
-
-function KindleFetchSettings:getEncryptedDns()
-    return KindleFetchSettings:getSetting("encrypted_dns")
-end
-function KindleFetchSettings:setEncryptedDns(bool)
-    return KindleFetchSettings:setSetting("encrypted_dns", bool)
-end
-
--- check_for_updates (automatically, once per session)
-function KindleFetchSettings:getCheckForUpdates()
-    return KindleFetchSettings:getSetting("check_for_updates")
-end
-function KindleFetchSettings:setCheckForUpdates(bool)
-    return KindleFetchSettings:setSetting("check_for_updates", bool)
-end
-
--- search_cache_expiry_days / mirror_cache_expiry_days
-function KindleFetchSettings:getSearchCacheExpiryDays()
-    return KindleFetchSettings:getSetting("search_cache_expiry_days")
-end
-function KindleFetchSettings:setSearchCacheExpiryDays(days)
-    return KindleFetchSettings:setSetting("search_cache_expiry_days", days)
-end
-function KindleFetchSettings:getMirrorCacheExpiryDays()
-    return KindleFetchSettings:getSetting("mirror_cache_expiry_days")
-end
-function KindleFetchSettings:setMirrorCacheExpiryDays(days)
-    return KindleFetchSettings:setSetting("mirror_cache_expiry_days", days)
-end
 function KindleFetchSettings:getAvailableCacheExpiryDays()
     return AVAILABLE_CACHE_EXPIRY_DAYS
 end
 
--- last_version (plugin version the last time KOReader was started)
-function KindleFetchSettings:getLastVersion()
-    return KindleFetchSettings:getSetting("last_version")
-end
-function KindleFetchSettings:setLastVersion(version)
-    return KindleFetchSettings:setSetting("last_version", version)
-end
-
--- last_update_check (when the latest release was last looked up, as the time in seconds)
-function KindleFetchSettings:getLastUpdateCheck()
-    return KindleFetchSettings:getSetting("last_update_check")
-end
-function KindleFetchSettings:setLastUpdateCheck(time)
-    return KindleFetchSettings:setSetting("last_update_check", time)
-end
-
--- skipped_version (plugin version that updating to was turned down, so it isn't offered again automatically)
-function KindleFetchSettings:getSkippedVersion()
-    return KindleFetchSettings:getSetting("skipped_version")
-end
-function KindleFetchSettings:setSkippedVersion(version)
-    return KindleFetchSettings:setSetting("skipped_version", version)
-end
-
--- curl_update_declined (the version of curl that updating to was turned down, so it isn't offered again
--- automatically, until there's a newer one), or true, as older versions saved it, for whichever version it was
+-- curl_update_declined (the curl version turned down, not offered again unless asked), or true from older versions
 function KindleFetchSettings:getCurlUpdateDeclined()
     local declined = getSettingsFile():readSetting("curl_update_declined")
     if declined == true or type(declined) == "string" then
@@ -702,24 +700,8 @@ function KindleFetchSettings:setCurlUpdateDeclined(version)
     return KindleFetchSettings:setSetting("curl_update_declined", version or nil)
 end
 
--- search_sources (the sites the search box searches, by their names in Sources, e.g. { "libgen", "archive" }), of which
--- there's always at least one, in a list of its own
-function KindleFetchSettings:getSearchSources()
-    local sources = {}
-    for __, source in ipairs(KindleFetchSettings:getSetting("search_sources")) do
-        table.insert(sources, source)
-    end
-    return #sources > 0 and sources or { unpack(DEFAULTS.search_sources) }
-end
-function KindleFetchSettings:setSearchSources(sources)
-    return KindleFetchSettings:setSetting("search_sources", sources)
-end
-
--- recent_searches (what was last searched for, most recent first)
+-- the most recent searches kept (see recent_searches in SCHEMA)
 local MAX_RECENT_SEARCHES = 10
-function KindleFetchSettings:getRecentSearches()
-    return KindleFetchSettings:getSetting("recent_searches") or {}
-end
 -- once each, whatever its capitals, as Library Genesis finds the same books either way
 function KindleFetchSettings:addRecentSearch(query)
     local searches = { query }
@@ -728,46 +710,54 @@ function KindleFetchSettings:addRecentSearch(query)
             table.insert(searches, search)
         end
     end
-    return KindleFetchSettings:setSetting("recent_searches", searches)
+    return KindleFetchSettings:setRecentSearches(searches)
 end
 function KindleFetchSettings:clearRecentSearches()
-    return KindleFetchSettings:setSetting("recent_searches", {})
+    return KindleFetchSettings:setRecentSearches({})
 end
 
--- zlib_account (the Z-Library account logged into: its email, and its user id and key, which log into it as the
--- password does, and are kept instead)
-function KindleFetchSettings:getZlibAccount()
-    local account = KindleFetchSettings:getSetting("zlib_account")
-    if type(account) == "table" and account.user_id and account.user_key then
-        return account
+-- libraries (OPDS catalogues added, see Libraries) saved as they should be, keeping the logins they ask for each time
+function KindleFetchSettings:getLibraries()
+    local saved = getSettingsFile():readSetting("libraries")
+    local libraries = {}
+    for __, entry in ipairs(type(saved) == "table" and saved or {}) do
+        local library = SavedLibrary.fromTable(entry)
+        if library then
+            table.insert(libraries, library:toTable())
+        end
     end
+    return libraries
 end
--- or nil to forget it. not logged, as the key logs into the account
-function KindleFetchSettings:setZlibAccount(account)
-    local settings_file = getSettingsFile()
-    if account then
-        settings_file:saveSetting("zlib_account", {
-            email = account.email,
-            user_id = account.user_id,
-            user_key = account.user_key,
-        })
-    else
-        settings_file:delSetting("zlib_account")
-    end
-    local ok, err = flush(settings_file, "zlib_account", account and settings_file:readSetting("zlib_account"))
+-- not logged, as the passwords log into the libraries. returns true, or nil and why not
+function KindleFetchSettings:setLibraries(libraries)
+    local ok, err = save("libraries", libraries)
     if not ok then
         return nil, err
     end
-    -- the settings as they were before (KOReader keeps them in case they can't be read), which would still log into
-    -- the account, and be read in place of these, if they ever can't be
+    LogUtil.debug("saved", #libraries, "libraries")
+    return true
+end
+
+-- zlib_account (the Z-Library account logged into: its email, and its user id and key, kept instead of the password)
+function KindleFetchSettings:getZlibAccount()
+    local account = SavedZlibAccount.fromTable(KindleFetchSettings:getSetting("zlib_account"))
+    return account and account:toTable()
+end
+-- or nil to forget it. not logged, as the key logs into the account
+function KindleFetchSettings:setZlibAccount(account)
+    local saved = SavedZlibAccount.fromTable(account)
+    local ok, err = save("zlib_account", saved and saved:toTable())
+    if not ok then
+        return nil, err
+    end
+    -- the settings from before (KOReader's backup), which would still log in, and be read if these ever can't be
     if not account then
         os.remove(settingsPath() .. ".old")
     end
     return true
 end
 
--- download_dir, or the default while the folder saved can't be found (e.g. once deleted, or on an SD card that has
--- been taken out), which is kept, as it may be back
+-- download_dir, or the default while the folder saved can't be found, which is kept, as it may be back
 function KindleFetchSettings:getDownloadDir()
     local settings_file = getSettingsFile()
     local download_dir = settings_file:readSetting("download_dir")
@@ -801,9 +791,7 @@ function KindleFetchSettings:setDownloadDir(path)
         return nil, err
     end
 
-    local settings_file = getSettingsFile()
-    settings_file:saveSetting("download_dir", path)
-    local saved, save_err = flush(settings_file, "download_dir", path)
+    local saved, save_err = save("download_dir", path)
     if not saved then
         return nil, save_err
     end
@@ -811,39 +799,10 @@ function KindleFetchSettings:setDownloadDir(path)
     return true
 end
 
--- preferred_languages
-function KindleFetchSettings:getPreferredLanguages()
-    return KindleFetchSettings:getSetting("preferred_languages")
-end
-function KindleFetchSettings:setPreferredLanguages(languages)
-    return KindleFetchSettings:setSetting("preferred_languages", languages)
-end
 function KindleFetchSettings:getAvailableLanguages()
     return AVAILABLE_LANGUAGES
 end
 
--- preferred_file_types
--- only those still offered, e.g. dropping azw3 and the other types KOReader can't open
-function KindleFetchSettings:getPreferredFileTypes()
-    local saved = KindleFetchSettings:getSetting("preferred_file_types")
-    local file_types = {}
-    for __, file_type in ipairs(saved) do
-        for __, available in ipairs(AVAILABLE_FILE_TYPES) do
-            if available == file_type then
-                table.insert(file_types, file_type)
-            end
-        end
-    end
-
-    -- none of those chosen are offered any more, rather than every one being turned off
-    if #file_types == 0 and #saved > 0 then
-        return DEFAULTS.preferred_file_types
-    end
-    return file_types
-end
-function KindleFetchSettings:setPreferredFileTypes(file_types)
-    return KindleFetchSettings:setSetting("preferred_file_types", file_types)
-end
 function KindleFetchSettings:getEbookFileTypes()
     return EBOOK_FILE_TYPES
 end
@@ -860,28 +819,6 @@ function KindleFetchSettings:getWebFileTypes()
     return WEB_FILE_TYPES
 end
 
--- preferred_book_types
-function KindleFetchSettings:getPreferredBookTypes()
-    local saved = KindleFetchSettings:getSetting("preferred_book_types")
-    local book_types = {}
-    for __, book_type in ipairs(saved) do
-        book_type = OLD_BOOK_TYPES[book_type] or book_type
-        for __, available in ipairs(AVAILABLE_BOOK_TYPES) do
-            if available.code == book_type then
-                table.insert(book_types, book_type)
-            end
-        end
-    end
-
-    -- none of those chosen are offered any more, rather than every one being turned off
-    if #book_types == 0 and #saved > 0 then
-        return DEFAULTS.preferred_book_types
-    end
-    return book_types
-end
-function KindleFetchSettings:setPreferredBookTypes(book_types)
-    return KindleFetchSettings:setSetting("preferred_book_types", book_types)
-end
 function KindleFetchSettings:getAvailableBookTypes()
     return AVAILABLE_BOOK_TYPES
 end

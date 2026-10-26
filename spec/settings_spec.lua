@@ -80,6 +80,153 @@ describe("KindleFetchSettings", function()
         assert.are.same({ "archive" }, Settings:getSearchSources())
     end)
 
+    -- as the search box always searches at least one
+    it("ticks every site again once none are", function()
+        assert.is_true(Settings:setSearchSources({}))
+        assert.are.same({ "zlib", "libgen", "archive", "gutenberg" }, Settings:getSearchSources())
+    end)
+
+    -- each made from the settings' schema: with its default, something else it can be, and something it can't
+    describe("with a getter and setter of their own", function()
+        local all_file_types = {
+            "epub",
+            "mobi",
+            "azw",
+            "fb2",
+            "prc",
+            "cbr",
+            "cbz",
+            "pdf",
+            "txt",
+            "rtf",
+            "doc",
+            "docx",
+            "odt",
+            "djvu",
+            "jpg",
+            "tif",
+            "pdb",
+            "chm",
+            "htm",
+            "html",
+            "htmlz",
+        }
+        local all_book_types = { "fiction", "nonfiction", "comics", "magazines", "articles", "standards" }
+        local settings = {
+            { name = "ShowBookCovers", key = "show_book_covers", default = true, value = false, wrong = "yes" },
+            { name = "EncryptedDns", key = "encrypted_dns", default = false, value = true, wrong = 1 },
+            { name = "CheckForUpdates", key = "check_for_updates", default = true, value = false, wrong = "no" },
+            {
+                name = "SearchCacheExpiryDays",
+                key = "search_cache_expiry_days",
+                default = 14,
+                value = 30,
+                wrong = "30",
+            },
+            { name = "MirrorCacheExpiryDays", key = "mirror_cache_expiry_days", default = 7, value = 1, wrong = {} },
+            { name = "LastVersion", key = "last_version", value = "0.8", wrong = 0.8 },
+            { name = "LastUpdateCheck", key = "last_update_check", value = 1234567, wrong = "yesterday" },
+            { name = "SkippedVersion", key = "skipped_version", value = "0.9", wrong = true },
+            {
+                name = "SearchSources",
+                key = "search_sources",
+                default = { "zlib", "libgen", "archive", "gutenberg" },
+                value = { "archive", "library_a1" },
+                wrong = "archive",
+            },
+            {
+                name = "RecentSearches",
+                key = "recent_searches",
+                default = {},
+                value = { "dune", "emma" },
+                wrong = "dune",
+            },
+            {
+                name = "PreferredLanguages",
+                key = "preferred_languages",
+                default = { "en" },
+                value = { "fr", "de" },
+                wrong = "en",
+            },
+            {
+                name = "PreferredFileTypes",
+                key = "preferred_file_types",
+                default = all_file_types,
+                value = { "mobi", "pdf" },
+                wrong = "epub",
+            },
+            {
+                name = "PreferredBookTypes",
+                key = "preferred_book_types",
+                default = all_book_types,
+                value = { "nonfiction" },
+                wrong = true,
+            },
+        }
+
+        local function get(setting)
+            return Settings["get" .. setting.name](Settings)
+        end
+        local function set(setting, value)
+            return Settings["set" .. setting.name](Settings, value)
+        end
+
+        it("are their defaults until they're saved", function()
+            for _, setting in ipairs(settings) do
+                assert.are.same(setting.default, get(setting), setting.key)
+            end
+        end)
+
+        it("are saved as they're given, by their names", function()
+            for _, setting in ipairs(settings) do
+                assert.is_true(set(setting, setting.value), setting.key)
+                assert.are.same(setting.value, get(setting), setting.key)
+                assert.are.same(setting.value, pluginSettings()[setting.key], setting.key)
+            end
+        end)
+
+        -- e.g. by hand, which what reads them would fail on
+        it("are their defaults while saved as something they can't be, saying so", function()
+            local saved = {}
+            for _, setting in ipairs(settings) do
+                saved[setting.key] = setting.wrong
+            end
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = saved
+            for _, setting in ipairs(settings) do
+                assert.are.same(setting.default, get(setting), setting.key)
+                local warning = string.format(
+                    "^ignoring %s as it's saved as a %s rather than a %s",
+                    setting.key,
+                    type(setting.wrong),
+                    type(setting.value)
+                )
+                assert.is_truthy(helper.logged("warn", warning), setting.key)
+            end
+        end)
+
+        it("say when they couldn't be saved", function()
+            helper.state.settings_unwritable = true
+            for _, setting in ipairs(settings) do
+                local ok, err = set(setting, setting.value)
+                assert.is_nil(ok, setting.key)
+                assert.are.equal("Kindle Fetch's settings couldn't be saved", err)
+            end
+        end)
+
+        -- which changing doesn't change the setting, nor its default
+        it("give lists of their own", function()
+            for _, setting in ipairs(settings) do
+                if type(setting.value) == "table" then
+                    table.insert(get(setting), "changed")
+                    assert.are.same(setting.default, get(setting), setting.key)
+                    set(setting, setting.value)
+                    table.insert(get(setting), "changed")
+                    assert.are.same(setting.value, get(setting), setting.key)
+                end
+            end
+        end)
+    end)
+
     describe("getDownloadDir", function()
         it("uses the saved download folder", function()
             helper.state.fs["/mnt/us/books"] = "directory"
@@ -89,8 +236,7 @@ describe("KindleFetchSettings", function()
             assert.are.equal("/mnt/us/books", Settings:getDownloadDir())
         end)
 
-        -- e.g. once deleted, or on an SD card that has been taken out, which was downloaded to all the same, failing
-        -- once its link had been looked up
+        -- e.g. deleted, or on an SD card taken out, which was still downloaded to, failing once its link was looked up
         it("uses the default while the saved download folder can't be found, keeping it for when it's back", function()
             local home = helper.tmpdir("home")
             setReaderHomeDir(home)
@@ -229,6 +375,82 @@ describe("KindleFetchSettings", function()
         end)
     end)
 
+    -- the OPDS catalogues the user has added (see Libraries)
+    describe("libraries", function()
+        local library = {
+            id = "a1",
+            name = "Books",
+            url = "http://nas:8080/opds?library_id=Books",
+            kind = "calibre",
+            search_url = "http://nas:8080/opds/search/{searchTerms}?library_id=Books",
+            username = "will",
+            password = "secretpassword",
+        }
+
+        it("are none to begin with", function()
+            assert.are.same({}, Settings:getLibraries())
+        end)
+
+        it("are kept with their logins, without logging them", function()
+            assert.is_true(Settings:setLibraries({ library }))
+            assert.are.same({ library }, Settings:getLibraries())
+            assert.are.same({ library }, pluginSettings().libraries)
+            for _, log in ipairs(helper.state.logs) do
+                for i = 2, #log do
+                    assert.is_nil(tostring(log[i]):find("secretpassword", 1, true))
+                end
+            end
+        end)
+
+        -- e.g. by hand, which what reads them would fail on
+        it("leave out what isn't saved as a library should be", function()
+            Settings:setLibraries({
+                library,
+                { id = "b2" },
+                "not a library",
+                { id = "c3", name = "C", url = "javascript:alert(1)", kind = "opds", search_url = "x" },
+                { id = "d4", name = "D", url = "http://nas:8083/opds", kind = "calibre-web", search_url = "x" },
+            })
+            local libraries = Settings:getLibraries()
+            assert.are.equal(2, #libraries)
+            assert.are.equal("Books", libraries[1].name)
+            -- with no login, where it needs none
+            assert.are.equal("", libraries[2].username)
+            assert.are.equal("", libraries[2].password)
+        end)
+
+        it("say when they couldn't be saved", function()
+            helper.state.settings_unwritable = true
+            local ok, err = Settings:setLibraries({ library })
+            assert.is_nil(ok)
+            assert.are.equal("Kindle Fetch's settings couldn't be saved", err)
+        end)
+
+        -- having the same id, which was all that was checked, so a new password that wasn't saved was said to have been
+        it("say when a change to one couldn't be saved", function()
+            assert.is_true(Settings:setLibraries({ library }))
+            helper.state.settings_unwritable = true
+            local changed = helper.deepCopy(library)
+            changed.password = "newpassword"
+            local ok, err = Settings:setLibraries({ changed })
+            assert.is_nil(ok)
+            assert.are.equal("Kindle Fetch's settings couldn't be saved", err)
+        end)
+
+        -- e.g. by hand, which what reads them would fail on
+        it("leave out what's saved in the settings file that isn't one", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = {
+                libraries = { "not a library", library, { id = "b2", name = "B" } },
+            }
+            assert.are.same({ library }, Settings:getLibraries())
+        end)
+
+        it("are none while they're saved as something other than a list", function()
+            helper.state.settings_files[data_dir .. "/settings/kindlefetch_settings.lua"] = { libraries = "Books" }
+            assert.are.same({}, Settings:getLibraries())
+        end)
+    end)
+
     describe("Z-Library account", function()
         it("is none to begin with", function()
             assert.is_nil(Settings:getZlibAccount())
@@ -259,6 +481,13 @@ describe("KindleFetchSettings", function()
             Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "abc" })
             helper.state.settings_unwritable = true
             local ok, err = Settings:setZlibAccount(nil)
+            assert.is_nil(ok)
+            assert.are.equal("Kindle Fetch's settings couldn't be saved", err)
+        end)
+
+        it("isn't said to have been remembered when the settings couldn't be saved", function()
+            helper.state.settings_unwritable = true
+            local ok, err = Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "abc" })
             assert.is_nil(ok)
             assert.are.equal("Kindle Fetch's settings couldn't be saved", err)
         end)
@@ -430,6 +659,23 @@ describe("KindleFetchSettings", function()
             )
             assert.is_true(pluginSettings().show_book_covers)
             assert.is_true(pluginSettings().check_for_updates)
+        end)
+
+        it("leaves the other settings unsaved until they're changed", function()
+            Settings:load()
+            for _, key in ipairs({
+                "encrypted_dns",
+                "last_version",
+                "last_update_check",
+                "skipped_version",
+                "curl_update_declined",
+                "search_sources",
+                "recent_searches",
+                "libraries",
+                "zlib_account",
+            }) do
+                assert.is_nil(pluginSettings()[key], key)
+            end
         end)
 
         -- it runs every time the file manager or a book is opened

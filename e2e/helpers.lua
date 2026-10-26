@@ -1,5 +1,4 @@
--- Helpers for driving KOReader's UI in the end-to-end tests: waiting for things to happen, finding widgets
--- on screen, tapping them, and taking screenshots.
+-- helpers for driving KOReader's UI in the end-to-end tests: waiting, finding widgets on screen, tapping, screenshots
 
 local Device = require("device")
 local Event = require("ui/event")
@@ -205,7 +204,7 @@ function H.isPublicDomain(book)
     return title == "pride and prejudice" and (authors == "austen, jane" or authors == "jane austen")
 end
 
--- the sites, by the names they're said with, as Kindle Fetch knows them (see Sources)
+-- the sites, by the names they're said with, as Kindle Fetch knows them (see Sites)
 H.SITES = {
     ["Library Genesis"] = "libgen",
     ["Internet Archive"] = "archive",
@@ -213,19 +212,30 @@ H.SITES = {
     ["Z-Library"] = "zlib",
 }
 
--- tick the sites to search (by name: Library Genesis, unless given, or a list of them), as the search box's Sites menu
--- does
+-- the name a site is searched as (see Sites), by the name it's said with: one in SITES, or a library from the settings
+local function sourceOf(site)
+    if H.SITES[site] then
+        return H.SITES[site]
+    end
+    for _, library in ipairs(require("settings.settings"):getLibraries()) do
+        if library.name == site then
+            return require("api.libraries").source(library)
+        end
+    end
+    error("no site " .. tostring(site))
+end
+
+-- tick the sites to search (a name or a list, Library Genesis unless given), as the search box's Sites menu does
 function H.tickSites(sites)
     sites = type(sites) == "table" and sites or { sites or "Library Genesis" }
     local sources = {}
     for _, site in ipairs(sites) do
-        table.insert(sources, (assert(H.SITES[site], "no site " .. tostring(site))))
+        table.insert(sources, sourceOf(site))
     end
     assert(require("settings.settings"):setSearchSources(sources))
 end
 
--- open the search dialog for the sites (see tickSites), type query and tap Search, returning KindleFetch and the
--- dialog
+-- open the search dialog for the sites (see tickSites), type query and tap Search, returning KindleFetch and the dialog
 function H.startSearch(query, sites)
     H.tickSites(sites)
     H.openMainMenu({ "Kindle Fetch", "Search" })
@@ -296,12 +306,17 @@ function H.tapMenuEntry(menu, predicate)
     end
     assert(index, "no such entry in the menu")
 
-    for page, indexes in ipairs(menu.page_items) do
-        for _, i in ipairs(indexes) do
-            if i == index then
-                menu:onGotoPage(page)
+    -- (the results' own menu says which entries are on each page, see BookMenu, and KOReader's how many are)
+    if menu.page_items then
+        for page, indexes in ipairs(menu.page_items) do
+            for _, i in ipairs(indexes) do
+                if i == index then
+                    menu:onGotoPage(page)
+                end
             end
         end
+    else
+        menu:onGotoPage(math.ceil(index / menu.perpage))
     end
     H.pump()
 
@@ -350,8 +365,7 @@ function H.clearCaches()
     require("cache.covercache"):clear()
 end
 
--- put mirrors that don't work before the real ones: one that doesn't exist, and one that answers without any books.
--- returns them
+-- put mirrors that don't work before the real ones: one that doesn't exist, one answering without books. returns them
 function H.breakMirrors()
     local mirrors = assert(require("api.urlapi"):getLibgenUrls(), "couldn't look up the mirrors on Wikipedia")
     local broken = { "https://libgen.invalid", "https://example.com" }
@@ -396,6 +410,17 @@ function H.errorShown()
     for _, window in ipairs(H.windows()) do
         if window.icon == "notice-warning" and type(window.text) == "string" then
             return window.text
+        end
+    end
+end
+
+-- tap away the message saying what went wrong, as it stays over what's behind it until it's tapped (see NotifyUtil)
+function H.dismissError()
+    for _, window in ipairs(H.windows()) do
+        if window.icon == "notice-warning" and type(window.text) == "string" then
+            H.tap(window)
+            H.pump()
+            return
         end
     end
 end

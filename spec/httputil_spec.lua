@@ -149,8 +149,27 @@ describe("HttpUtil", function()
         assert.is_nil(requests[1].proxy)
     end)
 
-    -- curl asks for pages compressed, which Library Genesis sends several times sooner, and doesn't hold KOReader
-    -- up while it waits
+    -- the Digest way, as Calibre's content server asks unless it's set up with HTTPS (see HttpLogin)
+    it("logs in to a library's site the way it asks, keeping only the page it sends once it has", function()
+        require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+        respond({
+            "<html>Unauthorized</html>",
+            1,
+            401,
+            { ["www-authenticate"] = 'Digest realm="calibre", nonce="abc", qop="auth"' },
+        }, { "<feed>books</feed>", 1, 200 })
+
+        local body, err, status = HttpUtil.getBody("http://nas:8080/opds/search/dune")
+        assert.are.equal("<feed>books</feed>", body)
+        assert.is_nil(err)
+        assert.are.equal(200, status)
+        assert.are.equal(2, #requests)
+        assert.matches('^Digest username="will", realm="calibre"', requests[2].headers.Authorization)
+        assert.is_false(requests[2].redirect)
+        assert.are.same({ 10, 60 }, requests[2].timeouts)
+        assert.is_nil(helper.state.http_timeouts)
+    end)
+
     describe("posting a form", function()
         local form = { { "email", "reader@example.com" }, { "password", "p@ss word" }, { "languages[]", "english" } }
 
@@ -268,17 +287,28 @@ describe("HttpUtil", function()
                 assert.are.equal("TLS/SSL connection failed", err)
             end)
 
-            -- rather than after the first, as one site's certificate can have expired, which KOReader's HTTP may not
-            -- check, so curl would be given up on when it works
+            -- rather than after the first, as one site's certificate can have expired, dropping curl though it works
             it("fetches pages with KOReader's own HTTP from then on, once curl couldn't 3 times in a row", function()
                 for i = 1, 3 do
                     respond({ "<html>page " .. i .. "</html>", 1, 200 })
                     HttpUtil.getBody("https://libgen.example/" .. i)
                 end
-                assert.is_false(require("util.curlutil").canFetch())
+                assert.is_false(require("util.curlversion").canFetch())
                 respond({ "<html>page 4</html>", 1, 200 })
                 HttpUtil.getBody("https://libgen.example/4")
                 assert.are.equal(3, #fetches)
+            end)
+
+            -- whose certificate KOReader's HTTP may not check, nor should it stop curl fetching every site's pages
+            it("doesn't fetch a library's page with KOReader's own HTTP instead", function()
+                require("util.librarysites").add("https://books.example/opds")
+                for _ = 1, 3 do
+                    local body, err = HttpUtil.getBody("https://books.example/opds")
+                    assert.is_nil(body)
+                    assert.are.equal("TLS/SSL connection failed", err)
+                end
+                assert.are.equal(0, #requests)
+                assert.is_true(require("util.curlversion").canFetch())
             end)
 
             it("keeps fetching pages with curl when it connects in between", function()
@@ -295,10 +325,11 @@ describe("HttpUtil", function()
                     respond({ "<html>page " .. i .. "</html>", 1, 200 })
                     HttpUtil.getBody("https://libgen.example/" .. i)
                 end
-                assert.is_true(require("util.curlutil").canFetch())
+                assert.is_true(require("util.curlversion").canFetch())
             end)
         end)
 
+        -- compressed, which Library Genesis sends several times sooner, without holding KOReader up while it waits
         it("fetches the page with curl rather than luasocket, within the same time limits", function()
             curlAnswers(function()
                 return "<html>results</html>\n", 200
@@ -398,8 +429,20 @@ describe("HttpUtil", function()
             assert.is_nil(fetches[1]:find("secret", 1, true))
         end)
 
-        -- so that curl keeps the cookie a site's check that it isn't a bot answers with, which it only does when not
-        -- given cookies of its own to send
+        it("passes curl a library's login in a file", function()
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            local config
+            curlAnswers(function(cmd)
+                config = helper.readFile(cmd:match("%-K '([^']+)'"))
+                return "<feed/>", 200
+            end)
+
+            assert.are.equal("<feed/>", HttpUtil.getBody("http://nas:8080/opds"))
+            assert.are.equal('user = "will:secret"\nanyauth\n', config)
+            assert.is_nil(fetches[1]:find("secret", 1, true))
+        end)
+
+        -- so curl keeps the cookie a site's bot check answers with, which it only does when given none to send
         it("has curl keep cookies, even when there are none to send", function()
             local config
             curlAnswers(function(cmd)
@@ -465,9 +508,7 @@ describe("HttpUtil", function()
                 assert.are.equal(fetches[1], helper.state.trapped[1].cmd)
             end)
 
-            -- each search, download and login waits in a coroutine of its own: hiding one download while it looked up
-            -- its link, then starting another, had the second's Cancel call off the first, and once the first was
-            -- over, a tap anywhere call off the second
+            -- each search, download and login waits in a coroutine of its own, and one's Cancel called off another's
             it("calls off each coroutine's requests with its own widget", function()
                 local first_message, second_message = { text = "Finding a download link..." }, { text = "Searching..." }
                 local first = coroutine.create(function()
@@ -525,6 +566,20 @@ describe("HttpUtil", function()
             assert.are.equal("https://github.example/releases/curl-armhf", requests[1].url)
             assert.are.equal("Mozilla/5.0", requests[1].headers["User-Agent"])
             assert.is_true(requests[1].redirect)
+        end)
+
+        -- e.g. a cover, in place of what it says when asked without the login
+        it("logs in to a library's site the way it asks, saving only the file it sends once it has", function()
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            respond(
+                { "<html>Unauthorized</html>", 1, 401, { ["www-authenticate"] = 'Basic realm="Calibre-Web"' } },
+                { "\255\216\255cover", 1, 200 }
+            )
+
+            assert.is_true(HttpUtil.downloadFile("http://nas:8080/opds/cover/1", path))
+            assert.are.equal("\255\216\255cover", helper.readFile(path))
+            assert.are.equal("will", requests[2].user)
+            assert.are.same({ 10, 300 }, requests[2].timeouts)
         end)
 
         -- as a file can be several megabytes, and an e-reader's Wi-Fi slow
@@ -594,7 +649,10 @@ describe("HttpUtil", function()
             assert.is_nil(ok)
             assert.are.equal("request timed out", err)
             -- for at most 5 minutes, and 30 seconds without anything arriving, as it holds KOReader up meanwhile
-            assert.are.same({ "https://github.example/curl-armhf", path, 300, { stall_time = 30 } }, download)
+            assert.are.same(
+                { "https://github.example/curl-armhf", path, 300, { max_time = 300, stall_time = 30 } },
+                download
+            )
             assert.are.equal(0, #requests)
         end)
     end)

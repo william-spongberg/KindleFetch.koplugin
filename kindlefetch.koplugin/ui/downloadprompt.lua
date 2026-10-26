@@ -38,8 +38,7 @@ local COVER_SIZE = Screen:scaleBySize(192)
 -- the title and the book's details in black, the rest in greys that are still dark enough to read on e-ink (#3)
 local AUTHOR_COLOR = Blitbuffer.COLOR_GRAY_4
 local LABEL_COLOR = Blitbuffer.COLOR_GRAY_6
--- the most lines a long title, a long list of authors and the name the book is saved as can take up, so the
--- prompt always fits on the screen
+-- the most lines a long title, authors and the name it's saved as can take, so the prompt always fits on the screen
 local TITLE_MAX_LINES = 4
 local AUTHOR_MAX_LINES = 2
 local FILENAME_MAX_LINES = 2
@@ -80,9 +79,7 @@ function DownloadPrompt.new(book, filepath, on_download)
         end
         return false
     end
-    -- show the cover once it has downloaded, or take its placeholder away if it couldn't be, but not for other
-    -- books' covers, which can arrive several times a second while search results are open (only logging what goes
-    -- wrong, as KOReader doesn't catch it, see Guard)
+    -- show the cover or drop its placeholder once it's done, not on other books'; errors are only logged (see Guard)
     self.outer_container.onKindleFetchCoversDownloaded = Guard.wrap("showing the book's cover", function()
         if parent_ref:coverState() ~= parent_ref.cover_state then
             parent_ref:refreshCover()
@@ -155,8 +152,7 @@ function DownloadPrompt:download()
     end
 end
 
--- the full-size cover once it has downloaded (after the cover was first enlarged), otherwise the thumbnail from
--- the search results
+-- the full-size cover once downloaded (after it was first enlarged), otherwise the thumbnail from the search results
 function DownloadPrompt:coverFile()
     return CoverCache:getFullSize(self.book) or CoverCache:get(self.book.id)
 end
@@ -448,8 +444,7 @@ function DownloadPrompt:choosePath()
                 NotifyUtil.error(T(_("Books can't be downloaded to %1: %2"), dir, err))
                 return
             end
-            -- named safely for that folder's file system, as well as the one it was to go to, as a FAT card's
-            -- can't have names with some of what other file systems can
+            -- named safely for that folder's file system too, as a FAT card's names can't have all that others' can
             local name = self.book.title and self.book.file_type and self.book.title .. "." .. self.book.file_type
             self.filepath = dir .. "/" .. (name and util.getSafeFilename(name, dir) or self:filename())
 
@@ -479,8 +474,7 @@ function DownloadPrompt:showFullscreenCover()
 
     self.fullscreen_cover_shown = true
     self.fullscreen_file = cover_file
-    -- only get the full-size cover once it's wanted, showing the thumbnail until it arrives (or until it couldn't
-    -- be downloaded, which may already be known, as when curl couldn't be started)
+    -- only get the full-size cover once wanted, with the thumbnail till it arrives or fails, as it may have already
     CoverCache:downloadFullSize(self.book)
     local loading_full_size = CoverCache:isFullSizeComing(self.book)
 
@@ -527,8 +521,7 @@ function DownloadPrompt:showFullscreenCover()
 
     UIManager:show(self.fullscreen_container)
     UIManager:setDirty(self.fullscreen_container, "full")
-    -- over the thumbnail until the full-size cover arrives, so it's clear something is happening (rather than closing
-    -- after a couple of seconds like other notifications)
+    -- over the thumbnail until the full-size cover arrives, unlike other notices, so it's clear something's happening
     if loading_full_size then
         self.loading_notice = Notification:new {
             text = _("Loading full-size cover..."),

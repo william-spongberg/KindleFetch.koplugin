@@ -1,8 +1,6 @@
 name: Canary
 
-# the tests against the live sites (tagged #live), which find out when a site has changed, e.g. how its pages are laid
-# out, every day, rather than on every push, which they'd fail whenever a site is down. a scheduled run that fails is
-# emailed to whoever last changed this schedule
+# the #live tests, which catch a site changing, daily rather than on every push, as they fail whenever a site is down
 on:
   schedule:
     - cron: "23 5 * * *"

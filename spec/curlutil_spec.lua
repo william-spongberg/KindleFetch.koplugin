@@ -34,12 +34,6 @@ describe("CurlUtil", function()
 
     after_each(helper.cleanup)
 
-    it("quotes strings for the shell", function()
-        assert.are.equal("'plain'", CurlUtil.shellQuote("plain"))
-        assert.are.equal("'it'\\''s'", CurlUtil.shellQuote("it's"))
-        assert.are.equal("'; rm -rf /'", CurlUtil.shellQuote("; rm -rf /"))
-    end)
-
     it("sends the site as the referer", function()
         assert.are.equal(
             "curl -e 'https://libgen.example/'",
@@ -58,8 +52,7 @@ describe("CurlUtil", function()
         assert.are.equal("(curl exit code 99)", CurlUtil.getErrorMeaning(99))
     end)
 
-    -- a Kindle's own curl can't connect to Library Genesis, so says the TLS connection failed
-    -- which were said only as their numbers, including the TLS ones curl gives a Kindle's own curl's failing on
+    -- which were said only as numbers, like the TLS ones from a Kindle's own curl, which can't reach Library Genesis
     it("explains each exit code of curl's that can come up", function()
         for _, exit_code in ipairs({ 16, 51, 58, 59, 77, 83, 92 }) do
             assert.is_nil(CurlUtil.getErrorMeaning(exit_code):find("exit code", 1, true), tostring(exit_code))
@@ -69,57 +62,57 @@ describe("CurlUtil", function()
 
     it("explains that a Kindle's curl is too old, and how to update it, when that's why it couldn't connect", function()
         helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
-        assert.is_true(CurlUtil.isOutdated())
+        assert.is_true(require("util.curlversion").isOutdated())
         assert.are.equal(CurlUtil.OUTDATED_ERROR, CurlUtil.explainExitCode(35))
         assert.are.equal(CurlUtil.OUTDATED_ERROR, CurlUtil.explainExitCode(60))
         -- which isn't why it couldn't when it was offline
         assert.are.equal("could not resolve host", CurlUtil.explainExitCode(6))
 
         helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
-        CurlUtil.forgetVersion()
-        assert.is_false(CurlUtil.isOutdated())
+        require("util.curlversion").forgetVersion()
+        assert.is_false(require("util.curlversion").isOutdated())
         assert.are.equal("TLS/SSL connection failed", CurlUtil.explainExitCode(35))
 
         -- other devices' curls aren't updated, and connect whatever their version
         helper.stubs.device.kindle = false
         helper.stubCommand("curl --version", "curl 7.68.0 (x86_64-pc-linux-gnu) libcurl/7.68.0\n")
-        CurlUtil.forgetVersion()
-        assert.is_false(CurlUtil.isOutdated())
+        require("util.curlversion").forgetVersion()
+        assert.is_false(require("util.curlversion").isOutdated())
         assert.are.equal("TLS/SSL connection failed", CurlUtil.explainExitCode(35))
     end)
 
     it("reads curl's version", function()
         helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
-        assert.are.equal("8.17.0", CurlUtil.getVersion())
+        assert.are.equal("8.17.0", require("util.curlversion").getVersion())
         helper.stubCommand("curl --version", "")
-        CurlUtil.forgetVersion()
-        assert.is_nil(CurlUtil.getVersion())
+        require("util.curlversion").forgetVersion()
+        assert.is_nil(require("util.curlversion").getVersion())
     end)
 
     -- it's asked for when KOReader starts, before searching, and before offering to update curl
     it("only starts curl to ask its version once per session", function()
         helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
-        CurlUtil.getVersion()
-        CurlUtil.canFetch()
-        CurlUtil.getVersion()
+        require("util.curlversion").getVersion()
+        require("util.curlversion").canFetch()
+        require("util.curlversion").getVersion()
         assert.are.equal(1, #helper.state.popen_calls)
 
         -- or once it isn't there
         helper.stubCommand("curl --version", "")
-        CurlUtil.forgetVersion()
-        CurlUtil.getVersion()
-        CurlUtil.canFetch()
+        require("util.curlversion").forgetVersion()
+        require("util.curlversion").getVersion()
+        require("util.curlversion").canFetch()
         assert.are.equal(2, #helper.state.popen_calls)
     end)
 
     it("asks again once told to forget, e.g. after curl has been updated", function()
         helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
-        assert.is_false(CurlUtil.canFetch())
+        assert.is_false(require("util.curlversion").canFetch())
 
         helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 zlib\n")
-        CurlUtil.forgetVersion()
-        assert.are.equal("8.21.0", CurlUtil.getVersion())
-        assert.is_true(CurlUtil.canFetch())
+        require("util.curlversion").forgetVersion()
+        assert.are.equal("8.21.0", require("util.curlversion").getVersion())
+        assert.is_true(require("util.curlversion").canFetch())
     end)
 
     -- pages are fetched with curl where it's up to it, as it asks for them compressed and can wait in the background
@@ -130,23 +123,23 @@ describe("CurlUtil", function()
 
         it("is left to curl once it's been updated on a Kindle", function()
             installedCurl("curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1")
-            assert.is_true(CurlUtil.canFetch())
+            assert.is_true(require("util.curlversion").canFetch())
             assert.is_truthy(helper.logged("info", "^fetching pages with curl compressed$"))
         end)
 
         it("isn't left to the curl a Kindle comes with, or an older update", function()
             installedCurl("curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2 zlib/1.2.8")
-            assert.is_false(CurlUtil.canFetch())
+            assert.is_false(require("util.curlversion").canFetch())
 
             installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
-            CurlUtil.forgetVersion()
-            assert.is_false(CurlUtil.canFetch())
+            require("util.curlversion").forgetVersion()
+            assert.is_false(require("util.curlversion").canFetch())
         end)
 
         it("is left to whichever curl other devices have", function()
             helper.stubs.device.kindle = false
             installedCurl("curl 7.68.0 (x86_64-pc-linux-gnu) libcurl/7.68.0 OpenSSL/1.1.1 zlib/1.2.11")
-            assert.is_true(CurlUtil.canFetch())
+            assert.is_true(require("util.curlversion").canFetch())
         end)
 
         -- as every site is https, which it fetched none of, rather than KOReader's own HTTP fetching them
@@ -155,21 +148,21 @@ describe("CurlUtil", function()
                 "curl --version",
                 "curl 7.88.1 (arm-linux) libcurl/7.88.1\nRelease-Date: 2023-02-20\nProtocols: file ftp http\n"
             )
-            assert.is_false(CurlUtil.canFetch())
+            assert.is_false(require("util.curlversion").canFetch())
             assert.is_truthy(
                 helper.logged("info", "^fetching pages with KOReader, as curl can't make secure connections")
             )
         end)
 
         it("isn't left to curl when there isn't one", function()
-            assert.is_false(CurlUtil.canFetch())
+            assert.is_false(require("util.curlversion").canFetch())
             assert.is_truthy(helper.logged("info", "^fetching pages with KOReader, as curl is missing or too old,"))
         end)
 
         it("is only worked out once per session, as it means running curl", function()
             installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
-            CurlUtil.canFetch()
-            CurlUtil.canFetch()
+            require("util.curlversion").canFetch()
+            require("util.curlversion").canFetch()
             CurlUtil.fetchCommand("https://libgen.example", "page", 10, 60)
 
             assert.are.equal(1, #helper.state.popen_calls)
@@ -192,8 +185,7 @@ describe("CurlUtil", function()
             assert.is_nil(cmd:find("--compressed", 1, true))
         end)
 
-        -- as KOReader's own HTTP does, in a file, rather than on its command line, where any program on the device can
-        -- read it, as it can have a password in it
+        -- as KOReader's own HTTP does, in a file, as it can have a password and any program can read a command line
         it("goes through KOReader's HTTP proxy, where it's on", function()
             helper.stubs.http.PROXY = "http://user:secret@proxy.example:8080"
             local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", 10, 60)
@@ -228,7 +220,7 @@ describe("CurlUtil", function()
             assert.is_nil(cmd:find("--doh-url", 1, true))
 
             require("settings.settings"):setEncryptedDns(true)
-            assert.is_true(CurlUtil.canUseEncryptedDns())
+            assert.is_true(require("util.curlversion").canUseEncryptedDns())
             cmd = CurlUtil.fetchCommand("https://libgen.example", "page", 10, 60)
             assert.matches(" --doh-url https://1.1.1.1/dns-query", cmd, 1, true)
         end)
@@ -240,10 +232,36 @@ describe("CurlUtil", function()
             installedCurl("curl 7.61.1 (x86_64-pc-linux-gnu) libcurl/7.61.1")
             require("settings.settings"):setEncryptedDns(true)
 
-            assert.is_true(CurlUtil.canFetch())
-            assert.is_false(CurlUtil.canUseEncryptedDns())
+            assert.is_true(require("util.curlversion").canFetch())
+            assert.is_false(require("util.curlversion").canUseEncryptedDns())
             local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", 10, 60)
             assert.is_nil(cmd:find("--doh-url", 1, true))
+        end)
+
+        -- e.g. a library's, which only that network's DNS knows and a proxy can't reach, given up on soon if not there
+        it("goes without encrypted DNS and the proxy on the network the device is on", function()
+            installedCurl("curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0")
+            require("settings.settings"):setEncryptedDns(true)
+            helper.stubs.http.PROXY = "http://proxy.example:3128"
+
+            local cmd = CurlUtil.fetchCommand("http://nas.local:8080/opds", "page", 10, 60)
+            assert.is_nil(cmd:find("--doh-url", 1, true))
+            assert.is_nil(proxyGiven(cmd))
+            assert.matches("--connect-timeout 5 --max-time 60", cmd, 1, true)
+
+            cmd = CurlUtil.fetchCommand("https://books.example/opds", "page", 10, 60)
+            assert.matches(" --doh-url ", cmd, 1, true)
+            assert.are.equal("http://proxy.example:3128", proxyGiven(cmd))
+        end)
+
+        -- which curl answers whichever way the site asks: Basic, or Digest, as Calibre's content server does
+        it("logs in to a library's site, giving curl the login in a file", function()
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            assert.are.same(
+                { { "user", "will:secret" }, { "anyauth" } },
+                CurlUtil.loginOptions(require("util.request").new("http://nas:8080/opds/search/dune"))
+            )
+            assert.is_nil(CurlUtil.loginOptions(require("util.request").new("https://libgen.example/index.php")))
         end)
 
         it("fetches into a file of its own in the plugin's tmp dir", function()
@@ -268,6 +286,11 @@ describe("CurlUtil", function()
                 )
             end)
 
+            it("writes an option without a value by its name alone", function()
+                local config_file = CurlUtil.createConfigFile({ { "user", "will:secret" }, { "anyauth" } })
+                assert.are.equal('user = "will:secret"\nanyauth\n', helper.readFile(config_file))
+            end)
+
             -- which would end the option early, and could start another
             it("won't write a value with a line break in it", function()
                 assert.is_nil(CurlUtil.createConfigFile({ { "data", "a=1\noutput = /etc/passwd" } }))
@@ -287,76 +310,6 @@ describe("CurlUtil", function()
                 assert.are.equal("200 28\n", output)
                 assert.is_false(helper.exists(config_file))
             end)
-        end)
-    end)
-
-    describe("processes", function()
-        it("detects whether a process is running and can kill it", function()
-            local pipe = io.popen("sleep 30 > /dev/null 2>&1 & echo $!")
-            local pid = tonumber(pipe:read("*l"))
-            pipe:close()
-
-            assert.is_true(CurlUtil.isPidRunning(pid))
-            CurlUtil.killPid(pid)
-            os.execute("sleep 0.2")
-            assert.is_false(CurlUtil.isPidRunning(pid))
-        end)
-
-        -- Cancel left curl running by itself, using the Wi-Fi and filling the book's .part file
-        it("stops what a background download runs, not only the shell that waits for it", function()
-            local exit_file = CurlUtil.createExitFile()
-            -- sleep standing in for curl
-            local pipe = io.popen(CurlUtil.echoPid(CurlUtil.saveExitCode("sleep 30", exit_file)))
-            local pid = tonumber(pipe:read("*l"))
-            pipe:close()
-            os.execute("sleep 0.2")
-            pipe = io.popen("pgrep -P " .. pid)
-            local child = tonumber(pipe:read("*l"))
-            pipe:close()
-            assert.is_true(CurlUtil.isPidRunning(child))
-
-            CurlUtil.killPid(pid)
-            os.execute("sleep 0.3")
-            assert.is_false(CurlUtil.isPidRunning(child))
-            assert.is_false(CurlUtil.isPidRunning(pid))
-        end)
-
-        it("saves the exit code of what a download runs once it has finished", function()
-            local exit_file = CurlUtil.createExitFile()
-            os.execute(CurlUtil.saveExitCode("sh -c 'exit 22'", exit_file))
-            assert.are.equal(22, CurlUtil.getExitCode(exit_file))
-            -- the shell's own, when curl isn't there to run
-            os.execute(CurlUtil.saveExitCode("kindlefetch-no-such-command -s", exit_file))
-            assert.are.equal(127, CurlUtil.getExitCode(exit_file))
-        end)
-
-        it("looks in /proc, without starting a shell", function()
-            local proc = helper.tmpdir("proc")
-            CurlUtil.PROC_DIR = proc
-            helper.writeFile(proc .. "/self/stat", "100 (luajit) R 1")
-            helper.writeFile(proc .. "/4242/stat", "4242 (sh (curl)) S 1 4242")
-            helper.writeFile(proc .. "/4343/stat", "4343 (sh) Z 1 4343")
-            helper.stubExecute("kill -0", function()
-                error("started a shell")
-            end)
-
-            assert.is_true(CurlUtil.isPidRunning(4242))
-            -- finished, but not cleaned up yet
-            assert.is_false(CurlUtil.isPidRunning(4343))
-            assert.is_false(CurlUtil.isPidRunning(4444))
-        end)
-
-        it("asks kill on systems without /proc", function()
-            CurlUtil.PROC_DIR = helper.tmpdir("no-proc")
-            helper.stubExecute("kill -0 4242", function()
-                return 0
-            end)
-            assert.is_true(CurlUtil.isPidRunning(4242))
-        end)
-
-        it("ignores missing pids", function()
-            assert.is_false(CurlUtil.isPidRunning(nil))
-            CurlUtil.killPid(nil)
         end)
     end)
 
@@ -450,23 +403,22 @@ describe("CurlUtil", function()
 
         it("reads and removes the exit code once curl has finished", function()
             local exit_file = CurlUtil.createExitFile()
-            assert.is_nil(CurlUtil.getExitCode(exit_file))
+            assert.is_nil(require("util.backgroundprocess").getExitCode(exit_file))
 
             helper.writeFile(exit_file, "22\n")
-            assert.are.equal(22, CurlUtil.getExitCode(exit_file))
+            assert.are.equal(22, require("util.backgroundprocess").getExitCode(exit_file))
             assert.is_false(helper.exists(exit_file))
         end)
 
-        -- a download that finished was said to have ended unexpectedly, when checked on between the shell creating
-        -- the file and writing curl's exit code in it
+        -- a finished download was said to have ended unexpectedly if checked on while its exit file was still empty
         it("waits for the exit code to be written, rather than losing it", function()
             local exit_file = CurlUtil.createExitFile()
             helper.writeFile(exit_file, "")
-            assert.is_nil(CurlUtil.getExitCode(exit_file))
+            assert.is_nil(require("util.backgroundprocess").getExitCode(exit_file))
             assert.is_true(helper.exists(exit_file))
 
             helper.writeFile(exit_file, "0\n")
-            assert.are.equal(0, CurlUtil.getExitCode(exit_file))
+            assert.are.equal(0, require("util.backgroundprocess").getExitCode(exit_file))
         end)
     end)
 
@@ -618,6 +570,33 @@ describe("CurlUtil", function()
             assert.are.equal("http://proxy.example:8080", proxyGiven(helper.state.executed[#helper.state.executed]))
         end)
 
+        -- in a file of its own, rather than on its command line, removed with the proxy's once curl has finished
+        it("logs in to a library's site, where it needs a login", function()
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            helper.stubs.http.PROXY = "http://proxy.example:3128"
+            local login, login_file
+            helper.stubExecute("curl -sL -f -o", function(cmd)
+                for config_file in cmd:gmatch("%-K '([^']+)'") do
+                    if not login then
+                        login, login_file = helper.readFile(config_file):match("^user = .*"), config_file
+                    end
+                end
+                fakeCurl("epub data")(cmd)
+            end)
+
+            assert.is_true(CurlUtil.download("http://nas:8080/get/epub/1", filepath))
+            assert.are.equal('user = "will:secret"\nanyauth\n', login)
+            local cmd = helper.state.executed[#helper.state.executed]
+            assert.is_nil(cmd:find("secret", 1, true))
+            assert.matches("; rm -f '" .. login_file .. "'; ", cmd, 1, true)
+            -- (and goes without the proxy, as the library is on the network the device is on)
+            assert.is_nil(proxyGiven(cmd))
+            assert.matches("--connect-timeout 5", cmd, 1, true)
+
+            CurlUtil.download("https://libgen.example/get.php", filepath)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find("user =", 1, true))
+        end)
+
         -- which was said to have failed with "(curl exit code nil)"
         it("says when curl couldn't be started", function()
             helper.stubExecute("curl -sL -f -o", function()
@@ -705,11 +684,11 @@ describe("CurlUtil", function()
 
             -- older curls stop at options they don't know
             helper.stubCommand("curl --version", "curl 7.67.0 (x86_64-pc-linux-gnu) libcurl/7.67.0\n")
-            CurlUtil.forgetVersion()
+            require("util.curlversion").forgetVersion()
             assert.is_nil(command():find("--parallel-immediate", 1, true))
 
             helper.stubCommand("curl --version", "")
-            CurlUtil.forgetVersion()
+            require("util.curlversion").forgetVersion()
             assert.is_nil(command():find("--parallel-immediate", 1, true))
         end)
 
@@ -737,7 +716,7 @@ describe("CurlUtil", function()
 
             -- older curls can only write them out together, once they've all finished
             helper.stubCommand("curl --version", "curl 7.62.0 (x86_64-pc-linux-gnu) libcurl/7.62.0\n")
-            CurlUtil.forgetVersion()
+            require("util.curlversion").forgetVersion()
             assert.matches("-w '%{exitcode} %{filename_effective}\\n' > '", command(), 1, true)
             assert.is_true(helper.exists(paths[3]))
         end)
@@ -768,6 +747,54 @@ describe("CurlUtil", function()
 
             local _, _, config_file = CurlUtil.downloadMultiple(urls, paths, true, 4, false, 15)
             assert.matches('^proxy = "http://koreader.example:3128"\nurl = ', helper.readFile(config_file))
+        end)
+
+        -- e.g. a library's covers, which CoverCache downloads apart from the rest
+        it("logs in to a library's site where every file is on it", function()
+            helper.stubCommand("& echo $!", "4242\n")
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            local library_urls = { "http://nas:8080/get/thumb/1", "http://nas:8080/get/thumb/2" }
+
+            local _, _, config_file = CurlUtil.downloadMultiple(library_urls, paths, true, 4, false, 15)
+            assert.matches('^user = "will:secret"\nanyauth\nurl = ', helper.readFile(config_file))
+            assert.is_nil(helper.state.popen_calls[#helper.state.popen_calls]:find("secret", 1, true))
+        end)
+
+        -- as curl is given the login once for all of them
+        it("never sends a library's login to the other sites' files it's given with its own", function()
+            helper.stubCommand("& echo $!", "4242\n")
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+
+            local _, _, config_file = CurlUtil.downloadMultiple(
+                { "http://nas:8080/get/thumb/1", "https://covers.example/b.jpg" },
+                paths,
+                true,
+                4,
+                false,
+                15
+            )
+            assert.is_nil(helper.readFile(config_file):find("secret", 1, true))
+            assert.is_truthy(helper.logged("warn", "^downloading files from several sites, so without the login"))
+        end)
+
+        -- e.g. a library's covers, on the network the device is on
+        it("goes without the proxy and encrypted DNS where every file is on the network the device is on", function()
+            helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
+            helper.stubCommand("& echo $!", "4242\n")
+            require("util.curlversion").forgetVersion()
+            require("settings.settings"):setEncryptedDns(true)
+            helper.stubs.http.PROXY = "http://proxy.example:3128"
+            local local_urls = { "http://192.168.1.10:8080/get/thumb/1", "http://192.168.1.10:8080/get/thumb/2" }
+
+            local _, _, config_file = CurlUtil.downloadMultiple(local_urls, paths, true, 4, false, 15)
+            assert.matches("^url = ", helper.readFile(config_file))
+            local cmd = helper.state.popen_calls[#helper.state.popen_calls]
+            assert.is_nil(cmd:find("--doh-url", 1, true))
+            assert.matches("--connect-timeout 5", cmd, 1, true)
+
+            _, _, config_file = CurlUtil.downloadMultiple(urls, paths, true, 4, false, 15)
+            assert.matches("^proxy = ", helper.readFile(config_file))
+            assert.matches("--doh-url", helper.state.popen_calls[#helper.state.popen_calls], 1, true)
         end)
 
         -- the next page's covers are fetched once these have finished, and older curls only say once they all have

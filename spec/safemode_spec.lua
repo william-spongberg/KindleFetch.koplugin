@@ -1,7 +1,6 @@
 local helper = require("helper")
 
--- what's left of Kindle Fetch when an update doesn't work with this KOReader, which was gone from KOReader's menu,
--- along with checking for updates, until it was copied over USB
+-- what's left when an update doesn't work with this KOReader (it was gone, updates and all, until copied over USB)
 describe("SafeMode", function()
     local plugin_path, registered
 

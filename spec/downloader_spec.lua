@@ -115,7 +115,7 @@ describe("Downloader", function()
 
         CurlUtil = require("util.curlutil")
         can_fetch, koreader_downloads = true, {}
-        CurlUtil.canFetch = function()
+        require("util.curlversion").canFetch = function()
             return can_fetch
         end
         CurlUtil.startDownload = function(url, path, _, opts)
@@ -142,10 +142,10 @@ describe("Downloader", function()
             table.insert(cover_downloads, urls)
             return nil, nil, nil, "unable to launch curl"
         end
-        CurlUtil.isPidRunning = function(pid)
+        require("util.backgroundprocess").isPidRunning = function(pid)
             return running[pid] ~= false
         end
-        CurlUtil.killPid = function(pid)
+        require("util.backgroundprocess").killPid = function(pid)
             table.insert(killed, pid)
         end
         -- worked out a piece at a time, all at once here
@@ -306,8 +306,7 @@ describe("Downloader", function()
             end)
         end)
 
-        -- which was only found out once its link had been looked up, which can count as one of the few downloads
-        -- Z-Library allows a day
+        -- which was only found out after looking up its link, which can use up one of Z-Library's few downloads a day
         it("doesn't look up the link when the folder chosen can't be found", function()
             Downloader:downloadBook(book, filepath, onResult)
             prompts[1].on_download(data_dir .. "/SD card/Dune.epub")
@@ -675,9 +674,7 @@ describe("Downloader", function()
             assert.are.equal("50% · 0.5 / 1.0 MB", progress().status_widget.text)
         end)
 
-        -- rather than looking as if KOReader is stuck, as curl only tries again once it has stalled for a while
-        -- once nothing has arrived for 10 seconds, the 20 checks on it since, however the clock has changed (it can be
-        -- put back, or jump forward once the time is looked up)
+        -- rather than seeming stuck till curl retries: once 20 checks (10 seconds) find nothing, as the clock can jump
         it("says when the download has stalled", function()
             helper.state.time = 1000
             download()
@@ -973,9 +970,7 @@ describe("Downloader", function()
             assert.are.equal(1, web.scrapes)
         end)
 
-        -- as every mirror did at once while this was written, their shared database refusing connections
-        -- which was taken to be a mirror without the book, so the broken mirror stayed first, and the mirrors were
-        -- never looked up again
+        -- as all mirrors did with their shared database down, taken as no book, so the broken one stayed first
         it("tries the next mirror when one answers with an error page, and forgets it", function()
             web.pages[adsUrl(mirrors[1])] = function()
                 return "<html>502 Bad Gateway</html>", nil, 502
@@ -1152,7 +1147,7 @@ describe("Downloader", function()
         -- rather than that the TLS connection failed, which doesn't say what to do about it
         it("says when a Kindle's curl is too old to download the book, and how to update it", function()
             helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0\n")
-            CurlUtil.forgetVersion()
+            require("util.curlversion").forgetVersion()
             download()
             curlWrote(0, 35)
             helper.runScheduled()
@@ -1177,6 +1172,35 @@ describe("Downloader", function()
             assert.matches("curl exit code 22 %(HTTP error response, HTTP 503%)", helper.logged("warn", "failed after"))
         end)
 
+        -- e.g. once its password has been changed there since the search
+        it("says when a library turned its login down", function()
+            local OpdsSearch = require("api.opdssearch")
+            require("api.multisearch").addSite(
+                "library_1",
+                OpdsSearch.new("library_1", {
+                    name = "Books",
+                    kind = OpdsSearch.CALIBRE,
+                    url = "http://nas:8080/opds",
+                    search_url = "http://nas:8080/opds/search/{searchTerms}",
+                })
+            )
+            book = {
+                source = "library_1",
+                id = "library_1_emma",
+                title = "Emma",
+                display_title = "Emma",
+                file_type = "epub",
+                download_url = "http://nas:8080/get/epub/2/Books",
+            }
+            download()
+            assert.are.equal("http://nas:8080/get/epub/2/Books", spawned[1].url)
+            helper.writeFile(spawned[1].headers_file, "HTTP/1.1 401 Unauthorized\r\ncontent-length: 0\r\n\r\n")
+            helper.writeFile(spawned[1].exit_file, "22")
+            helper.runScheduled()
+
+            assert.are.same({ { ok = false, err = require("util.errors").LIBRARY_LOGIN } }, results)
+        end)
+
         it("says which HTTP error stopped the download when it isn't Library Genesis' servers failing", function()
             download()
             helper.writeFile(spawned[1].headers_file, "HTTP/2 404 \r\ncontent-length: 9\r\n\r\n")
@@ -1197,7 +1221,7 @@ describe("Downloader", function()
         -- curl can finish just after its exit code was checked, before checking whether it's running
         it("finishes when curl exits between checks", function()
             download()
-            CurlUtil.isPidRunning = function()
+            require("util.backgroundprocess").isPidRunning = function()
                 curlWrote(MB, 0)
                 return false
             end
@@ -1456,8 +1480,7 @@ describe("Downloader", function()
         end)
     end)
 
-    -- which failed the download as if the site had, removing what had arrived, and for Z-Library, asking for another
-    -- link, which can count as another download
+    -- which failed downloads as if the site had, removing what had arrived, and could cost another Z-Library download
     describe("when Wi-Fi goes off, or the device goes to sleep", function()
         local network
 

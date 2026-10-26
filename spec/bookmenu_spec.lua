@@ -71,7 +71,7 @@ describe("BookMenu", function()
         helper.state.data_dir = data_dir
         selected = {}
         -- covers are downloaded with curl, which is stood in for where they are
-        require("util.curlutil").canFetch = function()
+        require("util.curlversion").canFetch = function()
             return true
         end
         CoverCache = require("cache.covercache")

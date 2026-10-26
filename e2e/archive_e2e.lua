@@ -2,8 +2,7 @@ local H = require("helpers")
 
 describe("Internet Archive", function()
     after_each(H.closeAll)
-    -- the book downloaded, which is removed once it has been read, as other tests find the book they download by
-    -- looking for one in the folder
+    -- the book downloaded, removed once read, as other tests find the book they download by looking in the folder
     local downloaded
     after_each(function()
         if downloaded then
@@ -12,8 +11,7 @@ describe("Internet Archive", function()
         end
     end)
 
-    -- Project Gutenberg's own copy of Jane Austen's Pride and Prejudice, a small epub, rather than one made from a
-    -- scan, which can be hundreds of megabytes
+    -- Project Gutenberg's Pride and Prejudice, a small epub, not one from a scan, which can be hundreds of megabytes
     local function isGutenbergEpub(book)
         return book.file_type == "epub"
             and book.identifier:find("gut$") ~= nil
@@ -47,8 +45,7 @@ describe("Internet Archive", function()
         H.shot("archive-search-results")
     end)
 
-    -- at once, its books showing as soon as it has found them, rather than once Library Genesis has answered, which can
-    -- take a minute or more, as when its mirrors take the connection but never answer
+    -- rather than once Library Genesis has answered, which can take a minute or more, as when its mirrors never answer
     it("is searched at once with Library Genesis, its books shown as soon as they're found", function()
         local plugin = H.startSearch(H.BOOK_QUERY, { "Library Genesis", "Internet Archive" })
         local menu = H.waitFor("Internet Archive's books", 60, function()

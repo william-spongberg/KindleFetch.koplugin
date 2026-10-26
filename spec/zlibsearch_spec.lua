@@ -282,7 +282,7 @@ describe("ZlibSearch", function()
         end)
 
         it("asks Z-Library for the link, as the account logged into", function()
-            local url, err = ZlibSearch.findDownloadLink(zlib_book)
+            local url, err = ZlibSearch:findDownloadLink(zlib_book)
 
             assert.is_nil(err)
             assert.are.equal("https://dl.example/books/1984.epub?token=abc", url)
@@ -290,16 +290,15 @@ describe("ZlibSearch", function()
             assert.is_truthy(helper.logged("info", "^the account can download 7 more of its 10 books today$"))
         end)
 
-        -- as each link it gives counts, whether or not the book downloads
-        -- which doesn't count again, as when its download failed, but was refused all the same
+        -- each link counts even if the book doesn't download, but the same book's again doesn't, yet that was refused
         it("asks for a book's link again the same day, once the account has downloaded as many as it can", function()
-            assert.is_not_nil(ZlibSearch.findDownloadLink(zlib_book))
+            assert.is_not_nil(ZlibSearch:findDownloadLink(zlib_book))
             profile(10, 10)
-            assert.are.equal("https://dl.example/books/1984.epub?token=abc", ZlibSearch.findDownloadLink(zlib_book))
+            assert.are.equal("https://dl.example/books/1984.epub?token=abc", ZlibSearch:findDownloadLink(zlib_book))
 
             -- but not another book's
             local other = { source = "zlib", id = "zlib_7", zlib_id = 7, hash = "abc", title = "Emma" }
-            local url, err = ZlibSearch.findDownloadLink(other)
+            local url, err = ZlibSearch:findDownloadLink(other)
             assert.is_nil(url)
             assert.matches("which it has today", err, 1, true)
         end)
@@ -307,7 +306,7 @@ describe("ZlibSearch", function()
         it("doesn't ask for the link once the account has downloaded as many books as it can today", function()
             profile(10, 10)
 
-            local url, err = ZlibSearch.findDownloadLink(zlib_book)
+            local url, err = ZlibSearch:findDownloadLink(zlib_book)
             assert.is_nil(url)
             assert.are.equal(
                 "Z-Library lets this account download 10 books a day, which it has today, so try again tomorrow",
@@ -318,8 +317,7 @@ describe("ZlibSearch", function()
             end
         end)
 
-        -- as each link goes to one of its servers, picked at random, and asking for the same book's again doesn't
-        -- count again
+        -- as each link goes to one of its servers, picked at random, and asking for the same book's again doesn't count
         describe("once the server a link went to has failed", function()
             local hosts
 
@@ -344,13 +342,13 @@ describe("ZlibSearch", function()
             it("asks for links until one goes to another server", function()
                 hosts = { "dl-failed.example", "dl-failed.example", "dl-other.example" }
 
-                local url = ZlibSearch.findDownloadLink(zlib_book, true, "https://dl-failed.example/1984.epub?t=1")
+                local url = ZlibSearch:findDownloadLink(zlib_book, true, "https://dl-failed.example/1984.epub?t=1")
                 assert.are.equal("https://dl-other.example/1984.epub", url)
                 assert.are.equal(3, linksAskedFor())
             end)
 
             it("gives the last link it was given once it has asked a few times", function()
-                local url = ZlibSearch.findDownloadLink(zlib_book, true, "https://dl-failed.example/1984.epub?t=1")
+                local url = ZlibSearch:findDownloadLink(zlib_book, true, "https://dl-failed.example/1984.epub?t=1")
                 assert.are.equal("https://dl-failed.example/1984.epub", url)
                 assert.are.equal(4, linksAskedFor())
             end)
@@ -361,7 +359,7 @@ describe("ZlibSearch", function()
                     profile(10, 10)
                     hosts = { "dl-other.example" }
 
-                    local url = ZlibSearch.findDownloadLink(zlib_book, true, "https://dl-failed.example/1984.epub?t=1")
+                    local url = ZlibSearch:findDownloadLink(zlib_book, true, "https://dl-failed.example/1984.epub?t=1")
                     assert.are.equal("https://dl-other.example/1984.epub", url)
                 end
             )
@@ -372,7 +370,7 @@ describe("ZlibSearch", function()
                 return fixtures.zlibError("Invalid hash"), nil, 400
             end
 
-            local url, err = ZlibSearch.findDownloadLink(zlib_book)
+            local url, err = ZlibSearch:findDownloadLink(zlib_book)
             assert.is_nil(url)
             assert.are.equal("Z-Library says: Invalid hash", err)
         end)
@@ -381,7 +379,7 @@ describe("ZlibSearch", function()
         it("won't use a link that isn't just an address", function()
             web.pages[FILE_URL] = '{"success":1,"file":{"downloadLink":"https://dl.example/a b\\"c"}}'
 
-            local url, err = ZlibSearch.findDownloadLink(zlib_book)
+            local url, err = ZlibSearch:findDownloadLink(zlib_book)
             assert.is_nil(url)
             assert.are.equal("Z-Library didn't give a download link", err)
             -- saying what it gave instead, but not the link, which carries a key
@@ -396,18 +394,17 @@ describe("ZlibSearch", function()
                 return fixtures.zlibError("Please login"), nil, 400
             end
 
-            local url, err = ZlibSearch.findDownloadLink(zlib_book)
+            local url, err = ZlibSearch:findDownloadLink(zlib_book)
             assert.is_nil(url)
             assert.are.equal(require("api.zlibaccount").LOGGED_OUT_ERROR, err)
             assert.are.equal(1, #web.requests)
         end)
     end)
 
-    -- catches Z-Library changing its search. needs an account, given by KINDLEFETCH_ZLIB_EMAIL and
-    -- KINDLEFETCH_ZLIB_PASSWORD, so it's skipped without them (as in CI). the download link isn't asked for, as each
-    -- one counts towards how many books the account can download a day
+    -- catches Z-Library changing its search, skipped without an account (as in CI). no download link, as each counts
     local email, password = os.getenv("KINDLEFETCH_ZLIB_EMAIL"), os.getenv("KINDLEFETCH_ZLIB_PASSWORD")
-    if email and password then
+    -- (or empty, as the Canary workflow gives them where the repository has no secrets of those names)
+    if email and email ~= "" and password and password ~= "" then
         it("finds books on the live Z-Library site #live", function()
             web.live = true
             -- at the addresses Wikipedia lists

@@ -1,8 +1,7 @@
 local md5 = require("ffi/sha2").md5
 local LogUtil = require("util.logutil")
 
--- what a file that has downloaded is, going by how it starts, to tell a book or cover from what a site can send in its
--- place, such as a web page saying it's busy; and whether it's the very file the site listed, by its md5
+-- tells a downloaded book or cover from e.g. a busy page by how it starts, and if it's the very file listed by its md5
 local FileCheck = {}
 
 -- how much of a file's start is read to tell what it is: enough for a PDF's header, which can come after other bytes
@@ -10,8 +9,7 @@ local HEAD_SIZE = 1024
 -- how much of a file is read at a time while working out its md5 (see Md5:step)
 local MD5_CHUNK_SIZE = 1024 * 1024
 
--- how files in each file type start, any of these. those that can start any way aren't here, and are only checked
--- for not being a web page (see FileCheck.problem)
+-- how files in each file type start, any of these; those that can start any way are only checked for being web pages
 local ZIP = "PK\3\4"
 local STARTS = {
     epub = { ZIP },
@@ -54,8 +52,7 @@ local function startsWith(s, start)
     return s:sub(1, #start) == start
 end
 
--- whether a file starting with head is a web page, or a site's answer to a program (JSON), as sites send in place of
--- what was asked for, e.g. to say they're busy, or that a link has expired
+-- whether a file starting with head is a web page or JSON, as sites send in place of what was asked for, e.g. when busy
 function FileCheck.isWebPage(head)
     local start = text(head)
     local lower = start:lower()
@@ -72,8 +69,7 @@ function FileCheck.isWebPage(head)
     return start:find('^{%s*["}]') ~= nil or start:find('^%[%s*[{"%]]') ~= nil
 end
 
--- whether a file starting with head is in the file type, going by how files in it start, or nil when they can start
--- any way
+-- whether a file starting with head is in the file type, by how its files start, or nil when they can start any way
 function FileCheck.isFileType(head, file_type)
     if file_type == "pdf" then
         -- which some have other bytes before
@@ -111,9 +107,7 @@ function FileCheck.pageTitle(head)
     return title ~= "" and title or nil
 end
 
--- what's wrong with the book of the file type that has downloaded to path, going by how it starts: that it's a web
--- page, or isn't in its file type. returns nil when nothing is, otherwise "web page" or "file type", then what it
--- starts with, for logging
+-- what's wrong with the book downloaded to path: nil, or "web page" or "file type" and what it starts with, to log
 function FileCheck.problem(path, file_type)
     local head = FileCheck.head(path)
     if not head then
@@ -136,8 +130,7 @@ end
 local Md5 = {}
 Md5.__index = Md5
 
--- read the next piece of the file, returning its md5 (in lower case) once it has all been read, otherwise nil, or
--- false and why if it can't be read
+-- read the next piece of the file: its md5 (in lower case) once all is read, else nil, or false and why if unreadable
 function Md5:step()
     local chunk, err = self.file:read(MD5_CHUNK_SIZE)
     if chunk then

@@ -264,10 +264,10 @@ describe("ZlibAccount", function()
         assert.is_nil(saved().zlib_account)
     end)
 
-    -- catches Z-Library changing how it's logged into. needs an account, given by KINDLEFETCH_ZLIB_EMAIL and
-    -- KINDLEFETCH_ZLIB_PASSWORD, so it's skipped without them (as in CI)
+    -- catches Z-Library changing how it's logged into. needs an account, so it's skipped without one (as in CI)
     local email, password = os.getenv("KINDLEFETCH_ZLIB_EMAIL"), os.getenv("KINDLEFETCH_ZLIB_PASSWORD")
-    if email and password then
+    -- (or empty, as the Canary workflow gives them where the repository has no secrets of those names)
+    if email and email ~= "" and password and password ~= "" then
         it("logs in to the live Z-Library site #live", function()
             web.live = true
             -- at the addresses Wikipedia lists
