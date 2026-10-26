@@ -15,7 +15,7 @@ local InputDialog = require("ui/widget/inputdialog")
 local NetworkMgr = require("ui/network/manager")
 local LogUtil = require("util.logutil")
 local ProxyUtil = require("util.proxyutil")
-local CurlUtil = require("util.curlutil")
+local CurlVersion = require("util.curlversion")
 local StringUtil = require("util.stringutil")
 local PathUtil = require("util.pathutil")
 local Diagnostics = require("ui.diagnostics")
@@ -231,7 +231,7 @@ function SettingsPage:settingsItems()
         {
             -- (see CurlUtil.applyEncryptedDns), which can be turned off whether or not curl can look names up with it
             text = T(_("Encrypted DNS: %1"), encrypted_dns and "☑" or "☐"),
-            enabled = encrypted_dns or CurlUtil.canUseEncryptedDns(),
+            enabled = encrypted_dns or CurlVersion.canUseEncryptedDns(),
             callback = function()
                 this:changeEncryptedDns()
             end,

@@ -257,6 +257,7 @@ kindlefetch.koplugin/
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes, unzipping the update with KOReader's own archiver (or unzip, where it has none) next to the plugin, and keeping the installed version until the new one is in place
 └── util/
     ├── curlutil.lua           # Builds curl's commands for fetching pages and downloading files (one or many at once), and says what its exit codes mean
+    ├── curlversion.lua        # Which curl is installed and what it can do (fetch pages securely, ask for them compressed, use encrypted DNS), looked up once a session
     ├── backgroundprocess.lua  # What runs in the background (curl in a shell, or a process of KOReader's own): whether it's running, its exit code once done, stopping it, and collecting it
     ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from, with the kind of fix each has
     ├── guard.lua              # Runs what KOReader runs later (scheduled tasks, Trapper's functions, event handlers), catching errors, logging where they happened and cleaning up

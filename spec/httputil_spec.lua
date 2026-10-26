@@ -293,7 +293,7 @@ describe("HttpUtil", function()
                     respond({ "<html>page " .. i .. "</html>", 1, 200 })
                     HttpUtil.getBody("https://libgen.example/" .. i)
                 end
-                assert.is_false(require("util.curlutil").canFetch())
+                assert.is_false(require("util.curlversion").canFetch())
                 respond({ "<html>page 4</html>", 1, 200 })
                 HttpUtil.getBody("https://libgen.example/4")
                 assert.are.equal(3, #fetches)
@@ -308,7 +308,7 @@ describe("HttpUtil", function()
                     assert.are.equal("TLS/SSL connection failed", err)
                 end
                 assert.are.equal(0, #requests)
-                assert.is_true(require("util.curlutil").canFetch())
+                assert.is_true(require("util.curlversion").canFetch())
             end)
 
             it("keeps fetching pages with curl when it connects in between", function()
@@ -325,7 +325,7 @@ describe("HttpUtil", function()
                     respond({ "<html>page " .. i .. "</html>", 1, 200 })
                     HttpUtil.getBody("https://libgen.example/" .. i)
                 end
-                assert.is_true(require("util.curlutil").canFetch())
+                assert.is_true(require("util.curlversion").canFetch())
             end)
         end)
 

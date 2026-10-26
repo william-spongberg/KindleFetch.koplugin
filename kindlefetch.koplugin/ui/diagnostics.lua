@@ -6,7 +6,7 @@ local KindleFetchSettings = require("settings.settings")
 local UrlApi = require("api.urlapi")
 local ZlibAccount = require("api.zlibaccount")
 local BackgroundTask = require("ui.backgroundtask")
-local CurlUtil = require("util.curlutil")
+local CurlVersion = require("util.curlversion")
 local HttpUtil = require("util.httputil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
@@ -53,7 +53,7 @@ function Diagnostics.summary()
         ok and koreader_version or "unknown",
         deviceKind(),
         tostring(Device.model),
-        CurlUtil.getVersion() or "not found",
+        CurlVersion.getVersion() or "not found",
         ProxyUtil.get() and ", through KOReader's HTTP proxy" or ""
     )
 end
@@ -72,7 +72,7 @@ function Diagnostics.report(tested)
     end
 
     add("Time", os.date("%Y-%m-%d %H:%M") .. " (secure connections fail when it's far off)")
-    add("Fetching with", CurlUtil.canFetch() and "curl" or "KOReader's own HTTP, as curl can't")
+    add("Fetching with", CurlVersion.canFetch() and "curl" or "KOReader's own HTTP, as curl can't")
     local folder = KindleFetchSettings:getDownloadDir()
     local writable, err = FileUtil.checkWritableDir(folder)
     add("Download folder", folder .. (writable and "" or " (which can't be written to: " .. tostring(err) .. ")"))
@@ -102,7 +102,7 @@ function Diagnostics.report(tested)
     add(
         "Encrypted DNS",
         onOff(KindleFetchSettings:getEncryptedDns())
-            .. (CurlUtil.canUseEncryptedDns() and "" or " (which curl can't do)")
+            .. (CurlVersion.canUseEncryptedDns() and "" or " (which curl can't do)")
     )
     add("Covers", onOff(KindleFetchSettings:getShowBookCovers()))
     add("Update checks", onOff(KindleFetchSettings:getCheckForUpdates()))

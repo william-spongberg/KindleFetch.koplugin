@@ -1,4 +1,5 @@
 local CurlUtil = require("util.curlutil")
+local CurlVersion = require("util.curlversion")
 local CurlTransport = require("util.curltransport")
 local KoreaderTransport = require("util.koreadertransport")
 local LogUtil = require("util.logutil")
@@ -15,7 +16,7 @@ HttpUtil.UNRESOLVED = CurlUtil.getErrorMeaning(6)
 
 -- whether requests made from inside Trapper:wrap can be called off (see setTrapWidget), which those made with curl can
 function HttpUtil.canCancel()
-    return CurlUtil.canFetch()
+    return CurlVersion.canFetch()
 end
 
 -- each coroutine's widget that calls off its requests when tapped, as one search's Cancel called off another's download
@@ -40,9 +41,9 @@ function HttpUtil.sayStatus(text)
     end
 end
 
--- the transport requests go by: curl, or KOReader's own HTTP where curl can't (see CurlUtil.canFetch)
+-- the transport requests go by: curl, or KOReader's own HTTP where curl can't (see CurlVersion.canFetch)
 function HttpUtil.transport()
-    return CurlUtil.canFetch() and CurlTransport or KoreaderTransport
+    return CurlVersion.canFetch() and CurlTransport or KoreaderTransport
 end
 
 -- pages in a row only KOReader's HTTP could fetch securely before it takes over, not one: it may not check certificates
@@ -52,7 +53,7 @@ local tls_fallbacks = 0
 -- fetch a page with curl, or KOReader's own HTTP where curl can't, through KOReader's HTTP proxy where it's on
 function HttpUtil.requestBody(request_url, opts)
     local request = Request.new(request_url, opts)
-    if not CurlUtil.canFetch() then
+    if not CurlVersion.canFetch() then
         return KoreaderTransport.fetchPage(request)
     end
 
@@ -77,7 +78,7 @@ function HttpUtil.requestBody(request_url, opts)
     end
     tls_fallbacks = tls_fallbacks + 1
     if tls_fallbacks >= TLS_FALLBACKS then
-        CurlUtil.stopFetching(
+        CurlVersion.stopFetching(
             string.format("curl couldn't connect securely %d times in a row where it could", tls_fallbacks)
         )
     end

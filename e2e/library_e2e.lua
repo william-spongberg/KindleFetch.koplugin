@@ -22,7 +22,7 @@ describe("Your libraries", function()
 
     local Settings = require("settings.settings")
     local Libraries = require("api.libraries")
-    local CurlUtil = require("util.curlutil")
+    local CurlVersion = require("util.curlversion")
     -- starting with no libraries, and leaving none behind
     local function removeLibraries()
         for _, library in ipairs(Settings:getLibraries()) do
@@ -150,12 +150,12 @@ describe("Your libraries", function()
     -- logging in the Digest way itself, as luasocket can't
     it("does so with KOReader's own HTTP too, where curl can't", function()
         local library = addLibrary()
-        local canFetch = CurlUtil.canFetch
-        CurlUtil.canFetch = function()
+        local canFetch = CurlVersion.canFetch
+        CurlVersion.canFetch = function()
             return false
         end
         local ok, err = pcall(downloadAndRead, library)
-        CurlUtil.canFetch = canFetch
+        CurlVersion.canFetch = canFetch
         assert(ok, err)
     end)
 end)

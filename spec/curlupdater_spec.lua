@@ -1,7 +1,7 @@
 local helper = require("helper")
 
 describe("CurlUpdater", function()
-    local data_dir, CurlUtil, HttpUtil, CurlUpdater
+    local data_dir, CurlVersion, HttpUtil, CurlUpdater
 
     local function installedCurl(version)
         helper.stubCommand(
@@ -18,7 +18,7 @@ describe("CurlUpdater", function()
         helper.reset()
         data_dir = helper.tmpdir("data")
         helper.state.data_dir = data_dir
-        CurlUtil = require("util.curlutil")
+        CurlVersion = require("util.curlversion")
         HttpUtil = require("util.httputil")
         CurlUpdater = require("updater.curlupdater")
     end)
@@ -295,8 +295,8 @@ describe("CurlUpdater", function()
                 "curl --version",
                 "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1\n"
             )
-            assert.is_true(CurlUtil.canFetch())
-            assert.are.equal("8.21.0", CurlUtil.getVersion())
+            assert.is_true(CurlVersion.canFetch())
+            assert.are.equal("8.21.0", CurlVersion.getVersion())
         end)
 
         -- as it's run as root once installed
@@ -375,7 +375,7 @@ describe("CurlUpdater", function()
             local path = data_dir .. "/curl-armhf"
             local url = string.format(
                 "https://github.com/moparisthebest/static-curl/releases/download/v%s/curl-armhf",
-                CurlUtil.MIN_VERSION
+                CurlVersion.MIN_VERSION
             )
 
             assert.is_true(HttpUtil.downloadFile(url, path))

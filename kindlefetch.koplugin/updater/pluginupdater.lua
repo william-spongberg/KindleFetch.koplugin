@@ -5,6 +5,7 @@ local JSON = require("json")
 local lfs = require("libs/libkoreader-lfs")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
+local CurlVersion = require("util.curlversion")
 local BackgroundProcess = require("util.backgroundprocess")
 local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
@@ -62,7 +63,7 @@ end
 -- look up the latest release in the background, as KOReader is in use, calling callback with it, or nil and why not
 local function fetchUpdateInfo(callback)
     -- with KOReader's own HTTP where curl can't fetch (#57), which holds KOReader up (so only when asked to check)
-    if not CurlUtil.canFetch() then
+    if not CurlVersion.canFetch() then
         local body, err = HttpUtil.getBody(REPO_VERSION_URL .. "/releases/latest")
         if not body then
             LogUtil.warn("could not look up the latest release on GitHub:", err)
@@ -338,7 +339,7 @@ function PluginUpdater.checkForUpdates(user_requested)
         return
     end
     -- without a curl that can fetch, only when asked, as KOReader's own HTTP holds KOReader up (see fetchUpdateInfo)
-    if not user_requested and not CurlUtil.canFetch() then
+    if not user_requested and not CurlVersion.canFetch() then
         LogUtil.info("only looking up the latest release when asked to check, as curl can't look it up")
         return
     end

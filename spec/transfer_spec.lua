@@ -47,7 +47,7 @@ describe("Transfer", function()
         helper.run("mkdir -p " .. helper.quote(data_dir .. "/settings"))
         spawned, results, over = {}, {}, 0
         CurlUtil = require("util.curlutil")
-        CurlUtil.canFetch = function()
+        require("util.curlversion").canFetch = function()
             return true
         end
         CurlUtil.startDownload = function(url, path, _, opts)

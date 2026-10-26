@@ -62,57 +62,57 @@ describe("CurlUtil", function()
 
     it("explains that a Kindle's curl is too old, and how to update it, when that's why it couldn't connect", function()
         helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
-        assert.is_true(CurlUtil.isOutdated())
+        assert.is_true(require("util.curlversion").isOutdated())
         assert.are.equal(CurlUtil.OUTDATED_ERROR, CurlUtil.explainExitCode(35))
         assert.are.equal(CurlUtil.OUTDATED_ERROR, CurlUtil.explainExitCode(60))
         -- which isn't why it couldn't when it was offline
         assert.are.equal("could not resolve host", CurlUtil.explainExitCode(6))
 
         helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
-        CurlUtil.forgetVersion()
-        assert.is_false(CurlUtil.isOutdated())
+        require("util.curlversion").forgetVersion()
+        assert.is_false(require("util.curlversion").isOutdated())
         assert.are.equal("TLS/SSL connection failed", CurlUtil.explainExitCode(35))
 
         -- other devices' curls aren't updated, and connect whatever their version
         helper.stubs.device.kindle = false
         helper.stubCommand("curl --version", "curl 7.68.0 (x86_64-pc-linux-gnu) libcurl/7.68.0\n")
-        CurlUtil.forgetVersion()
-        assert.is_false(CurlUtil.isOutdated())
+        require("util.curlversion").forgetVersion()
+        assert.is_false(require("util.curlversion").isOutdated())
         assert.are.equal("TLS/SSL connection failed", CurlUtil.explainExitCode(35))
     end)
 
     it("reads curl's version", function()
         helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
-        assert.are.equal("8.17.0", CurlUtil.getVersion())
+        assert.are.equal("8.17.0", require("util.curlversion").getVersion())
         helper.stubCommand("curl --version", "")
-        CurlUtil.forgetVersion()
-        assert.is_nil(CurlUtil.getVersion())
+        require("util.curlversion").forgetVersion()
+        assert.is_nil(require("util.curlversion").getVersion())
     end)
 
     -- it's asked for when KOReader starts, before searching, and before offering to update curl
     it("only starts curl to ask its version once per session", function()
         helper.stubCommand("curl --version", "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0\n")
-        CurlUtil.getVersion()
-        CurlUtil.canFetch()
-        CurlUtil.getVersion()
+        require("util.curlversion").getVersion()
+        require("util.curlversion").canFetch()
+        require("util.curlversion").getVersion()
         assert.are.equal(1, #helper.state.popen_calls)
 
         -- or once it isn't there
         helper.stubCommand("curl --version", "")
-        CurlUtil.forgetVersion()
-        CurlUtil.getVersion()
-        CurlUtil.canFetch()
+        require("util.curlversion").forgetVersion()
+        require("util.curlversion").getVersion()
+        require("util.curlversion").canFetch()
         assert.are.equal(2, #helper.state.popen_calls)
     end)
 
     it("asks again once told to forget, e.g. after curl has been updated", function()
         helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2\n")
-        assert.is_false(CurlUtil.canFetch())
+        assert.is_false(require("util.curlversion").canFetch())
 
         helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 zlib\n")
-        CurlUtil.forgetVersion()
-        assert.are.equal("8.21.0", CurlUtil.getVersion())
-        assert.is_true(CurlUtil.canFetch())
+        require("util.curlversion").forgetVersion()
+        assert.are.equal("8.21.0", require("util.curlversion").getVersion())
+        assert.is_true(require("util.curlversion").canFetch())
     end)
 
     -- pages are fetched with curl where it's up to it, as it asks for them compressed and can wait in the background
@@ -123,23 +123,23 @@ describe("CurlUtil", function()
 
         it("is left to curl once it's been updated on a Kindle", function()
             installedCurl("curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1")
-            assert.is_true(CurlUtil.canFetch())
+            assert.is_true(require("util.curlversion").canFetch())
             assert.is_truthy(helper.logged("info", "^fetching pages with curl compressed$"))
         end)
 
         it("isn't left to the curl a Kindle comes with, or an older update", function()
             installedCurl("curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0 OpenSSL/1.0.2 zlib/1.2.8")
-            assert.is_false(CurlUtil.canFetch())
+            assert.is_false(require("util.curlversion").canFetch())
 
             installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
-            CurlUtil.forgetVersion()
-            assert.is_false(CurlUtil.canFetch())
+            require("util.curlversion").forgetVersion()
+            assert.is_false(require("util.curlversion").canFetch())
         end)
 
         it("is left to whichever curl other devices have", function()
             helper.stubs.device.kindle = false
             installedCurl("curl 7.68.0 (x86_64-pc-linux-gnu) libcurl/7.68.0 OpenSSL/1.1.1 zlib/1.2.11")
-            assert.is_true(CurlUtil.canFetch())
+            assert.is_true(require("util.curlversion").canFetch())
         end)
 
         -- as every site is https, which it fetched none of, rather than KOReader's own HTTP fetching them
@@ -148,21 +148,21 @@ describe("CurlUtil", function()
                 "curl --version",
                 "curl 7.88.1 (arm-linux) libcurl/7.88.1\nRelease-Date: 2023-02-20\nProtocols: file ftp http\n"
             )
-            assert.is_false(CurlUtil.canFetch())
+            assert.is_false(require("util.curlversion").canFetch())
             assert.is_truthy(
                 helper.logged("info", "^fetching pages with KOReader, as curl can't make secure connections")
             )
         end)
 
         it("isn't left to curl when there isn't one", function()
-            assert.is_false(CurlUtil.canFetch())
+            assert.is_false(require("util.curlversion").canFetch())
             assert.is_truthy(helper.logged("info", "^fetching pages with KOReader, as curl is missing or too old,"))
         end)
 
         it("is only worked out once per session, as it means running curl", function()
             installedCurl("curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0 OpenSSL/3.5.4 zlib/1.3.1")
-            CurlUtil.canFetch()
-            CurlUtil.canFetch()
+            require("util.curlversion").canFetch()
+            require("util.curlversion").canFetch()
             CurlUtil.fetchCommand("https://libgen.example", "page", 10, 60)
 
             assert.are.equal(1, #helper.state.popen_calls)
@@ -220,7 +220,7 @@ describe("CurlUtil", function()
             assert.is_nil(cmd:find("--doh-url", 1, true))
 
             require("settings.settings"):setEncryptedDns(true)
-            assert.is_true(CurlUtil.canUseEncryptedDns())
+            assert.is_true(require("util.curlversion").canUseEncryptedDns())
             cmd = CurlUtil.fetchCommand("https://libgen.example", "page", 10, 60)
             assert.matches(" --doh-url https://1.1.1.1/dns-query", cmd, 1, true)
         end)
@@ -232,8 +232,8 @@ describe("CurlUtil", function()
             installedCurl("curl 7.61.1 (x86_64-pc-linux-gnu) libcurl/7.61.1")
             require("settings.settings"):setEncryptedDns(true)
 
-            assert.is_true(CurlUtil.canFetch())
-            assert.is_false(CurlUtil.canUseEncryptedDns())
+            assert.is_true(require("util.curlversion").canFetch())
+            assert.is_false(require("util.curlversion").canUseEncryptedDns())
             local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", 10, 60)
             assert.is_nil(cmd:find("--doh-url", 1, true))
         end)
@@ -684,11 +684,11 @@ describe("CurlUtil", function()
 
             -- older curls stop at options they don't know
             helper.stubCommand("curl --version", "curl 7.67.0 (x86_64-pc-linux-gnu) libcurl/7.67.0\n")
-            CurlUtil.forgetVersion()
+            require("util.curlversion").forgetVersion()
             assert.is_nil(command():find("--parallel-immediate", 1, true))
 
             helper.stubCommand("curl --version", "")
-            CurlUtil.forgetVersion()
+            require("util.curlversion").forgetVersion()
             assert.is_nil(command():find("--parallel-immediate", 1, true))
         end)
 
@@ -716,7 +716,7 @@ describe("CurlUtil", function()
 
             -- older curls can only write them out together, once they've all finished
             helper.stubCommand("curl --version", "curl 7.62.0 (x86_64-pc-linux-gnu) libcurl/7.62.0\n")
-            CurlUtil.forgetVersion()
+            require("util.curlversion").forgetVersion()
             assert.matches("-w '%{exitcode} %{filename_effective}\\n' > '", command(), 1, true)
             assert.is_true(helper.exists(paths[3]))
         end)
@@ -781,7 +781,7 @@ describe("CurlUtil", function()
         it("goes without the proxy and encrypted DNS where every file is on the network the device is on", function()
             helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
             helper.stubCommand("& echo $!", "4242\n")
-            CurlUtil.forgetVersion()
+            require("util.curlversion").forgetVersion()
             require("settings.settings"):setEncryptedDns(true)
             helper.stubs.http.PROXY = "http://proxy.example:3128"
             local local_urls = { "http://192.168.1.10:8080/get/thumb/1", "http://192.168.1.10:8080/get/thumb/2" }

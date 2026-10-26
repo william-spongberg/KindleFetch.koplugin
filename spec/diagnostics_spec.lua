@@ -19,7 +19,7 @@ describe("Diagnostics", function()
             end,
         })
         can_fetch = true
-        helper.stub("util.curlutil", {
+        helper.stub("util.curlversion", {
             getVersion = function()
                 return "8.21.0"
             end,

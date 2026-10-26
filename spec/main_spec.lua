@@ -459,13 +459,15 @@ describe("KindleFetch", function()
         helper.stub("cache.covercache", {})
         leftovers_removed = 0
         can_use_encrypted_dns = true
-        helper.stub("util.curlutil", {
+        helper.stub("util.curlversion", {
             getVersion = function()
                 return "8.17.0"
             end,
             canUseEncryptedDns = function()
                 return can_use_encrypted_dns
             end,
+        })
+        helper.stub("util.curlutil", {
             removeLeftovers = function()
                 leftovers_removed = leftovers_removed + 1
             end,

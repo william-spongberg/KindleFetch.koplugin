@@ -43,7 +43,7 @@ describe("CoverCache", function()
             error("cannot open " .. path .. ": Permission denied")
         end
         CoverCache:clear()
-        CurlUtil.canFetch = function()
+        require("util.curlversion").canFetch = function()
             return true
         end
         CurlUtil.downloadMultiple = function()
@@ -112,7 +112,7 @@ describe("CoverCache", function()
 
         it("is false once the cover couldn't be downloaded, until it's tried again", function()
             local a = book("a", "https://covers.example/a.jpg")
-            CurlUtil.canFetch = function()
+            require("util.curlversion").canFetch = function()
                 return true
             end
             CurlUtil.downloadMultiple = function()
@@ -157,7 +157,7 @@ describe("CoverCache", function()
 
     -- which KOReader exited on, with every cover on the page left waiting for
     it("takes the placeholders away when the covers can't be downloaded, as the device's storage is full", function()
-        CurlUtil.canFetch = function()
+        require("util.curlversion").canFetch = function()
             return true
         end
         local results = {}
@@ -212,7 +212,7 @@ describe("CoverCache", function()
 
         before_each(function()
             runs, results = {}, {}
-            CurlUtil.canFetch = function()
+            require("util.curlversion").canFetch = function()
                 return true
             end
             CurlUtil.downloadMultiple = function(urls, paths, background, parallel_jobs, _, _, opts)

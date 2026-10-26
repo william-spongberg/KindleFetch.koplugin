@@ -1,21 +1,17 @@
 local LogUtil = require("util.logutil")
 local Request = require("util.request")
+local CurlVersion = require("util.curlversion")
 local BackgroundProcess = require("util.backgroundprocess")
 local ShellUtil = require("util.shellutil")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
-local VersionUtil = require("util.versionutil")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 local lfs = require("libs/libkoreader-lfs")
 local DataStorage = require("datastorage")
-local Device = require("device")
 
 local CurlUtil = {}
-
--- the curl installed on Kindles, whose own is too old for Library Genesis: the latest static build, for security fixes
-CurlUtil.MIN_VERSION = "8.21.0"
 
 -- constants
 local TMP_DIR = DataStorage:getSettingsDir() .. "/tmp/"
@@ -92,88 +88,6 @@ function CurlUtil.removeLeftovers()
     end
 end
 
--- how the installed curl describes itself, or nil if it isn't there, looked up once a session as it means starting curl
-local curl_description, curl_protocols
-local function describeCurl()
-    if curl_description == nil then
-        local pipe = io.popen("curl --version 2>/dev/null", "r")
-        local output = pipe and pipe:read("*a") or ""
-        if pipe then
-            pipe:close()
-        end
-        -- false when curl isn't there, so it isn't looked for again
-        curl_description = output:match("^[^\n]+") or false
-        -- the protocols it can use, where it says, which leave https out for a curl built without TLS
-        curl_protocols = output:match("\nProtocols:%s*([^\n]*)")
-    end
-    return curl_description or nil
-end
-
--- the installed curl's version, e.g. "8.17.0", or nil if curl isn't there
-function CurlUtil.getVersion()
-    local description = describeCurl()
-    -- "curl X.Y.Z (platform) ..."
-    return description and description:match("^curl%s+([%d%.]+)")
-end
-
--- whether the installed curl is at least min_version, e.g. "7.68.0", for options older ones would fail on
-local function curlIsAtLeast(min_version)
-    local version = VersionUtil.parseVersion(CurlUtil.getVersion())
-    return version ~= nil and VersionUtil.compareVersions(version, VersionUtil.parseVersion(min_version)) >= 0
-end
-
--- DNS over HTTPS for curl to look sites' names up with: Cloudflare's, by its address, so the network's DNS isn't asked
-local DOH_URL = "https://1.1.1.1/dns-query"
-local DOH_MIN_VERSION = "7.62.0"
-
--- whether curl can fetch web pages and ask for them compressed, worked out once per session as it means running curl
-local can_fetch, can_decompress
-local function checkCurl()
-    if can_fetch ~= nil then
-        return
-    end
-
-    local description = describeCurl()
-    local version = VersionUtil.parseVersion(description and description:match("^curl%s+([%d%.]+)"))
-    -- every site is https, which a curl built without TLS can't fetch at all
-    local has_tls = not curl_protocols or (" " .. curl_protocols .. " "):find(" https ", 1, true) ~= nil
-    -- on a Kindle, only once it has been updated, as the curl it comes with can't connect to Library Genesis
-    can_fetch = version ~= nil
-        and has_tls
-        and (
-            not Device:isKindle()
-            or VersionUtil.compareVersions(version, VersionUtil.parseVersion(CurlUtil.MIN_VERSION)) >= 0
-        )
-    can_decompress = description ~= nil and description:find("zlib", 1, true) ~= nil
-    LogUtil.info(
-        "fetching pages with",
-        can_fetch and "curl"
-            or version and not has_tls and "KOReader, as curl can't make secure connections,"
-            or "KOReader, as curl is missing or too old,",
-        can_fetch and can_decompress and "compressed" or "uncompressed"
-    )
-end
-
--- fetch pages with KOReader's own HTTP for the rest of the session, as curl has been found not to connect where it can
-function CurlUtil.stopFetching(why)
-    checkCurl()
-    if can_fetch then
-        LogUtil.warn("fetching pages with KOReader from now on, as", why)
-        can_fetch = false
-    end
-end
-
-function CurlUtil.canFetch()
-    checkCurl()
-    return can_fetch
-end
-
--- look curl up again when it's next needed, e.g. once a newer one has been installed
-function CurlUtil.forgetVersion()
-    curl_description = nil
-    can_fetch, can_decompress = nil, nil
-end
-
 -- what KOReader's own HTTP says went wrong, in lower case, with curl's exit code for it, so it's said the same way
 local LUASOCKET_ERRORS = {
     { "host or service not provided, or not known", 6 },
@@ -223,14 +137,9 @@ function CurlUtil.isTlsFailure(err)
     return false
 end
 
--- whether this is a Kindle whose curl is older than the oldest known to connect to Library Genesis
-function CurlUtil.isOutdated()
-    return Device:isKindle() and CurlUtil.getVersion() ~= nil and not curlIsAtLeast(CurlUtil.MIN_VERSION)
-end
-
 -- what went wrong for curl to exit with exit_code, or on a Kindle with too old a curl, that and how to update it
 function CurlUtil.explainExitCode(exit_code)
-    if TLS_ERRORS[exit_code] and CurlUtil.isOutdated() then
+    if TLS_ERRORS[exit_code] and CurlVersion.isOutdated() then
         return CurlUtil.OUTDATED_ERROR
     end
     return CurlUtil.getErrorMeaning(exit_code)
@@ -338,25 +247,23 @@ end
 
 function CurlUtil.enableParallel(curl_cmd, max_parallel)
     -- which curl older than 7.66 doesn't have, and fails on, downloading them one after another instead
-    if not curlIsAtLeast("7.66.0") then
+    if not CurlVersion.isAtLeast("7.66.0") then
         return curl_cmd
     end
     local cmd = string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
     -- a connection per file at once, as Library Genesis never lets them share: covers arrive in a third of the time
-    if curlIsAtLeast("7.68.0") then
+    if CurlVersion.isAtLeast("7.68.0") then
         cmd = cmd .. " --parallel-immediate"
     end
     return cmd
 end
 
--- whether curl can look names up with encrypted DNS (see applyEncryptedDns)
-function CurlUtil.canUseEncryptedDns()
-    return CurlUtil.canFetch() and curlIsAtLeast(DOH_MIN_VERSION)
-end
+-- DNS over HTTPS for curl to look sites' names up with: Cloudflare's, by its address, so the network's DNS isn't asked
+local DOH_URL = "https://1.1.1.1/dns-query"
 
 -- curl_cmd with DNS over HTTPS where the request is to go with it (see Request) and curl can
 function CurlUtil.applyEncryptedDns(curl_cmd, request)
-    if request.encrypted_dns and CurlUtil.canUseEncryptedDns() then
+    if request.encrypted_dns and CurlVersion.canUseEncryptedDns() then
         return string.format("%s --doh-url %s", curl_cmd, DOH_URL)
     end
     return curl_cmd
@@ -413,11 +320,10 @@ end
 
 -- a command that fetches a page to page_file (kept on an error status, for what it says), printing status and exit code
 function CurlUtil.fetchCommand(url, page_file, answer_timeout, page_timeout, config_file)
-    checkCurl()
     local request = Request.new(url)
 
     local cmd = string.format("curl -sL -o %s %s", ShellUtil.quote(page_file), ShellUtil.quote(url))
-    if can_decompress then
+    if CurlVersion.canDecompress() then
         -- a page of search results is a tenth of the size compressed, and Library Genesis sends them slowly
         cmd = cmd .. " --compressed"
     end
@@ -654,7 +560,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
     cmd = CurlUtil.applyEncryptedDns(cmd, batch)
     -- each file's result, as some may fail, to stderr where curl can, which is unbuffered, so each shows once done
     local write_out = "%{exitcode} %{filename_effective}\\n"
-    if curlIsAtLeast("7.63.0") then
+    if CurlVersion.isAtLeast("7.63.0") then
         cmd = string.format(
             "%s -w %s 2> %s",
             cmd,

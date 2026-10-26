@@ -1,13 +1,13 @@
 local helper = require("helper")
 
 describe("the transports", function()
-    local HttpUtil, CurlUtil, CurlTransport, KoreaderTransport
+    local HttpUtil, CurlVersion, CurlTransport, KoreaderTransport
 
     before_each(function()
         helper.reset()
         helper.state.data_dir = helper.tmpdir("data")
         HttpUtil = require("util.httputil")
-        CurlUtil = require("util.curlutil")
+        CurlVersion = require("util.curlversion")
         CurlTransport = require("util.curltransport")
         KoreaderTransport = require("util.koreadertransport")
     end)
@@ -24,7 +24,7 @@ describe("the transports", function()
 
     it("go by curl where it can fetch, otherwise by KOReader's own HTTP", function()
         local can_fetch = true
-        CurlUtil.canFetch = function()
+        CurlVersion.canFetch = function()
             return can_fetch
         end
         assert.are.equal(CurlTransport, HttpUtil.transport())

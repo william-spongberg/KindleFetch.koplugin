@@ -115,7 +115,7 @@ describe("Downloader", function()
 
         CurlUtil = require("util.curlutil")
         can_fetch, koreader_downloads = true, {}
-        CurlUtil.canFetch = function()
+        require("util.curlversion").canFetch = function()
             return can_fetch
         end
         CurlUtil.startDownload = function(url, path, _, opts)
@@ -1147,7 +1147,7 @@ describe("Downloader", function()
         -- rather than that the TLS connection failed, which doesn't say what to do about it
         it("says when a Kindle's curl is too old to download the book, and how to update it", function()
             helper.stubCommand("curl --version", "curl 7.68.0 (arm-kindle-linux-gnueabi) libcurl/7.68.0\n")
-            CurlUtil.forgetVersion()
+            require("util.curlversion").forgetVersion()
             download()
             curlWrote(0, 35)
             helper.runScheduled()

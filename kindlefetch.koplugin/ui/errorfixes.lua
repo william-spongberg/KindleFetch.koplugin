@@ -3,7 +3,7 @@ local KindleFetchSettings = require("settings.settings")
 local SettingsPage = require("settings.settingspage")
 local ZlibLogin = require("ui.zliblogin")
 local CurlUpdater = require("updater.curlupdater")
-local CurlUtil = require("util.curlutil")
+local CurlVersion = require("util.curlversion")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
 local Errors = require("util.errors")
@@ -32,7 +32,7 @@ ErrorFixes.FIXES = {
     end,
     -- as the network's own DNS may be what's blocking the sites (#55)
     encrypted_dns = function(retry)
-        if KindleFetchSettings:getEncryptedDns() or not CurlUtil.canUseEncryptedDns() then
+        if KindleFetchSettings:getEncryptedDns() or not CurlVersion.canUseEncryptedDns() then
             return nil
         end
         return {

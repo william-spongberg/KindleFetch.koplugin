@@ -2,7 +2,7 @@ local Device = require("device")
 local UIManager = require("ui/uimanager")
 local InputDialog = require("ui/widget/inputdialog")
 local InfoMessage = require("ui/widget/infomessage")
-local CurlUtil = require("util.curlutil")
+local CurlVersion = require("util.curlversion")
 local FileUtil = require("util.fileutil")
 local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
@@ -16,7 +16,7 @@ local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- constants
-local MIN_VERSION = CurlUtil.MIN_VERSION
+local MIN_VERSION = CurlVersion.MIN_VERSION
 local CURL_REPO_URL = "https://github.com/moparisthebest/static-curl"
 -- the Kindle's curl, its backup (see the README), and the new one, which replaces it only once it's all there and runs
 local SYSTEM_CURL = "/usr/bin/curl"
@@ -24,7 +24,7 @@ local BACKUP_CURL = "/usr/bin/curl.system.bak"
 local NEW_CURL = "/usr/bin/curl.new"
 
 local CurlUpdater = {
-    -- the SHA-256 of that release's curl-armhf, so nothing else is installed, to change with CurlUtil.MIN_VERSION
+    -- the SHA-256 of that release's curl-armhf, so nothing else is installed, to change with CurlVersion.MIN_VERSION
     SHA256 = "e34d59a37903cdfc1d7807ae3b8659f708d1f44eff68790f716d33e257b101b7",
 }
 
@@ -155,7 +155,7 @@ local function updateCurl()
     local remounted, remount_err = remountReadOnly()
     FileUtil.removeFile(curl_path)
     -- whichever is there now
-    CurlUtil.forgetVersion()
+    CurlVersion.forgetVersion()
     if not installed then
         return nil, install_err
     end
@@ -225,7 +225,7 @@ function CurlUpdater.checkVersion(user_requested)
     end
     LogUtil.debug("checking curl version")
 
-    local current_version_str = CurlUtil.getVersion()
+    local current_version_str = CurlVersion.getVersion()
     if not current_version_str then
         LogUtil.warn("curl not found or version could not be determined")
         return false

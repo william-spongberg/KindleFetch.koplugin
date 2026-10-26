@@ -16,13 +16,13 @@ function fixtures.fakeWeb(helper)
     local fetchLive = HttpUtil.getBody
     -- live, with luasocket (see helper.useLiveHttp), whatever curl can do in the spec
     local function fetchWithLuasocket(url, opts)
-        local CurlUtil = require("util.curlutil")
-        local canFetch = CurlUtil.canFetch
-        CurlUtil.canFetch = function()
+        local CurlVersion = require("util.curlversion")
+        local canFetch = CurlVersion.canFetch
+        CurlVersion.canFetch = function()
             return false
         end
         local body, err, status = fetchLive(url, opts)
-        CurlUtil.canFetch = canFetch
+        CurlVersion.canFetch = canFetch
         return body, err, status
     end
     HttpUtil.getBody = function(url, opts)
