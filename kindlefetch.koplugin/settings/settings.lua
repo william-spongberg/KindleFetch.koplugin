@@ -20,7 +20,7 @@ local DEFAULTS = {
     download_dir = nil,
     -- and every file type and book type, set below
     preferred_languages = { "en" },
-    -- the sites the search box searches (see Sources), until others are ticked in it: all of them, Z-Library once
+    -- the sites the search box searches (see Sites), until others are ticked in it: all of them, Z-Library once
     -- logged into
     search_sources = { "zlib", "libgen", "archive", "gutenberg" },
 }
@@ -702,7 +702,7 @@ function KindleFetchSettings:setCurlUpdateDeclined(version)
     return KindleFetchSettings:setSetting("curl_update_declined", version or nil)
 end
 
--- search_sources (the sites the search box searches, by their names in Sources, e.g. { "libgen", "archive" }), of which
+-- search_sources (the sites the search box searches, by their names in Sites, e.g. { "libgen", "archive" }), of which
 -- there's always at least one, in a list of its own
 function KindleFetchSettings:getSearchSources()
     local sources = {}

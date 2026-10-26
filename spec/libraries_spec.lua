@@ -1,7 +1,7 @@
 local helper = require("helper")
 
 describe("Libraries", function()
-    local Libraries, Settings, MultiSearch, Sources, LibrarySites
+    local Libraries, Settings, MultiSearch, Sites, LibrarySites
 
     local CALIBRE = {
         url = "http://nas:8080/opds?library_id=Books",
@@ -24,7 +24,7 @@ describe("Libraries", function()
         Settings:setSearchSources({ "libgen", "archive" })
         Libraries = require("api.libraries")
         MultiSearch = require("api.multisearch")
-        Sources = require("api.sources")
+        Sites = require("api.sites")
         LibrarySites = require("util.librarysites")
     end)
 
@@ -35,8 +35,8 @@ describe("Libraries", function()
 
         local source = Libraries.source(library)
         assert.are.equal(source, MultiSearch.sources()[1])
-        assert.are.equal("Books", Sources[source].NAME)
-        assert.are.same({ "title", "author", "isbn" }, Sources[source].SCOPES)
+        assert.are.equal("Books", Sites[source].NAME)
+        assert.are.same({ "title", "author", "isbn" }, Sites[source].SCOPES)
         assert.are.same({ "libgen", "archive", source }, Settings:getSearchSources())
         -- logging in to its site, and only there
         assert.are.same({ username = "will", password = "secret" }, LibrarySites.loginFor("http://nas:8080/get/epub/1"))
@@ -77,14 +77,14 @@ describe("Libraries", function()
     it("keeps a library's site while it hasn't changed", function()
         local library = Libraries.add(CALIBRE)
         local source = Libraries.source(library)
-        local site = Sources[source]
+        local site = Sites[source]
         Libraries.register()
-        assert.are.equal(site, Sources[source])
+        assert.are.equal(site, Sites[source])
 
         library.name = "My Books"
         assert.is_true(Libraries.update(library))
-        assert.are_not.equal(site, Sources[source])
-        assert.are.equal("My Books", Sources[source].NAME)
+        assert.are_not.equal(site, Sites[source])
+        assert.are.equal("My Books", Sites[source].NAME)
         assert.are.equal("My Books", Libraries.find(library.id).name)
     end)
 

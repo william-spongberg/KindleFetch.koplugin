@@ -1,4 +1,4 @@
-local Sources = require("api.sources")
+local Sites = require("api.sites")
 local MultiSearch = require("api.multisearch")
 local StringUtil = require("util.stringutil")
 local T = require("ffi/util").template
@@ -83,7 +83,7 @@ BookFilter.FILTERS = {
         id = "site",
         name = _("Sites"),
         valuesOf = function(book)
-            local site = Sources[book.source]
+            local site = Sites[book.source]
             return { site and { code = book.source, text = site.NAME } or unknown() }
         end,
         before = function(a, b)

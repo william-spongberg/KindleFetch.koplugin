@@ -82,7 +82,7 @@ describe("MultiSearch", function()
             archive = fakeSite("Internet Archive", { "title", "author" }),
             zlib = fakeSite("Z-Library"),
         }
-        helper.stub("api.sources", sites)
+        helper.stub("api.sites", sites)
         MultiSearch = require("api.multisearch")
     end)
 

@@ -10,10 +10,10 @@ local StringUtil = require("util.stringutil")
 -- logged into with its own login (see LibrarySites)
 local Libraries = {}
 
--- the sites offered (see register), by their names in Sources, each with what it was made from (see signature)
+-- the sites offered (see register), by their names in Sites, each with what it was made from (see signature)
 local registered = {}
 
--- the name a library is searched as in Sources, which the books found in it are saved with
+-- the name a library is searched as in Sites, which the books found in it are saved with
 function Libraries.source(library)
     return "library_" .. library.id
 end
@@ -64,7 +64,7 @@ function Libraries.find(id)
     end
 end
 
--- a new library's id, which isn't another's, as its site's name in Sources is made from it (see source)
+-- a new library's id, which isn't another's, as its site's name in Sites is made from it (see source)
 local function newId(libraries)
     local taken = {}
     for __, library in ipairs(libraries) do

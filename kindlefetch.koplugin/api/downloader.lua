@@ -13,14 +13,14 @@ local CurlUtil = require("util.curlutil")
 local HttpDownload = require("util.httpdownload")
 local FileCheck = require("util.filecheck")
 local ProxyUtil = require("util.proxyutil")
-local Sources = require("api.sources")
+local Sites = require("api.sites")
 local CoverCache = require("cache.covercache")
 local Errors = require("util.errors")
 local Guard = require("util.guard")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- downloads books from the site they were found on (see Sources), in the background
+-- downloads books from the site they were found on (see Sites), in the background
 local Downloader = {}
 Downloader.active_downloads = {}
 -- how many downloads have been started this session, to list them in the order they were (see getActiveDownloads)
@@ -39,7 +39,7 @@ local SERVER_FAILURES = { [6] = true, [7] = true, [28] = true, [52] = true, [56]
 -- how often a download that's waiting for Wi-Fi checks whether it's back, as KOReader doesn't say so on every device
 local RECONNECT_POLL_INTERVAL = 2
 
--- what a site listed a book's file as (see findDownloadLink in Sources), to check what arrives against (see checkBook):
+-- what a site listed a book's file as (see findDownloadLink in Sites), to check what arrives against (see checkBook):
 -- its md5 (in lower case) and how many bytes it is, of those it gave that are what they should be
 local function expectedFile(listed)
     listed = type(listed) == "table" and listed or {}
@@ -176,7 +176,7 @@ local function resumeTransfer(transfer)
     end
     transfer.progress_widget:update(
         transfer.progress_widget.percentage or 0,
-        T(_("Waiting for %1..."), Sources[transfer.book.source].NAME)
+        T(_("Waiting for %1..."), Sites[transfer.book.source].NAME)
     )
     return true
 end
@@ -278,10 +278,7 @@ local function checkBook(transfer)
     local problem, start = FileCheck.problem(transfer.part_path, book.file_type)
     if problem == "web page" then
         LogUtil.warn(string.format("a web page arrived in place of %q: %s", book.title, start))
-        rejectBook(
-            transfer,
-            T(_("%1 sent a web page rather than the book, try again later"), Sources[book.source].NAME)
-        )
+        rejectBook(transfer, T(_("%1 sent a web page rather than the book, try again later"), Sites[book.source].NAME))
         return
     elseif problem then
         LogUtil.warn(string.format("what arrived of %q isn't %s: %s", book.title, book.file_type, start))
@@ -457,7 +454,7 @@ function pollDownload(transfer)
             err = http_status >= 500
                     and T(
                         _("%1 is too busy to send books right now, try again in a few minutes"),
-                        Sources[book.source].NAME
+                        Sites[book.source].NAME
                     )
                 or T(_("%1 (HTTP %2)"), err, http_status)
         end
@@ -486,7 +483,7 @@ end
 -- failed_url is the link the book failed to download from, when asking for another (see transfer.relink), and hidden
 -- is whether its progress was hidden, when trying again, so it stays hidden rather than showing again
 function Downloader:_startDownload(book, filepath, callback, retrying, failed_url, hidden)
-    local source = Sources[book.source]
+    local source = Sites[book.source]
     LogUtil.info(
         string.format(
             "downloading %q (%s, %s, id %s) to %s%s",
@@ -504,7 +501,7 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     -- one, and a book being downloaded over is kept until then
     local transfer = {
         book = book,
-        -- the site it's from (see Sources)
+        -- the site it's from (see Sites)
         site = source,
         part_path = filepath .. ".part",
         resume = true,

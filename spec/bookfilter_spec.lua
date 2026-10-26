@@ -5,7 +5,7 @@ describe("BookFilter", function()
 
     before_each(function()
         helper.reset()
-        helper.stub("api.sources", {
+        helper.stub("api.sites", {
             zlib = { NAME = "Z-Library" },
             libgen = { NAME = "Library Genesis" },
             archive = { NAME = "Internet Archive" },

@@ -9,8 +9,8 @@ local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- searches Library Genesis, and finds its books' download links (see Sources)
-local LlgiSearch = {
+-- searches Library Genesis, and finds its books' download links (see Sites)
+local LibgenSearch = {
     NAME = "Library Genesis",
     -- searches are narrowed down to the book types chosen in the settings, which are Library Genesis' topics
     HAS_BOOK_TYPES = true,
@@ -18,7 +18,7 @@ local LlgiSearch = {
 }
 
 -- constants
-local SOURCE = LlgiSearch.SOURCE
+local SOURCE = LibgenSearch.SOURCE
 -- the results asked for on each page, though Library Genesis sends 25 however many are asked for (see hasMorePages)
 local RESULTS_PER_PAGE = 100
 -- as many results as Library Genesis sends on a page, on every page but its last
@@ -171,7 +171,7 @@ end
 -- books in the preferred languages and file types, the number of results on the page, and the number of its rows
 -- that couldn't be read as books, which aren't results: they were said to be results in other languages or file
 -- types, when Library Genesis had changed its page
-function LlgiSearch.parseResults(html, base_url, languages, file_types)
+function LibgenSearch.parseResults(html, base_url, languages, file_types)
     local books = {}
     local tbody = html:match('id="tablelibgen".-<tbody>(.-)</tbody>')
     if not tbody then
@@ -202,7 +202,7 @@ end
 -- whether Library Genesis has more results after the given page, which had this many: as it says itself, in the
 -- script showing links to its pages (which it leaves out when there's only one), or failing that, when the page was
 -- full. a page of fewer results than were asked for isn't its last, as it sends 25 whatever's asked for (#56)
-function LlgiSearch.hasMorePages(html, page, results)
+function LibgenSearch.hasMorePages(html, page, results)
     local pages = tonumber(html:match('new Paginator%(%s*"paginator_example_top"%s*,%s*(%d+)'))
     if pages then
         return page < pages
@@ -210,9 +210,9 @@ function LlgiSearch.hasMorePages(html, page, results)
     return results >= FULL_PAGE
 end
 
--- what a search can be narrowed to (see Sources), searching only those of its fields (the boxes ticked on its search
+-- what a search can be narrowed to (see Sites), searching only those of its fields (the boxes ticked on its search
 -- page), rather than the books' titles, authors and series
-LlgiSearch.SCOPES = { "title", "author", "isbn" }
+LibgenSearch.SCOPES = { "title", "author", "isbn" }
 local SCOPE_COLUMNS = {
     title = { "t" },
     author = { "a" },
@@ -220,7 +220,7 @@ local SCOPE_COLUMNS = {
 }
 local COLUMNS = { "t", "a", "s" }
 
-function LlgiSearch.buildParams(query, page, book_types, scope)
+function LibgenSearch.buildParams(query, page, book_types, scope)
     local params = {
         "req=" .. util.urlEncode(query),
         "res=" .. RESULTS_PER_PAGE,
@@ -417,7 +417,7 @@ local function fetchResults(params)
 end
 
 -- whether there are results saved from an earlier search, which can be shown without an internet connection
-function LlgiSearch:isCached(query, page, scope)
+function LibgenSearch:isCached(query, page, scope)
     return SearchCache:hasPage(self, query, page, scope)
 end
 
@@ -430,7 +430,7 @@ local function searchPages(query, page, scope, languages, file_types, book_types
     local next_page = page
     local results_read = 0
     for __ = 1, MAX_PAGES do
-        local html, err, url = fetchResults(LlgiSearch.buildParams(query, next_page, book_types, scope))
+        local html, err, url = fetchResults(LibgenSearch.buildParams(query, next_page, book_types, scope))
         if not html then
             -- show the books found so far, carrying on from the page that failed, or that the search was called off
             -- on, rather than throwing away what earlier pages found. that may be none, but how many results they
@@ -455,7 +455,7 @@ local function searchPages(query, page, scope, languages, file_types, book_types
             return nil, err
         end
 
-        local page_books, results, unreadable = LlgiSearch.parseResults(html, url, languages, file_types)
+        local page_books, results, unreadable = LibgenSearch.parseResults(html, url, languages, file_types)
         -- nothing on the page could be read, as when Library Genesis has changed it
         if results == 0 and unreadable > 0 and #books == 0 and results_read == 0 then
             return nil, Errors.UNREADABLE
@@ -477,7 +477,7 @@ local function searchPages(query, page, scope, languages, file_types, book_types
             end
         end
 
-        if not LlgiSearch.hasMorePages(html, next_page, results) then
+        if not LibgenSearch.hasMorePages(html, next_page, results) then
             next_page = nil
             break
         end
@@ -502,7 +502,7 @@ end
 -- (or nil once there are no more results), and how many results were read to find them: most may have been in
 -- other languages or file types (unknown, so nil, for books saved from an earlier search). scope narrows it down to
 -- one of the books' fields, where given (see SCOPES)
-function LlgiSearch:search(query, page, scope)
+function LibgenSearch:search(query, page, scope)
     return SearchCache:search(self, query, page, scope, function(languages, file_types, book_types)
         return searchPages(query, page, scope, languages, file_types, book_types)
     end)
@@ -511,7 +511,7 @@ end
 -- the book's download link, from the first mirror whose download page has one, looked up on Wikipedia again
 -- when retrying. otherwise nil, and why not (HttpUtil.CANCELLED when called off), and whether a mirror failed,
 -- rather than not having the book
-function LlgiSearch.findDownloadLink(book, retrying)
+function LibgenSearch.findDownloadLink(book, retrying)
     -- get urls from cache, or scrape them from wikipedia again when retrying
     local base_urls, urls_err = UrlApi:getLibgenUrls(retrying)
     if not base_urls then
@@ -620,4 +620,4 @@ function LlgiSearch.findDownloadLink(book, retrying)
         mirror_failed
 end
 
-return LlgiSearch
+return LibgenSearch

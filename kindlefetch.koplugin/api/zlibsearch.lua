@@ -7,7 +7,7 @@ local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- searches Z-Library as the account logged into (see ZlibAccount), and finds its books' download links (see Sources)
+-- searches Z-Library as the account logged into (see ZlibAccount), and finds its books' download links (see Sites)
 local ZlibSearch = {
     NAME = "Z-Library",
     -- searching it needs an account, logged into before searching (see ZlibLogin)
@@ -179,7 +179,7 @@ local function fetchResults(query, page, languages, file_types)
 end
 
 -- search the given page of Z-Library's results, returning the books found, the page to carry on from (or nil once
--- there are no more results), and how many results were read to find them (as LlgiSearch:search does)
+-- there are no more results), and how many results were read to find them (as LibgenSearch:search does)
 function ZlibSearch:search(query, page)
     return SearchCache:search(self, query, page, nil, function(languages, file_types)
         return fetchResults(query, page, languages, file_types)

@@ -11,7 +11,7 @@ local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- searches the OPDS catalogue of a library the user has added (see Libraries), such as Calibre's content server's or
--- Calibre-Web's, and finds its books' files (see Sources). each library is a site of its own (see new), searched with
+-- Calibre-Web's, and finds its books' files (see Sites). each library is a site of its own (see new), searched with
 -- the search its catalogue gives (see discover), for the languages and file types chosen in the settings
 local OpdsSearch = {}
 OpdsSearch.__index = OpdsSearch
@@ -79,7 +79,7 @@ local IMAGES = {
 -- how big a thumbnail to ask Calibre's content server for (whose own are 60 by 80), for the covers in the results
 local CALIBRE_THUMBNAIL_SIZE = "200x300"
 
--- a library's site for searching and downloading from, as source (its name in Sources), from library: { name, url
+-- a library's site for searching and downloading from, as source (its name in Sites), from library: { name, url
 -- (its catalogue's address), kind (see CALIBRE), search_url (the template of its search, see discover) }. Calibre's
 -- can be narrowed down to the books' titles, authors or ISBNs, as its search takes its own search's syntax
 function OpdsSearch.new(source, library)
@@ -358,7 +358,7 @@ end
 
 -- search the given page of the library's results, returning the books found, the page to carry on from (or nil once
 -- there are no more results), and how many results were read to find them, narrowed down by scope, where given (as
--- LlgiSearch:search does)
+-- LibgenSearch:search does)
 function OpdsSearch:search(query, page, scope)
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
@@ -433,7 +433,7 @@ function OpdsSearch:search(query, page, scope)
 end
 
 -- the book's download link, from its entry in the catalogue, then nil, nil and how many bytes the catalogue lists the
--- file as (which what arrives is checked against), as Sources says
+-- file as (which what arrives is checked against), as Sites says
 function OpdsSearch:downloadLink(book)
     if not StringUtil.isSafeUrl(book.download_url) then
         return nil, T(_("%1 doesn't have this book as %2"), self.NAME, tostring(book.file_type):upper())

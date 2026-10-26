@@ -9,7 +9,7 @@ local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- searches Project Gutenberg's free ebooks, which anyone can download, with its own catalogue's search (its OPDS
--- feed), and finds their files in the catalogue (see Sources)
+-- feed), and finds their files in the catalogue (see Sites)
 local GutenbergSearch = {
     NAME = "Project Gutenberg",
     SOURCE = "gutenberg",
@@ -186,7 +186,7 @@ local function fetchResults(query, page, languages, file_types)
 end
 
 -- search the given page of Project Gutenberg's results, returning the books found, the page to carry on from (or nil
--- once there are no more results), and how many results were read to find them (as LlgiSearch:search does). it can't
+-- once there are no more results), and how many results were read to find them (as LibgenSearch:search does). it can't
 -- be narrowed down to the books' titles or authors, so searches both
 function GutenbergSearch:search(query, page)
     return SearchCache:search(self, query, page, nil, function(languages, file_types)

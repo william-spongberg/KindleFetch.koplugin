@@ -221,9 +221,9 @@ kindlefetch.koplugin/
 │   └── settingspage.lua       # UI for configuring user preferences, and clearing the caches
 ├── api/
 │   ├── downloader.lua         # Downloads books from the site they were found on, with progress tracking and error recovery
-│   ├── sources.lua            # The sites books can be searched for and downloaded from
+│   ├── sites.lua              # The sites books can be searched for and downloaded from
 │   ├── multisearch.lua        # Searches the sites ticked at once, each in a coroutine of its own, passing on each one's books as soon as it has found them
-│   ├── lglisearch.lua         # Searches Library Genesis and finds its download links; parses HTML, filters by preferences and caches results
+│   ├── libgensearch.lua       # Searches Library Genesis and finds its download links; parses HTML, filters by preferences and caches results
 │   ├── iasearch.lua           # Searches Internet Archive's books that anyone can download, and finds their files, with its search API
 │   ├── gutenbergsearch.lua    # Searches Project Gutenberg's free ebooks with its catalogue's search, and finds their files in the catalogue
 │   ├── opdssearch.lua         # Finds the OPDS catalogue of a library of your own, such as Calibre's content server's or Calibre-Web's, and searches it in its own way, finding its books' files
@@ -289,7 +289,7 @@ kindlefetch.koplugin/
    - Book cover loading can be toggled on/off (for efficiency)
    - All settings are persisted and applied to future searches
 
-2. **Search Phase** (`MultiSearch`, `LlgiSearch`, `IaSearch`, `GutenbergSearch`, `ZlibSearch`, `OpdsSearch`)
+2. **Search Phase** (`MultiSearch`, `LibgenSearch`, `IaSearch`, `GutenbergSearch`, `ZlibSearch`, `OpdsSearch`)
    - User enters a search query via InputDialog, or chooses one of the last 10 from its Recent button
    - The sites ticked in the search box (`MultiSearch`) are searched at once, each in a coroutine of its own, so each one's books are shown as soon as it has found them, with the sites still being searched listed at the end. Where pages are fetched with KOReader's own HTTP, which holds KOReader up, they're searched one after another instead, with what has been found shown in between. A site that fails is said to have over the books the others found, Load more carries on from each site that has more, and Cancel calls them all off
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)

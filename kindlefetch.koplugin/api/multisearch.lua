@@ -1,10 +1,10 @@
 local Trapper = require("ui/trapper")
-local Sources = require("api.sources")
+local Sites = require("api.sites")
 local HttpUtil = require("util.httputil")
 local Guard = require("util.guard")
 local Errors = require("util.errors")
 
--- searches several of the sites at once (see Sources), each in a coroutine of its own (see Trapper), so that each one's
+-- searches several of the sites at once (see Sites), each in a coroutine of its own (see Trapper), so that each one's
 -- books can be shown as soon as it has found them, rather than once the slowest site has answered. where pages are
 -- fetched with KOReader's own HTTP, which holds KOReader up until they've arrived, the sites are searched one after
 -- another instead, with KOReader left to show what's been found in between
@@ -16,7 +16,7 @@ MultiSearch.__index = MultiSearch
 local KNOWN_SOURCES = { "zlib", "libgen", "archive", "gutenberg" }
 local added_sources = {}
 
--- the sites, by their names in Sources, in the order they're offered, and searched in where it's one after another:
+-- the sites, by their names in Sites, in the order they're offered, and searched in where it's one after another:
 -- those added (see addSite), then those Kindle Fetch knows
 function MultiSearch.sources()
     local sources = {}
@@ -28,11 +28,11 @@ function MultiSearch.sources()
     return sources
 end
 
--- offer site to search as source (its name in Sources, which the books found on it are saved with), before the sites
+-- offer site to search as source (its name in Sites, which the books found on it are saved with), before the sites
 -- Kindle Fetch knows, e.g. a library the user has added, in place of the site added as source before, where there was
 -- one
 function MultiSearch.addSite(source, site)
-    Sources[source] = site
+    Sites[source] = site
     for __, added in ipairs(added_sources) do
         if added == source then
             return
@@ -41,7 +41,7 @@ function MultiSearch.addSite(source, site)
     table.insert(added_sources, source)
 end
 
--- stop offering the site added as source (see addSite). it's kept in Sources, so the books found on it before, where
+-- stop offering the site added as source (see addSite). it's kept in Sites, so the books found on it before, where
 -- they're showing, are still listed with its name, and can still be downloaded
 function MultiSearch.removeSite(source)
     for i, added in ipairs(added_sources) do
@@ -52,9 +52,9 @@ function MultiSearch.removeSite(source)
     end
 end
 
--- whether the site can narrow a search down to scope, e.g. "author" (see SCOPES in Sources)
+-- whether the site can narrow a search down to scope, e.g. "author" (see SCOPES in Sites)
 function MultiSearch.canNarrow(source, scope)
-    for __, site_scope in ipairs(Sources[source].SCOPES or {}) do
+    for __, site_scope in ipairs(Sites[source].SCOPES or {}) do
         if site_scope == scope then
             return true
         end
@@ -63,10 +63,10 @@ function MultiSearch.canNarrow(source, scope)
 end
 
 -- whether every one of the sites' pages (see start) is saved from an earlier search, to be shown straight away, without
--- an internet connection (see isCached in Sources)
+-- an internet connection (see isCached in Sites)
 function MultiSearch.isCached(query, pages, scope)
     for source, page in pairs(pages) do
-        if not Sources[source]:isCached(query, page, MultiSearch.canNarrow(source, scope) and scope or nil) then
+        if not Sites[source]:isCached(query, page, MultiSearch.canNarrow(source, scope) and scope or nil) then
             return false
         end
     end
@@ -76,8 +76,9 @@ end
 -- search the sites in pages (the page of each one's results to search from, by its name, e.g. { libgen = 1,
 -- archive = 1 }) for query, narrowed down to scope on those that can be (see canNarrow). as each site's search
 -- finishes, handlers.on_result(source, books, err, next_page, results_read) is called with what it returned (see
--- LlgiSearch:search), and once every one has, handlers.on_done(). handlers.on_status(text), where given, is called with
--- what a site's search says it's waiting for (see HttpUtil.sayStatus). returns the search, to call off (see cancel)
+-- LibgenSearch:search), and once every one has, handlers.on_done(). handlers.on_status(text), where given, is called
+-- with what a site's search says it's waiting for (see HttpUtil.sayStatus). returns the search, to call off (see
+-- cancel)
 function MultiSearch.start(query, pages, scope, handlers)
     local search = setmetatable({
         query = query,
@@ -112,7 +113,7 @@ function MultiSearch:startNext()
     if not source then
         return
     end
-    Guard.nextTick("starting a search of " .. Sources[source].NAME, function()
+    Guard.nextTick("starting a search of " .. Sites[source].NAME, function()
         self:searchSite(source)
     end, function(err)
         self:finish(source, nil, err)
@@ -124,7 +125,7 @@ function MultiSearch:searchSite(source)
         self:finish(source, nil, HttpUtil.CANCELLED)
         return
     end
-    local site = Sources[source]
+    local site = Sites[source]
     local handlers = self.handlers
     -- what calls off this site's search, and is told what it's waiting for: a stand-in for the message saying the
     -- search is going on, as Trapper gives each wait its own way to be called off, on the widget it waits with, and

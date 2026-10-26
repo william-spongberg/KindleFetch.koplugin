@@ -13,7 +13,7 @@ local Diagnostics = require("ui.diagnostics")
 local util = require("util")
 local NetworkMgr = require("ui/network/manager")
 local StringUtil = require("util.stringutil")
-local Sources = require("api.sources")
+local Sites = require("api.sites")
 local MultiSearch = require("api.multisearch")
 local Downloader = require("api.downloader")
 local HttpUtil = require("util.httputil")
@@ -108,13 +108,13 @@ function KindleFetch:onDispatcherRegisterActions()
     Dispatcher:registerAction("kindlefetch_archive_action", {
         category = "none",
         event = "KindleFetchArchive",
-        title = T(_("Kindle Fetch: search %1"), Sources.archive.NAME),
+        title = T(_("Kindle Fetch: search %1"), Sites.archive.NAME),
         general = true,
     })
     Dispatcher:registerAction("kindlefetch_zlib_action", {
         category = "none",
         event = "KindleFetchZlib",
-        title = T(_("Kindle Fetch: search %1"), Sources.zlib.NAME),
+        title = T(_("Kindle Fetch: search %1"), Sites.zlib.NAME),
         general = true,
     })
 end
@@ -393,15 +393,15 @@ end
 
 -- whether the site can only be searched once logged into, and isn't. then logs in, calling on_logged_in once it has
 local function needsLogin(source, on_logged_in)
-    if not (Sources[source] and Sources[source].NEEDS_LOGIN) or ZlibAccount:isLoggedIn() then
+    if not (Sites[source] and Sites[source].NEEDS_LOGIN) or ZlibAccount:isLoggedIn() then
         return false
     end
-    LogUtil.info("logging in to", Sources[source].NAME, "before searching it")
+    LogUtil.info("logging in to", Sites[source].NAME, "before searching it")
     ZlibLogin.show(on_logged_in)
     return true
 end
 
--- the name of what a search can be narrowed to (see SCOPES in Sources), or of searching all a site does
+-- the name of what a search can be narrowed to (see SCOPES in Sites), or of searching all a site does
 local function scopeName(scope)
     return ({ title = _("Title"), author = _("Author"), isbn = _("ISBN") })[scope] or _("All")
 end
@@ -419,14 +419,14 @@ end
 -- whether the site can be searched now: one that needs an account (Z-Library) only once logged into, and it's left
 -- out of the search otherwise, though ticked, rather than asking to log in to it for every search
 local function canSearch(source)
-    return not Sources[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn()
+    return not Sites[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn()
 end
 
 -- the sites' names, as they're said together, e.g. "Library Genesis and Internet Archive"
 local function sitesName(sources)
     local names = {}
     for __, source in ipairs(sources) do
-        table.insert(names, Sources[source].NAME)
+        table.insert(names, Sites[source].NAME)
     end
     if #names <= 1 then
         return names[1] or ""
@@ -464,7 +464,7 @@ local function sitesText(sources)
     if #sources == #offered - 1 and #sources > 1 then
         for __, source in ipairs(offered) do
             if not isTicked(sources, source) then
-                return T(_("Sites: All but %1"), Sources[source].NAME)
+                return T(_("Sites: All but %1"), Sites[source].NAME)
             end
         end
     end
@@ -480,7 +480,7 @@ local function describeFailures(one, several, failures, sites_searched)
     end
     local lines = {}
     for __, failure in ipairs(failures) do
-        table.insert(lines, T(_("%1: %2"), Sources[failure.source].NAME, failure.err))
+        table.insert(lines, T(_("%1: %2"), Sites[failure.source].NAME, failure.err))
     end
     return T(several, table.concat(lines, "\n"))
 end
@@ -505,7 +505,7 @@ end
 
 -- open the search box, for searching the sites ticked in it: sources, where given (e.g. the site a gesture is for),
 -- otherwise those ticked last (see KindleFetchSettings:getSearchSources). with query in it, where given, narrowed down
--- to scope (e.g. only the books' authors, see SCOPES in Sources) where given, on the sites that can be, and searching
+-- to scope (e.g. only the books' authors, see SCOPES in Sites) where given, on the sites that can be, and searching
 -- straight away when search_now is set, e.g. another site for what one found nothing for (see otherSites)
 function KindleFetch:setupUI(query, scope, sources, search_now)
     -- grab self reference for callbacks
@@ -591,7 +591,7 @@ function KindleFetch:chooseSites()
         return isTicked(this.sources, source) and canSearch(source)
     end
     local function label(source)
-        local text = (shownTicked(source) and "✓ " or "") .. Sources[source].NAME
+        local text = (shownTicked(source) and "✓ " or "") .. Sites[source].NAME
         if not canSearch(source) then
             return T(_("%1 (log in)"), text)
         end
@@ -654,7 +654,7 @@ function KindleFetch:chooseSites()
     UIManager:show(dialog)
 end
 
--- choose what the search is narrowed down to (see SCOPES in Sources), e.g. only the books' authors, or all a site
+-- choose what the search is narrowed down to (see SCOPES in Sites), e.g. only the books' authors, or all a site
 -- searches, for the search box that's open: whatever any site can be narrowed down to, as those that can't search
 -- everything
 function KindleFetch:chooseScope()
@@ -663,7 +663,7 @@ function KindleFetch:chooseScope()
     local row = {}
     local scopes, offered = { false }, {}
     for __, source in ipairs(MultiSearch.sources()) do
-        for __, scope in ipairs(Sources[source].SCOPES or {}) do
+        for __, scope in ipairs(Sites[source].SCOPES or {}) do
             if not offered[scope] then
                 offered[scope] = true
                 table.insert(scopes, scope)
@@ -737,11 +737,11 @@ function KindleFetch:otherSites(query)
     for __, source in ipairs(MultiSearch.sources()) do
         if not isTicked(searched, source) and canSearch(source) then
             table.insert(buttons, {
-                text = T(_("Search %1"), Sources[source].NAME),
+                text = T(_("Search %1"), Sites[source].NAME),
                 callback = function()
                     -- once what it's in has closed
                     Guard.nextTick("searching another site", function()
-                        LogUtil.info(string.format("searching %s for %q instead", Sources[source].NAME, query))
+                        LogUtil.info(string.format("searching %s for %q instead", Sites[source].NAME, query))
                         local scope = self.scope
                         self:closeSearch()
                         -- narrowed down as these were, where it can be
@@ -771,7 +771,7 @@ function KindleFetch:performSearch()
     local sources = self:sitesToSearch()
     local has_book_types = false
     for __, source in ipairs(sources) do
-        has_book_types = has_book_types or Sources[source].HAS_BOOK_TYPES == true
+        has_book_types = has_book_types or Sites[source].HAS_BOOK_TYPES == true
     end
     local turned_off = #KindleFetchSettings:getPreferredLanguages() == 0 and "language"
         or #KindleFetchSettings:getPreferredFileTypes() == 0 and "file type"
@@ -829,7 +829,7 @@ function KindleFetch:searchFrom(query, pages)
     local waiting_text = T(_("Searching %1 for\n“%2”..."), sitesName(sources), query)
     self:startSearch(query, pages, waiting_text, {
         on_result = function(source, books, err, next_page, read)
-            local name = Sources[source].NAME
+            local name = Sites[source].NAME
             if err == HttpUtil.CANCELLED then
                 called_off = true
                 LogUtil.info(string.format("search of %s for %q was called off", name, query))
@@ -894,7 +894,7 @@ end
 function KindleFetch:sayFailed(failures)
     for __, failure in ipairs(failures) do
         if failure.err ~= Errors.LIBRARY_UNREACHABLE or not unreachable_said[failure.source] then
-            NotifyUtil.error(T(_("Searching %1 failed: %2"), Sources[failure.source].NAME, failure.err))
+            NotifyUtil.error(T(_("Searching %1 failed: %2"), Sites[failure.source].NAME, failure.err))
         end
         if failure.err == Errors.LIBRARY_UNREACHABLE then
             unreachable_said[failure.source] = true
@@ -1216,8 +1216,8 @@ end
 -- on, where several were searched
 function KindleFetch:bookItemText(book)
     local text = bookText(book)
-    if self.several_sites and Sources[book.source] then
-        text = StringUtil.joinDetails(text, Sources[book.source].NAME)
+    if self.several_sites and Sites[book.source] then
+        text = StringUtil.joinDetails(text, Sites[book.source].NAME)
     end
     return text
 end
@@ -1537,7 +1537,7 @@ function KindleFetch:searchAgain()
         { text = _("File types…"), change = SettingsPage.changeFileTypes },
     }
     for __, source in ipairs(self:sitesToSearch()) do
-        if Sources[source].HAS_BOOK_TYPES then
+        if Sites[source].HAS_BOOK_TYPES then
             table.insert(changes, { text = _("Book types…"), change = SettingsPage.changeBookTypes })
             break
         end
@@ -1628,7 +1628,7 @@ function KindleFetch:showBooks(books)
         end,
         -- and which site each was found on, where several were searched
         source_name = self.several_sites and function(book)
-            return Sources[book.source] and Sources[book.source].NAME
+            return Sites[book.source] and Sites[book.source].NAME
         end or nil,
         -- once it's closed, as with its X, the sites still being searched are called off, as their books would have
         -- nowhere to go, and saying they failed would come out of nowhere
@@ -1689,7 +1689,7 @@ function KindleFetch:loadMoreBooks()
             if err or not books then
                 err = err or "search failed"
                 LogUtil.warn(
-                    string.format("loading more books from %s for %q failed: %s", Sources[source].NAME, query, err)
+                    string.format("loading more books from %s for %q failed: %s", Sites[source].NAME, query, err)
                 )
                 table.insert(failures, { source = source, err = err })
                 return

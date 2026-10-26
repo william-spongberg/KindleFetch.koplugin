@@ -299,7 +299,7 @@ describe("IaSearch", function()
             assert.are.equal(1, #searches())
             assert.are.equal("emma00aust", books[1].identifier)
             -- unlike Library Genesis' results for the same search
-            assert.is_false(require("api.lglisearch"):isCached("emma", 1))
+            assert.is_false(require("api.libgensearch"):isCached("emma", 1))
         end)
 
         it("doesn't save a search that found nothing, which may have been an error", function()

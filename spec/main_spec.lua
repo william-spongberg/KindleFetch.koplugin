@@ -298,7 +298,7 @@ describe("KindleFetch", function()
                 return trap_widget
             end,
         })
-        helper.stub("api.lglisearch", {
+        helper.stub("api.libgensearch", {
             NAME = "Library Genesis",
             HAS_BOOK_TYPES = true,
             SCOPES = { "title", "author", "isbn" },

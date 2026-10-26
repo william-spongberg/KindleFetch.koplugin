@@ -11,7 +11,7 @@ local T = require("ffi/util").template
 local _ = require("gettext")
 
 -- searches the books on Internet Archive that anyone can download, rather than only borrow, and finds their files'
--- download links (see Sources)
+-- download links (see Sites)
 local IaSearch = {
     NAME = "Internet Archive",
     SOURCE = "archive",
@@ -81,7 +81,7 @@ local function quote(term)
     return '"' .. term:gsub('[\\"]', "\\%0") .. '"'
 end
 
--- what a search can be narrowed to (see Sources): only the books' titles, the names of their authors, or their ISBNs
+-- what a search can be narrowed to (see Sites): only the books' titles, the names of their authors, or their ISBNs
 IaSearch.SCOPES = { "title", "author", "isbn" }
 local SCOPE_FIELDS = {
     title = "title",
@@ -369,7 +369,7 @@ end
 
 -- search the given page of Internet Archive's results, returning the books found, the page to carry on from (or
 -- nil once there are no more results), and how many results were read to find them, narrowed down by scope, where
--- given (as LlgiSearch:search does)
+-- given (as LibgenSearch:search does)
 function IaSearch:search(query, page, scope)
     return SearchCache:search(self, query, page, scope, function(languages, file_types)
         return fetchResults(query, page, scope, languages, file_types)
@@ -407,7 +407,7 @@ local function pickFile(files, file_type)
 end
 
 -- the book's download link, from the list of the files in its folder on Internet Archive, then nil, nil and what it
--- lists the file as (see Sources). otherwise nil, and why not (HttpUtil.CANCELLED when called off)
+-- lists the file as (see Sites). otherwise nil, and why not (HttpUtil.CANCELLED when called off)
 function IaSearch.findDownloadLink(book)
     local body, err, status = HttpUtil.getBody(string.format("%s/metadata/%s/files", SITE, book.identifier))
     if err == HttpUtil.CANCELLED then

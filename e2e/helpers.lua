@@ -205,7 +205,7 @@ function H.isPublicDomain(book)
     return title == "pride and prejudice" and (authors == "austen, jane" or authors == "jane austen")
 end
 
--- the sites, by the names they're said with, as Kindle Fetch knows them (see Sources)
+-- the sites, by the names they're said with, as Kindle Fetch knows them (see Sites)
 H.SITES = {
     ["Library Genesis"] = "libgen",
     ["Internet Archive"] = "archive",
@@ -213,7 +213,7 @@ H.SITES = {
     ["Z-Library"] = "zlib",
 }
 
--- the name a site is searched as (see Sources), by the name it's said with: one Kindle Fetch knows (see SITES), or a
+-- the name a site is searched as (see Sites), by the name it's said with: one Kindle Fetch knows (see SITES), or a
 -- library added in the settings
 local function sourceOf(site)
     if H.SITES[site] then

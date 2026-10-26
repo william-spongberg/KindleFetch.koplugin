@@ -2,14 +2,18 @@ local helper = require("helper")
 local fixtures = require("fixtures")
 
 -- mirrors are scraped from the live Wikipedia page, so these need internet access
-describe("LlgiSearch", function()
-    local web, mirrors, LlgiSearch
+describe("LibgenSearch", function()
+    local web, mirrors, LibgenSearch
 
     -- with the default book types
     local function searchUrl(mirror, page, query)
         return mirror
             .. "/index.php?"
-            .. LlgiSearch.buildParams(query or "dune", page or 1, require("settings.settings"):getPreferredBookTypes())
+            .. LibgenSearch.buildParams(
+                query or "dune",
+                page or 1,
+                require("settings.settings"):getPreferredBookTypes()
+            )
     end
 
     -- the books on the given page of results, of the pages Library Genesis says there are, when it says
@@ -35,14 +39,14 @@ describe("LlgiSearch", function()
         mirrors = fixtures.scrapeMirrors(web, function(UrlApi)
             return UrlApi:getLibgenUrls()
         end, "Library Genesis")
-        LlgiSearch = require("api.lglisearch")
+        LibgenSearch = require("api.libgensearch")
     end)
 
     after_each(helper.cleanup)
 
     describe("search", function()
         it("searches the preferred book types", function()
-            LlgiSearch:search("dune messiah", 2)
+            LibgenSearch:search("dune messiah", 2)
 
             assert.are.equal(
                 mirrors[1]
@@ -58,7 +62,7 @@ describe("LlgiSearch", function()
         it("searches the books' titles, authors and series, or the one field the search is narrowed to", function()
             local function columns(scope)
                 local found = {}
-                for column in LlgiSearch.buildParams("dune", 1, {}, scope):gmatch("columns%%5B%%5D=(%a)") do
+                for column in LibgenSearch.buildParams("dune", 1, {}, scope):gmatch("columns%%5B%%5D=(%a)") do
                     table.insert(found, column)
                 end
                 return found
@@ -67,22 +71,22 @@ describe("LlgiSearch", function()
             assert.are.same({ "t" }, columns("title"))
             assert.are.same({ "a" }, columns("author"))
             assert.are.same({ "i" }, columns("isbn"))
-            assert.are.same({ "title", "author", "isbn" }, LlgiSearch.SCOPES)
+            assert.are.same({ "title", "author", "isbn" }, LibgenSearch.SCOPES)
         end)
 
         -- which finds different books
         it("saves a search that's narrowed down apart from one that isn't", function()
             local book_types = require("settings.settings"):getPreferredBookTypes()
-            web.pages[mirrors[1] .. "/index.php?" .. LlgiSearch.buildParams("dune", 1, book_types, "author")] =
+            web.pages[mirrors[1] .. "/index.php?" .. LibgenSearch.buildParams("dune", 1, book_types, "author")] =
                 fixtures.libgenResults({ fixtures.DUNE })
-            assert.are.equal(1, #LlgiSearch:search("dune", 1, "author"))
-            assert.is_true(LlgiSearch:isCached("dune", 1, "author"))
-            assert.is_false(LlgiSearch:isCached("dune", 1))
+            assert.are.equal(1, #LibgenSearch:search("dune", 1, "author"))
+            assert.is_true(LibgenSearch:isCached("dune", 1, "author"))
+            assert.is_false(LibgenSearch:isCached("dune", 1))
             assert.is_truthy(helper.logged("info", '^searching Library Genesis for "dune" by author from page 1, in '))
         end)
 
         it("maps every book type to a Library Genesis topic", function()
-            local params = LlgiSearch.buildParams(
+            local params = LibgenSearch.buildParams(
                 "dune",
                 1,
                 { "fiction", "nonfiction", "comics", "magazines", "articles", "standards", "unknown" }
@@ -96,7 +100,7 @@ describe("LlgiSearch", function()
 
         it("reads each book from the results table", function()
             results(mirrors[1], { fixtures.DUNE, fixtures.MESSIAH })
-            local books = LlgiSearch:search("dune", 1)
+            local books = LibgenSearch:search("dune", 1)
 
             assert.are.equal(2, #books)
             -- the search and what it found, for crash.log
@@ -133,7 +137,7 @@ describe("LlgiSearch", function()
                     file_type = "cbr",
                 },
             })
-            local book = LlgiSearch:search("dune", 1)[1]
+            local book = LibgenSearch:search("dune", 1)[1]
 
             -- without what's in brackets, like every title
             assert.are.equal("Dune - House Atreides", book.title)
@@ -150,7 +154,7 @@ describe("LlgiSearch", function()
                     file_type = "cbr",
                 },
             })
-            assert.are.equal("Dune Comics", LlgiSearch:search("dune", 1)[1].title)
+            assert.are.equal("Dune Comics", LibgenSearch:search("dune", 1)[1].title)
         end)
 
         it("finds the title after a comic's series and issue number", function()
@@ -167,7 +171,7 @@ describe("LlgiSearch", function()
                     file_type = "cbz",
                 },
             })
-            local book = LlgiSearch:search("dune", 1)[1]
+            local book = LibgenSearch:search("dune", 1)[1]
 
             assert.are.equal("Dune - The official Marvel Comics adaptation", book.title)
             assert.are.equal("Comics issue", book.book_type)
@@ -183,7 +187,7 @@ describe("LlgiSearch", function()
                     file_type = "epub",
                 },
             })
-            assert.are.equal("https://covers.example/abc.jpg", LlgiSearch:search("dune", 1)[1].image_url)
+            assert.are.equal("https://covers.example/abc.jpg", LibgenSearch:search("dune", 1)[1].image_url)
         end)
 
         -- covers are downloaded by writing their addresses to a file of options for curl. a mirror could send an
@@ -203,7 +207,7 @@ describe("LlgiSearch", function()
                     file_type = "epub",
                 },
             })
-            local books = LlgiSearch:search("dune", 1)
+            local books = LibgenSearch:search("dune", 1)
 
             assert.are.equal(2, #books)
             assert.is_nil(books[1].image_url)
@@ -220,7 +224,7 @@ describe("LlgiSearch", function()
                     file_type = "EPUB",
                 },
             })
-            local book = LlgiSearch:search("dune", 1)[1]
+            local book = LibgenSearch:search("dune", 1)[1]
 
             assert.are.equal("abc", book.id)
             assert.are.equal("epub", book.file_type)
@@ -243,7 +247,7 @@ describe("LlgiSearch", function()
                     file_type = "epub",
                 },
             })
-            local book = LlgiSearch:search("dune", 1)[1]
+            local book = LibgenSearch:search("dune", 1)[1]
 
             assert.are.equal(title, book.display_title)
             assert.are.equal(string.rep("Author, ", 10):gsub("[,%s]+$", ""), book.authors)
@@ -257,7 +261,7 @@ describe("LlgiSearch", function()
                     file_type = "epub",
                 },
             })
-            local book = LlgiSearch:search("dune", 1)[1]
+            local book = LibgenSearch:search("dune", 1)[1]
 
             assert.are.equal("Orwell, George: Animal farm", book.display_title)
             assert.are.equal("Orwell, George- Animal farm", book.title)
@@ -271,12 +275,12 @@ describe("LlgiSearch", function()
                     file_type = "epub",
                 },
             })
-            assert.are.equal("Pride & Prejudice", LlgiSearch:search("dune", 1)[1].title)
+            assert.are.equal("Pride & Prejudice", LibgenSearch:search("dune", 1)[1].title)
         end)
 
         it("shows each book once, though Library Genesis may list it more than once", function()
             results(mirrors[1], { fixtures.DUNE, fixtures.MESSIAH, fixtures.DUNE })
-            local books = LlgiSearch:search("dune", 1)
+            local books = LibgenSearch:search("dune", 1)
 
             assert.are.same({ "Dune", "Dune Messiah" }, { books[1].title, books[2].title })
             assert.are.equal(2, #books)
@@ -290,7 +294,7 @@ describe("LlgiSearch", function()
                     file_type = "epub",
                 },
             })
-            assert.are.equal("Mr. Mercedes", LlgiSearch:search("dune", 1)[1].title)
+            assert.are.equal("Mr. Mercedes", LibgenSearch:search("dune", 1)[1].title)
         end)
 
         it("skips rows that are not usable books", function()
@@ -315,7 +319,7 @@ describe("LlgiSearch", function()
                 },
                 fixtures.DUNE,
             })
-            local books = LlgiSearch:search("dune", 1)
+            local books = LibgenSearch:search("dune", 1)
 
             assert.are.equal(1, #books)
             assert.are.equal("Dune", books[1].title)
@@ -330,7 +334,7 @@ describe("LlgiSearch", function()
                 { md5 = "abc", title = "Too few cells", file_type = "epub", cells = 9 },
                 { md5 = "def", title = "Dune", language = "Spanish", file_type = "epub" },
             })
-            local books, err, _, results_read = LlgiSearch:search("dune", 1)
+            local books, err, _, results_read = LibgenSearch:search("dune", 1)
             assert.is_nil(err)
             assert.are.same({}, books)
             assert.are.equal(1, results_read)
@@ -342,7 +346,7 @@ describe("LlgiSearch", function()
                 { title = "No md5", file_type = "epub" },
                 { md5 = "abc", title = "Too few cells", file_type = "epub", cells = 9 },
             })
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal(require("util.errors").UNREADABLE, err)
         end)
@@ -368,7 +372,7 @@ describe("LlgiSearch", function()
                     file_type = "epub",
                 },
             })
-            local books = LlgiSearch:search("dune", 1)
+            local books = LibgenSearch:search("dune", 1)
 
             assert.are.same({ "Dune", "Dune unknown language" }, { books[1].title, books[2].title })
             assert.are.equal(2, #books)
@@ -402,7 +406,7 @@ describe("LlgiSearch", function()
                     results(mirrors[1], fullPage(page, 4), page, 10)
                 end
 
-                local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
+                local books, err, next_page, results_read = LibgenSearch:search("dune", 1)
                 assert.is_nil(err)
                 assert.are.equal(12, #books)
                 assert.are.equal("Book 3.4", books[12].title)
@@ -416,7 +420,7 @@ describe("LlgiSearch", function()
                 results(mirrors[1], fullPage(1, 0), 1, 2)
                 results(mirrors[1], { { md5 = "abc", title = "Dune", language = "Spanish", file_type = "epub" } }, 2, 2)
 
-                local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
+                local books, err, next_page, results_read = LibgenSearch:search("dune", 1)
                 assert.are.same({}, books)
                 assert.is_nil(err)
                 assert.is_nil(next_page)
@@ -428,7 +432,7 @@ describe("LlgiSearch", function()
                 results(mirrors[1], fullPage(1, 2), 1, 2)
                 results(mirrors[1], fullPage(2, 1), 2, 2)
 
-                local books, _, next_page = LlgiSearch:search("dune", 1)
+                local books, _, next_page = LibgenSearch:search("dune", 1)
                 assert.are.same({ "Book 1.1", "Book 1.2", "Book 2.1" }, titles(books))
                 assert.is_nil(next_page)
                 assert.are.equal(2, #searches())
@@ -439,7 +443,7 @@ describe("LlgiSearch", function()
             it("carries on while Library Genesis says there are more pages", function()
                 results(mirrors[1], fullPage(1, 10), 1, 80)
 
-                local books, _, next_page = LlgiSearch:search("dune", 1)
+                local books, _, next_page = LibgenSearch:search("dune", 1)
                 assert.are.equal(10, #books)
                 assert.are.equal(2, next_page)
                 assert.are.equal(1, #searches())
@@ -450,7 +454,7 @@ describe("LlgiSearch", function()
                 results(mirrors[1], fullPage(1, 2), 1)
                 results(mirrors[1], { fixtures.DUNE }, 2)
 
-                local books, _, next_page = LlgiSearch:search("dune", 1)
+                local books, _, next_page = LibgenSearch:search("dune", 1)
                 assert.are.same({ "Book 1.1", "Book 1.2", "Dune" }, titles(books))
                 assert.is_nil(next_page)
             end)
@@ -460,7 +464,7 @@ describe("LlgiSearch", function()
                 results(mirrors[1], fullPage(1, 2), 1)
                 web.pages[searchUrl(mirrors[1], 2)] = fixtures.libgenNoResults(25)
 
-                local books, err, next_page = LlgiSearch:search("dune", 1)
+                local books, err, next_page = LibgenSearch:search("dune", 1)
                 assert.is_nil(err)
                 assert.are.same({ "Book 1.1", "Book 1.2" }, titles(books))
                 assert.is_nil(next_page)
@@ -476,7 +480,7 @@ describe("LlgiSearch", function()
                     end
                 end
 
-                local books, err, next_page = LlgiSearch:search("dune", 1)
+                local books, err, next_page = LibgenSearch:search("dune", 1)
                 assert.is_nil(err)
                 assert.are.equal(3, #books)
                 assert.are.equal(2, next_page)
@@ -488,7 +492,7 @@ describe("LlgiSearch", function()
                     results(mirrors[1], fullPage(page, 1), page, 10)
                 end
 
-                local books, _, next_page = LlgiSearch:search("dune", 1)
+                local books, _, next_page = LibgenSearch:search("dune", 1)
                 assert.are.equal(5, #books)
                 assert.are.equal(6, next_page)
                 assert.are.equal(5, #searches())
@@ -497,7 +501,7 @@ describe("LlgiSearch", function()
             it("carries on from the given page", function()
                 results(mirrors[1], { fixtures.DUNE }, 3)
 
-                local books = LlgiSearch:search("dune", 3)
+                local books = LibgenSearch:search("dune", 3)
                 assert.are.same({ "Dune" }, titles(books))
                 assert.are.equal(searchUrl(mirrors[1], 3), searches()[1])
             end)
@@ -505,7 +509,7 @@ describe("LlgiSearch", function()
             it("keeps the books found when a later page fails", function()
                 results(mirrors[1], fullPage(1, 3), 1, 10)
 
-                local books, err, next_page = LlgiSearch:search("dune", 1)
+                local books, err, next_page = LibgenSearch:search("dune", 1)
                 assert.is_nil(err)
                 assert.are.equal(3, #books)
                 -- so the failed page is tried again next time
@@ -517,7 +521,7 @@ describe("LlgiSearch", function()
             it("says how many results it read when a later page fails before any books to show were found", function()
                 results(mirrors[1], fullPage(1, 0), 1, 10)
 
-                local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
+                local books, err, next_page, results_read = LibgenSearch:search("dune", 1)
                 assert.are.same({}, books)
                 assert.is_nil(err)
                 assert.are.equal(2, next_page)
@@ -545,7 +549,7 @@ describe("LlgiSearch", function()
                 it("stops without finding fault with any of the mirrors", function()
                     callOffAt("/index.php?")
 
-                    local books, err = LlgiSearch:search("dune", 1)
+                    local books, err = LibgenSearch:search("dune", 1)
                     assert.is_nil(books)
                     assert.are.equal(HttpUtil.CANCELLED, err)
                     assert.are.equal(1, #searches())
@@ -558,7 +562,7 @@ describe("LlgiSearch", function()
                     results(mirrors[1], fullPage(1, 3), 1, 10)
                     callOffAt("&page=2")
 
-                    local books, err, next_page = LlgiSearch:search("dune", 1)
+                    local books, err, next_page = LibgenSearch:search("dune", 1)
                     assert.is_nil(err)
                     assert.are.equal(3, #books)
                     assert.are.equal(2, next_page)
@@ -570,7 +574,7 @@ describe("LlgiSearch", function()
                     results(mirrors[1], fullPage(1, 0), 1, 10)
                     callOffAt("&page=2")
 
-                    local books, err = LlgiSearch:search("dune", 1)
+                    local books, err = LibgenSearch:search("dune", 1)
                     assert.is_nil(books)
                     assert.are.equal(HttpUtil.CANCELLED, err)
                 end)
@@ -578,7 +582,7 @@ describe("LlgiSearch", function()
                 it("stops while the mirrors are being looked up, rather than taking it for being offline", function()
                     callOffAt("wikipedia.org")
 
-                    local books, err = LlgiSearch:search("dune", 1)
+                    local books, err = LibgenSearch:search("dune", 1)
                     assert.is_nil(books)
                     assert.are.equal(HttpUtil.CANCELLED, err)
                     assert.are.equal(0, #searches())
@@ -590,9 +594,9 @@ describe("LlgiSearch", function()
                 for page = 1, 3 do
                     results(mirrors[1], fullPage(page, 4), page, 10)
                 end
-                LlgiSearch:search("dune", 1)
+                LibgenSearch:search("dune", 1)
 
-                local books, _, next_page = LlgiSearch:search("dune", 1)
+                local books, _, next_page = LibgenSearch:search("dune", 1)
                 assert.are.equal(12, #books)
                 assert.are.equal(4, next_page)
                 assert.are.equal(3, #searches())
@@ -613,40 +617,40 @@ describe("LlgiSearch", function()
             )
             results(mirrors[1], { fixtures.DUNE })
 
-            assert.are.equal("Dune", LlgiSearch:search("dune", 1)[1].title)
+            assert.are.equal("Dune", LibgenSearch:search("dune", 1)[1].title)
         end)
 
         it("caches results", function()
             results(mirrors[1], { fixtures.DUNE })
-            LlgiSearch:search("dune", 1)
-            LlgiSearch:search("dune", 1)
+            LibgenSearch:search("dune", 1)
+            LibgenSearch:search("dune", 1)
 
             assert.are.equal(1, #searches())
         end)
 
         it("says whether a search's results are saved, e.g. to show them offline", function()
             results(mirrors[1], { fixtures.DUNE })
-            assert.is_false(LlgiSearch:isCached("dune", 1))
+            assert.is_false(LibgenSearch:isCached("dune", 1))
 
-            LlgiSearch:search("dune", 1)
-            assert.is_true(LlgiSearch:isCached("dune", 1))
-            assert.is_false(LlgiSearch:isCached("dune", 2))
-            assert.is_false(LlgiSearch:isCached("dune messiah", 1))
+            LibgenSearch:search("dune", 1)
+            assert.is_true(LibgenSearch:isCached("dune", 1))
+            assert.is_false(LibgenSearch:isCached("dune", 2))
+            assert.is_false(LibgenSearch:isCached("dune messiah", 1))
         end)
 
         it("does not cache searches that found nothing", function()
             results(mirrors[1], {})
-            assert.are.same({}, LlgiSearch:search("dune", 1))
+            assert.are.same({}, LibgenSearch:search("dune", 1))
 
             results(mirrors[1], { fixtures.DUNE })
-            assert.are.equal(1, #LlgiSearch:search("dune", 1))
+            assert.are.equal(1, #LibgenSearch:search("dune", 1))
         end)
 
         -- which Library Genesis sends without a table of results, rather than with an empty one
         it("finds no books when Library Genesis has none, without finding fault with the mirror", function()
             web.pages[searchUrl(mirrors[1])] = fixtures.libgenNoResults(0)
 
-            local books, err, next_page, results_read = LlgiSearch:search("dune", 1)
+            local books, err, next_page, results_read = LibgenSearch:search("dune", 1)
             assert.are.same({}, books)
             assert.is_nil(err)
             assert.is_nil(next_page)
@@ -660,7 +664,7 @@ describe("LlgiSearch", function()
         it("tries the next mirror, and the one that didn't answer after the others from then on", function()
             results(mirrors[2], { fixtures.DUNE })
 
-            assert.are.equal(1, #LlgiSearch:search("dune", 1))
+            assert.are.equal(1, #LibgenSearch:search("dune", 1))
             assert.are.same({ searchUrl(mirrors[1]), searchUrl(mirrors[2]) }, searches())
 
             local reordered = {}
@@ -677,12 +681,12 @@ describe("LlgiSearch", function()
             web.pages[searchUrl(mirrors[1])] =
                 "<html><head><title>DDoS-Guard</title></head><body>Checking your browser</body></html>"
             results(mirrors[2], { fixtures.DUNE })
-            assert.are.equal(1, #LlgiSearch:search("dune", 1))
+            assert.are.equal(1, #LibgenSearch:search("dune", 1))
             assert.are.equal(mirrors[2], require("api.urlapi"):getLibgenUrls()[1])
 
             web.fetched = {}
             web.pages[searchUrl(mirrors[2], 1, "dune messiah")] = fixtures.libgenResults({ fixtures.DUNE })
-            assert.are.equal(1, #LlgiSearch:search("dune messiah", 1))
+            assert.are.equal(1, #LibgenSearch:search("dune messiah", 1))
             assert.are.same({ searchUrl(mirrors[2], 1, "dune messiah") }, searches())
         end)
 
@@ -690,7 +694,7 @@ describe("LlgiSearch", function()
             web.pages[searchUrl(mirrors[1])] = "<html><body>Under maintenance</body></html>"
             results(mirrors[2], { fixtures.DUNE })
 
-            assert.are.equal(1, #LlgiSearch:search("dune", 1))
+            assert.are.equal(1, #LibgenSearch:search("dune", 1))
             -- saying what the page was, for crash.log
             assert.matches("Under maintenance", helper.logged("warn", "^unexpected search page from"))
         end)
@@ -715,7 +719,7 @@ describe("LlgiSearch", function()
 
             it("and that the one before didn't answer", function()
                 results(mirrors[2], { fixtures.DUNE })
-                LlgiSearch:search("dune", 1)
+                LibgenSearch:search("dune", 1)
 
                 assert.are.same({
                     string.format("Trying %s (mirror 1 of %d)...", site(mirrors[1]), #mirrors),
@@ -731,7 +735,7 @@ describe("LlgiSearch", function()
             it("and what was wrong with what the one before sent", function()
                 web.pages[searchUrl(mirrors[1])] = "<html><body>Loading...</body></html>"
                 results(mirrors[2], { fixtures.DUNE })
-                LlgiSearch:search("dune", 1)
+                LibgenSearch:search("dune", 1)
 
                 assert.are.equal(
                     string.format(
@@ -749,7 +753,7 @@ describe("LlgiSearch", function()
                     return "<html>Service Unavailable</html>", nil, 503
                 end
                 web.pages[mirrors[2] .. "/ads.php?md5=" .. fixtures.DUNE.md5] = fixtures.libgenAds(fixtures.DUNE.md5)
-                LlgiSearch.findDownloadLink({ id = fixtures.DUNE.md5 })
+                LibgenSearch.findDownloadLink({ id = fixtures.DUNE.md5 })
 
                 assert.are.equal(
                     string.format(
@@ -776,7 +780,7 @@ describe("LlgiSearch", function()
             end
             results(moved, { fixtures.DUNE })
 
-            local books = LlgiSearch:search("dune", 1)
+            local books = LibgenSearch:search("dune", 1)
             assert.are.equal(2, web.scrapes)
             assert.are.equal(1, #books)
             assert.are.equal("Dune", books[1].title)
@@ -785,7 +789,7 @@ describe("LlgiSearch", function()
 
         -- which have just failed, some (such as one that takes the connection but never answers) only after a while
         it("gives up once scraping the mirrors again finds no others, without asking them again", function()
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
 
             assert.is_nil(books)
             assert.are.equal("failed to connect to server", err)
@@ -807,7 +811,7 @@ describe("LlgiSearch", function()
                     busy(mirror)
                 end
 
-                local books, err = LlgiSearch:search("dune", 1)
+                local books, err = LibgenSearch:search("dune", 1)
                 assert.is_nil(books)
                 assert.are.equal("Library Genesis is too busy to search right now, try again in a few minutes", err)
                 assert.are.equal(#mirrors, #searches())
@@ -821,7 +825,7 @@ describe("LlgiSearch", function()
                 busy(mirrors[1])
                 results(mirrors[2], { fixtures.DUNE })
 
-                assert.are.equal(1, #LlgiSearch:search("dune", 1))
+                assert.are.equal(1, #LibgenSearch:search("dune", 1))
                 local remaining = require("api.urlapi"):getLibgenUrls()
                 assert.are.equal(#mirrors, #remaining)
                 assert.are.equal(mirrors[2], remaining[1])
@@ -833,7 +837,7 @@ describe("LlgiSearch", function()
             web.pages[searchUrl(mirrors[1])] =
                 "<html><head><title>DDoS-Guard</title></head><body>Checking your browser</body></html>"
 
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal("Library Genesis is blocking automated searches right now, try again later", err)
         end)
@@ -846,7 +850,7 @@ describe("LlgiSearch", function()
                 end
             end
 
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal("Library Genesis answered with an error (HTTP 503), try again later", err)
         end)
@@ -857,7 +861,7 @@ describe("LlgiSearch", function()
                     "<html><head><title>DDoS-Guard</title></head><body>Checking your browser</body></html>"
             end
 
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal("Library Genesis is blocking automated searches right now, try again later", err)
             -- the mirrors work, so they are kept and not scraped again
@@ -874,7 +878,7 @@ describe("LlgiSearch", function()
                 end
             end
 
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal(
                 "none of Library Genesis' sites can be found on this network, which may be blocking them. Try "
@@ -891,7 +895,7 @@ describe("LlgiSearch", function()
                 return nil, "could not resolve host"
             end
 
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal("failed to connect to server", err)
         end)
@@ -905,7 +909,7 @@ describe("LlgiSearch", function()
             end
             web.wikipedia_down = "TLS/SSL connection failed"
 
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal(
                 "Wikipedia, where the mirrors are looked up, couldn't be connected to securely (TLS/SSL connection "
@@ -922,7 +926,7 @@ describe("LlgiSearch", function()
             end
             web.wikipedia_down = "server returned an empty response"
 
-            local _, err = LlgiSearch:search("dune", 1)
+            local _, err = LibgenSearch:search("dune", 1)
             assert.are.equal("the mirrors couldn't be looked up on Wikipedia (server returned an empty response)", err)
         end)
 
@@ -934,7 +938,7 @@ describe("LlgiSearch", function()
             end
             web.wikipedia_down = true
 
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal("no internet connection", err)
         end)
@@ -942,7 +946,7 @@ describe("LlgiSearch", function()
         it("says there's no internet connection when neither the mirrors nor Wikipedia answer", function()
             web.wikipedia_down = true
 
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal("no internet connection", err)
         end)
@@ -953,7 +957,7 @@ describe("LlgiSearch", function()
             UrlApi:getLibgenUrls()
             web.wikipedia_down = true
 
-            local books, err = LlgiSearch:search("dune", 1)
+            local books, err = LibgenSearch:search("dune", 1)
             assert.is_nil(books)
             assert.are.equal("no internet connection", err)
             assert.are.same(mirrors, UrlApi:getLibgenUrls())
@@ -962,7 +966,7 @@ describe("LlgiSearch", function()
         -- catches Library Genesis changing its results page, like Anna's Archive blocking searches did (#24)
         it("finds books on the live Library Genesis site #live", function()
             web.live = true
-            local books, err, next_page = LlgiSearch:search("frank herbert dune", 1)
+            local books, err, next_page = LibgenSearch:search("frank herbert dune", 1)
 
             assert.is_nil(err)
             assert.is_true(#books > 0, "no books found")

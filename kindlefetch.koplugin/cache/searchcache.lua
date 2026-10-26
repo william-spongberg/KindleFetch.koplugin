@@ -10,7 +10,7 @@ local SearchCache = KindleFetchCache:new {
     -- each search is around 25KB, and the whole cache is read and written at once
     max_entries = 100,
 
-    -- the site searched (see Sources), as each finds different books, and what the search was narrowed to, where it
+    -- the site searched (see Sites), as each finds different books, and what the search was narrowed to, where it
     -- was (e.g. only the books' authors), as searches that weren't were saved before
     makeKey = function(...)
         LogUtil.debug("data for makeKey:", ...)
@@ -31,7 +31,7 @@ local SearchCache = KindleFetchCache:new {
     end,
 }
 
--- what a search of site (see Sources) is narrowed down to, as chosen in the settings: the languages, file types and,
+-- what a search of site (see Sites) is narrowed down to, as chosen in the settings: the languages, file types and,
 -- where the site has them, book types
 local function choices(site)
     return KindleFetchSettings:getPreferredLanguages(),
