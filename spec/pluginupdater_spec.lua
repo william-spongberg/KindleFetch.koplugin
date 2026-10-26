@@ -85,7 +85,7 @@ for _, layout in ipairs(LAYOUTS) do
                 helper.writeFile(exit_file, release_response and "0" or "6")
                 return 4000, exit_file
             end
-            CurlUtil.isPidRunning = function()
+            require("util.backgroundprocess").isPidRunning = function()
                 return false
             end
         end)
@@ -142,7 +142,7 @@ for _, layout in ipairs(LAYOUTS) do
                     exit_file = CurlUtil.createExitFile()
                     return 4000, exit_file
                 end
-                CurlUtil.isPidRunning = function()
+                require("util.backgroundprocess").isPidRunning = function()
                     return true
                 end
                 PluginUpdater.checkForUpdates()
@@ -202,7 +202,7 @@ for _, layout in ipairs(LAYOUTS) do
             -- which KOReader would have exited on
             it("reports when looking up the latest release goes wrong, if the user asked", function()
                 latestRelease("v0.4")
-                CurlUtil.getExitCode = function()
+                require("util.backgroundprocess").getExitCode = function()
                     error("unexpected")
                 end
                 checkForUpdates(true)
@@ -268,7 +268,7 @@ for _, layout in ipairs(LAYOUTS) do
                         helper.writeFile(filepath, release_response)
                         return 4000, exit_file
                     end
-                    CurlUtil.isPidRunning = function()
+                    require("util.backgroundprocess").isPidRunning = function()
                         return true
                     end
 

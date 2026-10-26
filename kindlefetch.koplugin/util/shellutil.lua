@@ -2,6 +2,11 @@ local LogUtil = require("util.logutil")
 
 local ShellUtil = {}
 
+-- str in single quotes, as the shell takes it as it is
+function ShellUtil.quote(str)
+    return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
+end
+
 -- run a step done with shell commands: true, or nil and the command's own words or exit code, logged with the step
 function ShellUtil.run(step, cmd)
     local pipe = io.popen(string.format('(%s) 2>&1; echo "exit $?"', cmd))

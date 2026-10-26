@@ -5,6 +5,7 @@ local JSON = require("json")
 local lfs = require("libs/libkoreader-lfs")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
+local BackgroundProcess = require("util.backgroundprocess")
 local HttpUtil = require("util.httputil")
 local LogUtil = require("util.logutil")
 local NotifyUtil = require("util.notifyutil")
@@ -85,15 +86,12 @@ local function fetchUpdateInfo(callback)
     local function failed(err)
         callback(nil, err)
     end
+    local process = BackgroundProcess.new(pid, exit_file)
     local function poll()
-        local exit_code = CurlUtil.getExitCode(exit_file)
-        if not exit_code then
-            if CurlUtil.isPidRunning(pid) then
-                Guard.scheduleIn(POLL_INTERVAL, "looking up the latest release", poll, failed)
-                return
-            end
-            -- curl may have finished between checking for its exit code and whether it was running
-            exit_code = CurlUtil.getExitCode(exit_file)
+        local exit_code, running = process:poll()
+        if running then
+            Guard.scheduleIn(POLL_INTERVAL, "looking up the latest release", poll, failed)
+            return
         end
 
         local output = FileUtil.readFile(release_file)
@@ -187,7 +185,7 @@ local function extract(zip_path, folder)
 
     local ok, err = ShellUtil.run(
         "unzip the release",
-        string.format("unzip -q -o %s -d %s", CurlUtil.shellQuote(zip_path), CurlUtil.shellQuote(folder))
+        string.format("unzip -q -o %s -d %s", ShellUtil.quote(zip_path), ShellUtil.quote(folder))
     )
     if not ok then
         return nil, T(_("it couldn't be unzipped (%1)"), err)

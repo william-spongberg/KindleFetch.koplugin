@@ -45,7 +45,7 @@ helper.TMP_ROOT = "spec/.tmp"
 
 -- guard against specs reaching the network or modifying the host system
 local function guardCommand(cmd)
-    -- curl run anywhere in the command, e.g. by the shell that saves its exit code (see CurlUtil.saveExitCode)
+    -- curl run anywhere in the command, e.g. by the shell that saves its exit code (see BackgroundProcess.saveExitCode)
     if cmd:find("%f[%w]curl%s") then
         error("unstubbed network command: " .. cmd, 3)
     end

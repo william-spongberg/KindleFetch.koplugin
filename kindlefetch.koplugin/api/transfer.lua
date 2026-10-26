@@ -4,6 +4,7 @@ local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
 local HttpDownload = require("util.httpdownload")
+local BackgroundProcess = require("util.backgroundprocess")
 local FileCheck = require("util.filecheck")
 local ProxyUtil = require("util.proxyutil")
 local Errors = require("util.errors")
@@ -91,7 +92,7 @@ function Transfer:startCurl()
     if not pid then
         return false, exit_file_or_err
     end
-    self.pid, self.exit_file = pid, exit_file_or_err
+    self.process = BackgroundProcess.new(pid, exit_file_or_err)
     return true
 end
 
@@ -129,9 +130,7 @@ function Transfer:pause(why)
     end
     self.state = Transfer.PAUSED
     -- (whose exit code isn't looked at)
-    CurlUtil.killPid(self.pid)
-    HttpDownload.collect(self.pid)
-    self.pid = nil
+    self.process:stop()
     LogUtil.info(
         string.format(
             "pausing the download of %q at %d bytes, as %s",
@@ -152,7 +151,7 @@ function Transfer:resume()
     self.state = Transfer.DOWNLOADING
     self.carry_on = true
     self.quiet_polls = 0
-    FileUtil.removeFile(self.exit_file)
+    FileUtil.removeFile(self.process.exit_file)
     local started, err = self:startCurl()
     if not started then
         LogUtil.warn("could not start curl to carry on with the download:", err)
@@ -259,8 +258,7 @@ end
 function Transfer:check()
     local book = self.book
     -- it has finished, so Cancel has nothing to stop (collecting KOReader's own process, if that downloaded it)
-    HttpDownload.collect(self.pid)
-    self.pid = nil
+    self.process:collect()
 
     local problem, start = FileCheck.problem(self.part_path, book.file_type)
     if problem == "web page" then
@@ -295,7 +293,7 @@ function Transfer:poll()
         LogUtil.info(
             string.format("download of %q cancelled at %d bytes", book.title, FileUtil.getSize(part_path) or 0)
         )
-        CurlUtil.killPid(self.pid)
+        self.process:kill()
         FileUtil.removeFile(part_path)
         self:finish(false, Errors.CANCELLED)
         return
@@ -359,11 +357,7 @@ function Transfer:poll()
         total_size = total_size,
     })
 
-    -- check exit code, again if curl has stopped, as it may have finished between the two checks
-    local exit_code = CurlUtil.getExitCode(self.exit_file)
-    if not exit_code and not CurlUtil.isPidRunning(self.pid) then
-        exit_code = CurlUtil.getExitCode(self.exit_file)
-    end
+    local exit_code, running = self.process:poll()
     if exit_code then
         local final_size = FileUtil.getSize(part_path)
 
@@ -416,8 +410,6 @@ function Transfer:poll()
 
         -- Wi-Fi went off unannounced, not the site failing: carry on once it's back, as trying again now can't work
         if SERVER_FAILURES[exit_code] and not NetworkMgr:isConnected() then
-            -- (as curl has stopped, there's nothing to stop)
-            self.pid = nil
             self:pause("Wi-Fi is off")
             self:pollIn(RECONNECT_POLL_INTERVAL)
             return
@@ -443,7 +435,7 @@ function Transfer:poll()
     end
 
     -- exit early if process ends abruptly
-    if not CurlUtil.isPidRunning(self.pid) then
+    if not running then
         LogUtil.warn(
             string.format(
                 "curl stopped without reporting back while downloading %q, at %d bytes",
@@ -465,7 +457,9 @@ function Transfer:finish(ok, err)
     self:close(ok and Transfer.DONE or Transfer.FAILED)
     FileUtil.removeFile(self.headers_file)
     -- where it was KOReader's own process that downloaded it, rather than curl
-    HttpDownload.collect(self.pid)
+    if self.process then
+        self.process:collect()
+    end
     if ok and not os.rename(self.part_path, self.filepath) then
         LogUtil.warn("could not move the downloaded book from", self.part_path, "to", self.filepath)
         FileUtil.removeFile(self.part_path)
@@ -486,8 +480,9 @@ function Transfer:abandon(err)
         if self.checksum then
             self.checksum:close()
         end
-        CurlUtil.killPid(self.pid)
-        HttpDownload.collect(self.pid)
+        if self.process then
+            self.process:stop()
+        end
         FileUtil.removeFile(self.part_path)
         FileUtil.removeFile(self.headers_file)
     end

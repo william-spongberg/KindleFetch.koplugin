@@ -55,7 +55,7 @@ describe("Transfer", function()
             table.insert(spawned, { url = url, path = path, exit_file = exit_file, headers_file = opts.headers_file })
             return 1000 + #spawned, exit_file
         end
-        CurlUtil.isPidRunning = function()
+        require("util.backgroundprocess").isPidRunning = function()
             return true
         end
         Transfer = require("api.transfer")

@@ -10,7 +10,6 @@ local Transfer = require("api.transfer")
 local BackgroundTask = require("ui.backgroundtask")
 local HttpUtil = require("util.httputil")
 local FileUtil = require("util.fileutil")
-local CurlUtil = require("util.curlutil")
 local Sites = require("api.sites")
 local CoverCache = require("cache.covercache")
 local Errors = require("util.errors")
@@ -92,8 +91,8 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     -- create and show progress widget immediately
     local transfer
     local progress_widget = DownloadProgress.new(book.display_title or book.title, function()
-        if transfer.pid then
-            CurlUtil.killPid(transfer.pid)
+        if transfer.process then
+            transfer.process:kill()
         end
     end, hidden)
     transfer = Transfer.new {

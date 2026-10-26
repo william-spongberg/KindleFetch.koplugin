@@ -142,10 +142,10 @@ describe("Downloader", function()
             table.insert(cover_downloads, urls)
             return nil, nil, nil, "unable to launch curl"
         end
-        CurlUtil.isPidRunning = function(pid)
+        require("util.backgroundprocess").isPidRunning = function(pid)
             return running[pid] ~= false
         end
-        CurlUtil.killPid = function(pid)
+        require("util.backgroundprocess").killPid = function(pid)
             table.insert(killed, pid)
         end
         -- worked out a piece at a time, all at once here
@@ -1221,7 +1221,7 @@ describe("Downloader", function()
         -- curl can finish just after its exit code was checked, before checking whether it's running
         it("finishes when curl exits between checks", function()
             download()
-            CurlUtil.isPidRunning = function()
+            require("util.backgroundprocess").isPidRunning = function()
                 curlWrote(MB, 0)
                 return false
             end

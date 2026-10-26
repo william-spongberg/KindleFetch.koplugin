@@ -256,7 +256,8 @@ kindlefetch.koplugin/
 │   ├── curlupdater.lua        # Checks curl version on Kindles and offers to install static curl (8.21.0) if it's older, downloading it with KOReader's own HTTP, checking it's the build that was released, and that it runs
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes, unzipping the update with KOReader's own archiver (or unzip, where it has none) next to the plugin, and keeping the installed version until the new one is in place
 └── util/
-    ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
+    ├── curlutil.lua           # Builds curl's commands for fetching pages and downloading files (one or many at once), and says what its exit codes mean
+    ├── backgroundprocess.lua  # What runs in the background (curl in a shell, or a process of KOReader's own): whether it's running, its exit code once done, stopping it, and collecting it
     ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from, with the kind of fix each has
     ├── guard.lua              # Runs what KOReader runs later (scheduled tasks, Trapper's functions, event handlers), catching errors, logging where they happened and cleaning up
     ├── httpdownload.lua       # Downloads books and covers with KOReader's own HTTP in a process of its own, where curl can't, followed and stopped as curl's downloads are
@@ -273,7 +274,7 @@ kindlefetch.koplugin/
     ├── notifyutil.lua         # Notifications, and error messages that stay until dismissed
     ├── pathutil.lua           # Plugin install location and temporary download directory
     ├── proxyutil.lua          # The proxy everything goes through: KOReader's HTTP proxy, where it's on
-    ├── shellutil.lua          # Runs a step of installing an update with shell commands, saying what went wrong in the command's own words
+    ├── shellutil.lua          # Quotes what's given to the shell, and runs a step of installing an update with shell commands, saying what went wrong in the command's own words
     └── versionutil.lua        # Version parsing and comparison utilities
 ```
 

@@ -39,7 +39,7 @@ describe("HttpDownload", function()
         })
 
         assert.are.equal(helper.state.subprocesses[1], pid)
-        assert.are.equal(0, CurlUtil.getExitCode(exit_file))
+        assert.are.equal(0, require("util.backgroundprocess").getExitCode(exit_file))
         assert.are.equal("epub data", helper.readFile(path))
         -- noting down what curl would, for how big it is
         assert.are.equal(9, CurlUtil.getDownloadSize(headers_file))
@@ -66,7 +66,7 @@ describe("HttpDownload", function()
         end
         local _, exit_file = HttpDownload.start("http://nas:8080/get/epub/1", path, { headers_file = headers_file })
 
-        assert.are.equal(0, CurlUtil.getExitCode(exit_file))
+        assert.are.equal(0, require("util.backgroundprocess").getExitCode(exit_file))
         assert.are.equal("epub data", helper.readFile(path))
         -- noting down the headers of what was sent once logged in
         assert.are.equal(200, CurlUtil.getDownloadStatus(headers_file))
@@ -78,7 +78,7 @@ describe("HttpDownload", function()
     it("says the site answered with an error as curl does", function()
         answer("<html>Not Found</html>", 1, 404, {}, "HTTP/1.1 404 Not Found")
         local _, exit_file = HttpDownload.start("https://libgen.example/get.php", path, { headers_file = headers_file })
-        assert.are.equal(22, CurlUtil.getExitCode(exit_file))
+        assert.are.equal(22, require("util.backgroundprocess").getExitCode(exit_file))
         assert.are.equal(404, CurlUtil.getDownloadStatus(headers_file))
     end)
 
@@ -92,7 +92,7 @@ describe("HttpDownload", function()
         }) do
             answer(nil, nil, luasocket_err)
             local _, exit_file = HttpDownload.start("https://libgen.example/get.php", path)
-            assert.are.equal(exit_code, CurlUtil.getExitCode(exit_file), luasocket_err)
+            assert.are.equal(exit_code, require("util.backgroundprocess").getExitCode(exit_file), luasocket_err)
         end
 
         -- including what it raises rather than returns
@@ -100,13 +100,13 @@ describe("HttpDownload", function()
             error("closed")
         end
         local _, exit_file = HttpDownload.start("https://libgen.example/get.php", path)
-        assert.are.equal(56, CurlUtil.getExitCode(exit_file))
+        assert.are.equal(56, require("util.backgroundprocess").getExitCode(exit_file))
     end)
 
     it("says when the file can't be written, as curl does", function()
         answer("epub data", 1, 200)
         local _, exit_file = HttpDownload.start("https://libgen.example/get.php", data_dir .. "/missing/Dune.epub")
-        assert.are.equal(23, CurlUtil.getExitCode(exit_file))
+        assert.are.equal(23, require("util.backgroundprocess").getExitCode(exit_file))
     end)
 
     it("says when its process couldn't be started", function()
@@ -133,13 +133,13 @@ describe("HttpDownload", function()
         assert.are.same({ [covers[1]] = 0, [covers[2]] = 28 }, results)
         assert.are.equal("jpeg", helper.readFile(covers[1]))
         assert.is_false(helper.exists(covers[2]))
-        assert.are.equal(28, CurlUtil.getExitCode(exit_file))
+        assert.are.equal(28, require("util.backgroundprocess").getExitCode(exit_file))
     end)
 
     -- which KOReader keeps as a zombie until it closes, otherwise
     it("collects a download's process once it has finished", function()
         helper.state.subprocesses_running[5000000] = true
-        HttpDownload.collect(5000000)
+        require("util.backgroundprocess").collectPid(5000000)
         assert.is_nil(helper.state.subprocesses_collected[5000000])
 
         helper.state.subprocesses_running[5000000] = nil

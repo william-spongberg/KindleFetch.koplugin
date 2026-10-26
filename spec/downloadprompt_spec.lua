@@ -344,7 +344,7 @@ describe("DownloadPrompt", function()
                     table.insert(runs, run)
                     return 4000, run.exit_file, data_dir .. "/curl_config.txt"
                 end
-                CurlUtil.isPidRunning = function()
+                require("util.backgroundprocess").isPidRunning = function()
                     return true
                 end
                 book.image_url = "https://libgen.example/fictioncovers/1000/dune_small.jpg"

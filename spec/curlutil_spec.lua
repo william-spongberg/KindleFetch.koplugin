@@ -34,12 +34,6 @@ describe("CurlUtil", function()
 
     after_each(helper.cleanup)
 
-    it("quotes strings for the shell", function()
-        assert.are.equal("'plain'", CurlUtil.shellQuote("plain"))
-        assert.are.equal("'it'\\''s'", CurlUtil.shellQuote("it's"))
-        assert.are.equal("'; rm -rf /'", CurlUtil.shellQuote("; rm -rf /"))
-    end)
-
     it("sends the site as the referer", function()
         assert.are.equal(
             "curl -e 'https://libgen.example/'",
@@ -319,76 +313,6 @@ describe("CurlUtil", function()
         end)
     end)
 
-    describe("processes", function()
-        it("detects whether a process is running and can kill it", function()
-            local pipe = io.popen("sleep 30 > /dev/null 2>&1 & echo $!")
-            local pid = tonumber(pipe:read("*l"))
-            pipe:close()
-
-            assert.is_true(CurlUtil.isPidRunning(pid))
-            CurlUtil.killPid(pid)
-            os.execute("sleep 0.2")
-            assert.is_false(CurlUtil.isPidRunning(pid))
-        end)
-
-        -- Cancel left curl running by itself, using the Wi-Fi and filling the book's .part file
-        it("stops what a background download runs, not only the shell that waits for it", function()
-            local exit_file = CurlUtil.createExitFile()
-            -- sleep standing in for curl
-            local pipe = io.popen(CurlUtil.echoPid(CurlUtil.saveExitCode("sleep 30", exit_file)))
-            local pid = tonumber(pipe:read("*l"))
-            pipe:close()
-            os.execute("sleep 0.2")
-            pipe = io.popen("pgrep -P " .. pid)
-            local child = tonumber(pipe:read("*l"))
-            pipe:close()
-            assert.is_true(CurlUtil.isPidRunning(child))
-
-            CurlUtil.killPid(pid)
-            os.execute("sleep 0.3")
-            assert.is_false(CurlUtil.isPidRunning(child))
-            assert.is_false(CurlUtil.isPidRunning(pid))
-        end)
-
-        it("saves the exit code of what a download runs once it has finished", function()
-            local exit_file = CurlUtil.createExitFile()
-            os.execute(CurlUtil.saveExitCode("sh -c 'exit 22'", exit_file))
-            assert.are.equal(22, CurlUtil.getExitCode(exit_file))
-            -- the shell's own, when curl isn't there to run
-            os.execute(CurlUtil.saveExitCode("kindlefetch-no-such-command -s", exit_file))
-            assert.are.equal(127, CurlUtil.getExitCode(exit_file))
-        end)
-
-        it("looks in /proc, without starting a shell", function()
-            local proc = helper.tmpdir("proc")
-            CurlUtil.PROC_DIR = proc
-            helper.writeFile(proc .. "/self/stat", "100 (luajit) R 1")
-            helper.writeFile(proc .. "/4242/stat", "4242 (sh (curl)) S 1 4242")
-            helper.writeFile(proc .. "/4343/stat", "4343 (sh) Z 1 4343")
-            helper.stubExecute("kill -0", function()
-                error("started a shell")
-            end)
-
-            assert.is_true(CurlUtil.isPidRunning(4242))
-            -- finished, but not cleaned up yet
-            assert.is_false(CurlUtil.isPidRunning(4343))
-            assert.is_false(CurlUtil.isPidRunning(4444))
-        end)
-
-        it("asks kill on systems without /proc", function()
-            CurlUtil.PROC_DIR = helper.tmpdir("no-proc")
-            helper.stubExecute("kill -0 4242", function()
-                return 0
-            end)
-            assert.is_true(CurlUtil.isPidRunning(4242))
-        end)
-
-        it("ignores missing pids", function()
-            assert.is_false(CurlUtil.isPidRunning(nil))
-            CurlUtil.killPid(nil)
-        end)
-    end)
-
     describe("getDownloadSize", function()
         local headers_file
 
@@ -479,10 +403,10 @@ describe("CurlUtil", function()
 
         it("reads and removes the exit code once curl has finished", function()
             local exit_file = CurlUtil.createExitFile()
-            assert.is_nil(CurlUtil.getExitCode(exit_file))
+            assert.is_nil(require("util.backgroundprocess").getExitCode(exit_file))
 
             helper.writeFile(exit_file, "22\n")
-            assert.are.equal(22, CurlUtil.getExitCode(exit_file))
+            assert.are.equal(22, require("util.backgroundprocess").getExitCode(exit_file))
             assert.is_false(helper.exists(exit_file))
         end)
 
@@ -490,11 +414,11 @@ describe("CurlUtil", function()
         it("waits for the exit code to be written, rather than losing it", function()
             local exit_file = CurlUtil.createExitFile()
             helper.writeFile(exit_file, "")
-            assert.is_nil(CurlUtil.getExitCode(exit_file))
+            assert.is_nil(require("util.backgroundprocess").getExitCode(exit_file))
             assert.is_true(helper.exists(exit_file))
 
             helper.writeFile(exit_file, "0\n")
-            assert.are.equal(0, CurlUtil.getExitCode(exit_file))
+            assert.are.equal(0, require("util.backgroundprocess").getExitCode(exit_file))
         end)
     end)
 

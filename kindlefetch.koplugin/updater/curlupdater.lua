@@ -41,7 +41,7 @@ end
 
 -- the version the curl at path says it is, and what it said, which when it can't run says why
 local function runVersion(path)
-    local pipe = io.popen(CurlUtil.shellQuote(path) .. " --version 2>&1")
+    local pipe = io.popen(ShellUtil.quote(path) .. " --version 2>&1")
     local said = pipe and pipe:read("*l")
     if pipe then
         pipe:close()
@@ -64,14 +64,14 @@ local function install(curl_path)
             "back up the Kindle's own curl",
             string.format(
                 "cp %s %s && mv %s %s",
-                CurlUtil.shellQuote(SYSTEM_CURL),
-                CurlUtil.shellQuote(BACKUP_CURL .. ".new"),
-                CurlUtil.shellQuote(BACKUP_CURL .. ".new"),
-                CurlUtil.shellQuote(BACKUP_CURL)
+                ShellUtil.quote(SYSTEM_CURL),
+                ShellUtil.quote(BACKUP_CURL .. ".new"),
+                ShellUtil.quote(BACKUP_CURL .. ".new"),
+                ShellUtil.quote(BACKUP_CURL)
             )
         )
         if not ok then
-            ShellUtil.run("remove the backup cut short", "rm -f " .. CurlUtil.shellQuote(BACKUP_CURL .. ".new"))
+            ShellUtil.run("remove the backup cut short", "rm -f " .. ShellUtil.quote(BACKUP_CURL .. ".new"))
             return nil, T(_("the Kindle's own curl couldn't be backed up (%1)"), err)
         end
     end
@@ -80,30 +80,30 @@ local function install(curl_path)
     LogUtil.debug("copying static curl to", NEW_CURL)
     local ok, err = ShellUtil.run(
         "copy the new curl into place",
-        string.format("cp %s %s", CurlUtil.shellQuote(curl_path), CurlUtil.shellQuote(NEW_CURL))
+        string.format("cp %s %s", ShellUtil.quote(curl_path), ShellUtil.quote(NEW_CURL))
     )
     if not ok then
-        ShellUtil.run("remove the new curl cut short", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
+        ShellUtil.run("remove the new curl cut short", "rm -f " .. ShellUtil.quote(NEW_CURL))
         return nil, T(_("the new curl couldn't be copied into place (%1)"), err)
     end
-    if not ShellUtil.run("set the new curl's permissions", "chmod 755 " .. CurlUtil.shellQuote(NEW_CURL)) then
+    if not ShellUtil.run("set the new curl's permissions", "chmod 755 " .. ShellUtil.quote(NEW_CURL)) then
         LogUtil.warn("carrying on without setting the new curl's permissions")
     end
 
     local installed_version, said = runVersion(NEW_CURL)
     if installed_version ~= MIN_VERSION then
         LogUtil.warn("the new curl doesn't run on this Kindle, saying", said, "so keeping the old one")
-        ShellUtil.run("remove the new curl", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
+        ShellUtil.run("remove the new curl", "rm -f " .. ShellUtil.quote(NEW_CURL))
         return nil, _("the new curl doesn't run on this Kindle, so the old one has been kept")
     end
 
     -- in one go, so there's always a curl there
     ok, err = ShellUtil.run(
         "replace the old curl",
-        string.format("mv %s %s", CurlUtil.shellQuote(NEW_CURL), CurlUtil.shellQuote(SYSTEM_CURL))
+        string.format("mv %s %s", ShellUtil.quote(NEW_CURL), ShellUtil.quote(SYSTEM_CURL))
     )
     if not ok then
-        ShellUtil.run("remove the new curl", "rm -f " .. CurlUtil.shellQuote(NEW_CURL))
+        ShellUtil.run("remove the new curl", "rm -f " .. ShellUtil.quote(NEW_CURL))
         return nil, T(_("the old curl couldn't be replaced (%1)"), err)
     end
     return true
@@ -137,7 +137,7 @@ local function updateCurl()
     end
 
     local ok
-    ok, err = ShellUtil.run("make the new curl executable", "chmod +x " .. CurlUtil.shellQuote(curl_path))
+    ok, err = ShellUtil.run("make the new curl executable", "chmod +x " .. ShellUtil.quote(curl_path))
     if not ok then
         FileUtil.removeFile(curl_path)
         return nil, T(_("the new curl couldn't be made executable (%1)"), err)

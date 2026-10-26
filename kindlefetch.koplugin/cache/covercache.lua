@@ -6,6 +6,7 @@ local Event = require("ui/event")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
 local HttpDownload = require("util.httpdownload")
+local BackgroundProcess = require("util.backgroundprocess")
 local FileCheck = require("util.filecheck")
 local ProxyUtil = require("util.proxyutil")
 local LibrarySites = require("util.librarysites")
@@ -185,29 +186,25 @@ local function downloadedPaths(results, filepaths, exit_code)
 end
 
 -- wait for curl's downloads, calling on_progress with the paths downloaded so far, then on_done with those that did
-local function pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
+local function pollDownloads(process, config_file, filepaths, on_progress, on_done)
     local results_file = CurlUtil.getResultsFile(config_file)
-    local exit_code = CurlUtil.getExitCode(exit_file)
-    if not exit_code then
-        if CurlUtil.isPidRunning(pid) then
-            on_progress(downloadedPaths(CurlUtil.getTransferResults(results_file), filepaths))
-            -- once something goes wrong, as having none of them (see Guard)
-            Guard.scheduleIn(POLL_INTERVAL, "checking on covers' downloads", function()
-                pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
-            end, function()
-                on_done({})
-            end)
-            return
-        end
-        -- curl may have finished between checking for its exit code and whether it was running
-        exit_code = CurlUtil.getExitCode(exit_file)
+    local exit_code, running = process:poll()
+    if running then
+        on_progress(downloadedPaths(CurlUtil.getTransferResults(results_file), filepaths))
+        -- once something goes wrong, as having none of them (see Guard)
+        Guard.scheduleIn(POLL_INTERVAL, "checking on covers' downloads", function()
+            pollDownloads(process, config_file, filepaths, on_progress, on_done)
+        end, function()
+            on_done({})
+        end)
+        return
     end
 
     local results = CurlUtil.getTransferResults(results_file)
     FileUtil.removeFile(config_file)
     FileUtil.removeFile(results_file)
     -- where it was KOReader's own process that downloaded them, rather than curl
-    HttpDownload.collect(pid)
+    process:collect()
 
     -- keep the covers that downloaded, removing any partial files left by ones that failed
     local downloaded = downloadedPaths(results, filepaths, exit_code)
@@ -256,8 +253,9 @@ local function startDownloads(download_urls, filepaths, parallel_jobs, on_progre
         return
     end
 
+    local process = BackgroundProcess.new(pid, exit_file)
     Guard.scheduleIn(POLL_INTERVAL, "checking on covers' downloads", function()
-        pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
+        pollDownloads(process, config_file, filepaths, on_progress, on_done)
     end, function()
         on_done({})
     end)

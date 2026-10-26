@@ -1,5 +1,7 @@
 local LogUtil = require("util.logutil")
 local Request = require("util.request")
+local BackgroundProcess = require("util.backgroundprocess")
+local ShellUtil = require("util.shellutil")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local VersionUtil = require("util.versionutil")
@@ -88,44 +90,6 @@ function CurlUtil.removeLeftovers()
     if #leftovers > 0 then
         LogUtil.info("removed", #leftovers, "files left by earlier downloads")
     end
-end
-
-function CurlUtil.shellQuote(str)
-    return "'" .. tostring(str):gsub("'", "'\\''") .. "'"
-end
-
--- where running processes are listed (changed by the tests)
-CurlUtil.PROC_DIR = "/proc"
-
-function CurlUtil.isPidRunning(pid)
-    if not pid then
-        return false
-    end
-
-    -- downloads are checked on twice a second, so look in /proc rather than starting a shell each time to ask kill
-    local stat_file = io.open(string.format("%s/%d/stat", CurlUtil.PROC_DIR, pid), "r")
-    if stat_file then
-        local stat = stat_file:read("*l") or ""
-        stat_file:close()
-        -- a process that has finished, but hasn't been cleaned up yet, isn't running
-        return stat:match(".*%)%s+(%a)") ~= "Z"
-    end
-    local self_stat = io.open(CurlUtil.PROC_DIR .. "/self/stat", "r")
-    if self_stat then
-        self_stat:close()
-        return false
-    end
-
-    local ok = os.execute(string.format("kill -0 %d 2>/dev/null", pid))
-    return ok == 0
-end
-
--- stop a download started in the background (see saveExitCode), whose shell passes the signal on to curl
-function CurlUtil.killPid(pid)
-    if not pid then
-        return
-    end
-    os.execute(string.format("kill %d 2>/dev/null", pid))
 end
 
 -- how the installed curl describes itself, or nil if it isn't there, looked up once a session as it means starting curl
@@ -338,41 +302,8 @@ function CurlUtil.createExitFile()
     return exit_file
 end
 
--- curl's exit code once it has finished, or nil while it runs, or while the shell is still writing it to the empty file
-function CurlUtil.getExitCode(exit_file)
-    local exit_code_str = FileUtil.readFile(exit_file)
-    local exit_code = exit_code_str and tonumber(exit_code_str)
-    if not exit_code then
-        return nil
-    end
-    FileUtil.removeFile(exit_file)
-    return exit_code
-end
-
--- start cmd in the background (see echoPid), returning its pid, or nil and Errors.START_FAILED
-function CurlUtil.spawnCurlPid(cmd)
-    -- execute command
-    local pipe = io.popen(cmd, "r")
-    if not pipe then
-        LogUtil.warn("could not start a shell to run curl")
-        return nil, Errors.START_FAILED
-    end
-
-    -- read pid from terminal output
-    local pid_str = pipe:read("*l")
-    pipe:close()
-
-    local pid = tonumber(pid_str)
-    if not pid then
-        LogUtil.warn("curl was started, but its pid wasn't given:", tostring(pid_str))
-        return nil, Errors.START_FAILED
-    end
-
-    return pid
-end
-
 function CurlUtil.getDownloadCMD(download_url, filepath)
-    return string.format("curl -sL -f -o %s %s", CurlUtil.shellQuote(filepath), CurlUtil.shellQuote(download_url))
+    return string.format("curl -sL -f -o %s %s", ShellUtil.quote(filepath), ShellUtil.quote(download_url))
 end
 
 function CurlUtil.pretendBrowser(curl_cmd)
@@ -385,7 +316,7 @@ function CurlUtil.setReferer(curl_cmd, url)
     if not site then
         return curl_cmd
     end
-    return string.format("%s -e %s", curl_cmd, CurlUtil.shellQuote(site .. "/"))
+    return string.format("%s -e %s", curl_cmd, ShellUtil.quote(site .. "/"))
 end
 
 function CurlUtil.enableRetry(curl_cmd, count, delay)
@@ -402,7 +333,7 @@ function CurlUtil.abortWhenStalled(curl_cmd, seconds)
 end
 
 function CurlUtil.dumpHeaders(curl_cmd, headers_file)
-    return string.format("%s -D %s", curl_cmd, CurlUtil.shellQuote(headers_file))
+    return string.format("%s -D %s", curl_cmd, ShellUtil.quote(headers_file))
 end
 
 function CurlUtil.enableParallel(curl_cmd, max_parallel)
@@ -442,7 +373,7 @@ function CurlUtil.applyProxy(curl_cmd, request)
         LogUtil.warn("could not give curl the proxy, so it's going without")
         return curl_cmd
     end
-    return string.format("%s -K %s", curl_cmd, CurlUtil.shellQuote(config_file)), config_file
+    return string.format("%s -K %s", curl_cmd, ShellUtil.quote(config_file)), config_file
 end
 
 -- a file of curl options (each name and value, or name) kept off its command line; nil if a value has a line break
@@ -485,7 +416,7 @@ function CurlUtil.fetchCommand(url, page_file, answer_timeout, page_timeout, con
     checkCurl()
     local request = Request.new(url)
 
-    local cmd = string.format("curl -sL -o %s %s", CurlUtil.shellQuote(page_file), CurlUtil.shellQuote(url))
+    local cmd = string.format("curl -sL -o %s %s", ShellUtil.quote(page_file), ShellUtil.quote(url))
     if can_decompress then
         -- a page of search results is a tenth of the size compressed, and Library Genesis sends them slowly
         cmd = cmd .. " --compressed"
@@ -505,22 +436,22 @@ function CurlUtil.fetchCommand(url, page_file, answer_timeout, page_timeout, con
     local proxy_config
     cmd, proxy_config = CurlUtil.applyProxy(cmd, request)
     if proxy_config then
-        table.insert(config_files, CurlUtil.shellQuote(proxy_config))
+        table.insert(config_files, ShellUtil.quote(proxy_config))
     end
     if config_file then
-        cmd = string.format("%s -K %s", cmd, CurlUtil.shellQuote(config_file))
-        table.insert(config_files, CurlUtil.shellQuote(config_file))
+        cmd = string.format("%s -K %s", cmd, ShellUtil.quote(config_file))
+        table.insert(config_files, ShellUtil.quote(config_file))
     end
     if #config_files > 0 then
         return string.format(
             '(%s -w %s; exit_code=$?; rm -f %s; echo " $exit_code") 2>/dev/null',
             cmd,
-            CurlUtil.shellQuote("%{http_code}"),
+            ShellUtil.quote("%{http_code}"),
             table.concat(config_files, " ")
         )
     end
 
-    return string.format('(%s -w %s; echo " $?") 2>/dev/null', cmd, CurlUtil.shellQuote("%{http_code}"))
+    return string.format('(%s -w %s; echo " $?") 2>/dev/null', cmd, ShellUtil.quote("%{http_code}"))
 end
 
 -- file downloadMultiple has curl write each transfer's result to
@@ -551,29 +482,6 @@ function CurlUtil.isTransferComplete(results, filepath, exit_code)
         return results[filepath] == 0 and FileUtil.getSize(filepath) > 0
     end
     return exit_code == 0 and FileUtil.getSize(filepath) > 0
-end
-
--- run cmd in a shell that saves its exit code to exit_file, passing a kill on to cmd, which would otherwise carry on
-function CurlUtil.saveExitCode(cmd, exit_file, config_files)
-    -- (those curl was given its options in, once it has finished with them: one, or a list of them)
-    local removed = {}
-    for __, config_file in ipairs(type(config_files) == "table" and config_files or { config_files }) do
-        table.insert(removed, CurlUtil.shellQuote(config_file))
-    end
-    local command = string.format(
-        "(trap 'kill $c 2>/dev/null' TERM; %s & c=$!; wait $c; s=$?; "
-            .. "if kill -0 $c 2>/dev/null; then wait $c; s=$?; fi; %secho $s > %s)",
-        cmd,
-        #removed > 0 and string.format("rm -f %s; ", table.concat(removed, " ")) or "",
-        CurlUtil.shellQuote(exit_file)
-    )
-    command = string.format("%s >/dev/null 2>&1", command) -- do not print errors to terminal
-
-    return command
-end
-
-function CurlUtil.echoPid(cmd)
-    return string.format("%s & echo $!", cmd)
 end
 
 -- the command downloading url to filepath and its exit file; opts.resume carries on from what's there, also on retries
@@ -611,7 +519,7 @@ local function downloadCommand(download_url, filepath, max_time, opts)
     if login then
         local login_config = CurlUtil.createConfigFile(login)
         if login_config then
-            cmd = string.format("%s -K %s", cmd, CurlUtil.shellQuote(login_config))
+            cmd = string.format("%s -K %s", cmd, ShellUtil.quote(login_config))
             table.insert(config_files, login_config)
         else
             LogUtil.warn("could not give curl the library's login, so it's going without")
@@ -619,7 +527,7 @@ local function downloadCommand(download_url, filepath, max_time, opts)
     end
 
     local exit_file = CurlUtil.createExitFile()
-    cmd = CurlUtil.saveExitCode(cmd, exit_file, config_files)
+    cmd = BackgroundProcess.saveExitCode(cmd, exit_file, config_files)
 
     -- without the link, which can carry a temporary key
     LogUtil.debug("curl downloading from", LogUtil.site(download_url), "to", filepath)
@@ -629,7 +537,7 @@ end
 -- download url to filepath in the background, returning its pid and the file its exit code is saved in, or nil and why
 function CurlUtil.startDownload(download_url, filepath, max_time, opts)
     local cmd, exit_file = downloadCommand(download_url, filepath, max_time, opts)
-    local pid, err = CurlUtil.spawnCurlPid(CurlUtil.echoPid(cmd))
+    local pid, err = BackgroundProcess.spawn(BackgroundProcess.echoPid(cmd))
     if not pid then
         return nil, err
     end
@@ -641,7 +549,7 @@ function CurlUtil.download(download_url, filepath, max_time, opts)
     local cmd, exit_file = downloadCommand(download_url, filepath, max_time, opts)
     os.execute(cmd)
 
-    local exit_code = CurlUtil.getExitCode(exit_file)
+    local exit_code = BackgroundProcess.getExitCode(exit_file)
     if not exit_code then
         LogUtil.warn("could not start curl to download from", LogUtil.site(download_url))
         FileUtil.removeFile(exit_file)
@@ -750,22 +658,22 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
         cmd = string.format(
             "%s -w %s 2> %s",
             cmd,
-            CurlUtil.shellQuote("%{stderr}" .. write_out),
-            CurlUtil.shellQuote(results_file)
+            ShellUtil.quote("%{stderr}" .. write_out),
+            ShellUtil.quote(results_file)
         )
     else
-        cmd = string.format("%s -w %s > %s", cmd, CurlUtil.shellQuote(write_out), CurlUtil.shellQuote(results_file))
+        cmd = string.format("%s -w %s > %s", cmd, ShellUtil.quote(write_out), ShellUtil.quote(results_file))
     end
 
     local exit_file = CurlUtil.createExitFile()
-    cmd = CurlUtil.saveExitCode(cmd, exit_file)
+    cmd = BackgroundProcess.saveExitCode(cmd, exit_file)
 
     LogUtil.debug("curl parallel download command", cmd)
 
     if background then
-        cmd = CurlUtil.echoPid(cmd)
+        cmd = BackgroundProcess.echoPid(cmd)
 
-        local pid, err = CurlUtil.spawnCurlPid(cmd)
+        local pid, err = BackgroundProcess.spawn(cmd)
         if not pid then
             FileUtil.removeFile(config_file)
             FileUtil.removeFile(exit_file)
@@ -783,7 +691,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
 
     os.execute(cmd)
 
-    local exit_code = CurlUtil.getExitCode(exit_file)
+    local exit_code = BackgroundProcess.getExitCode(exit_file)
     if exit_code ~= 0 then
         local reason = CurlUtil.getErrorMeaning(exit_code)
         LogUtil.warn("parallel download command failed", {

@@ -228,7 +228,7 @@ describe("CoverCache", function()
                 table.insert(runs, run)
                 return run.pid, run.exit_file, data_dir .. "/settings/curl_config.txt"
             end
-            CurlUtil.isPidRunning = function()
+            require("util.backgroundprocess").isPidRunning = function()
                 return true
             end
         end)
@@ -548,7 +548,7 @@ describe("CoverCache", function()
         -- curl can finish just after its exit code was checked, before checking whether it's running
         it("reads the exit code again once curl has stopped", function()
             CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone)
-            CurlUtil.isPidRunning = function()
+            require("util.backgroundprocess").isPidRunning = function()
                 finishRun(runs[1], { true })
                 return false
             end
@@ -558,7 +558,7 @@ describe("CoverCache", function()
         end)
 
         it("stops when curl stops without reporting back", function()
-            CurlUtil.isPidRunning = function()
+            require("util.backgroundprocess").isPidRunning = function()
                 return false
             end
             CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone)
@@ -570,7 +570,7 @@ describe("CoverCache", function()
         -- which KOReader would have exited on, rather than taking the placeholders away
         it("gives up on the covers when checking on them goes wrong", function()
             CoverCache:downloadMultiple({ book("a", "https://covers.example/a.jpg") }, 6, onDone)
-            CurlUtil.getExitCode = function()
+            require("util.backgroundprocess").getExitCode = function()
                 error("unexpected")
             end
             helper.runScheduled()

@@ -1,19 +1,15 @@
-local ffiutil = require("ffi/util")
 local http = require("socket.http")
 local socketutil = require("socketutil")
 local CurlUtil = require("util.curlutil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
-local Guard = require("util.guard")
+local BackgroundProcess = require("util.backgroundprocess")
 local Request = require("util.request")
 local HttpLogin = require("util.httplogin")
 local _ = require("gettext")
 
 -- downloads with KOReader's own HTTP where curl can't (#63), in a process of its own, leaving the files curl's would
 local HttpDownload = {}
-
--- how often a process that has finished is looked for again, to collect it (see collect)
-local COLLECT_INTERVAL = 1
 
 -- the exit code curl would have given up with for what KOReader's HTTP said went wrong (which is logged where found)
 local function exitCode(err)
@@ -87,20 +83,12 @@ local function download(url, path, opts)
     return 0
 end
 
--- run fn in its own process, returning the pid and the file its exit code goes to (even if it fails), or nil and why
+-- run fn in its own process (see BackgroundProcess.run), returning the pid and its exit file, or nil and why
 local function start(fn)
     local exit_file = CurlUtil.createExitFile()
-    local pid, err = ffiutil.runInSubProcess(function()
-        local ok, exit_code = pcall(fn, exit_file)
-        if not ok then
-            LogUtil.err("downloading with KOReader's HTTP went wrong:", tostring(exit_code))
-            exit_code = 1
-        end
-        FileUtil.writeFile(exit_file, tostring(exit_code) .. "\n")
-    end)
+    local pid, err = BackgroundProcess.run("downloading with KOReader's HTTP", fn, exit_file)
     if not pid then
-        LogUtil.warn("could not start a process to download with KOReader's HTTP:", tostring(err))
-        return nil, _("could not start downloading")
+        return nil, err
     end
     return pid, exit_file
 end
@@ -139,16 +127,6 @@ function HttpDownload.startMultiple(download_urls, filepaths, opts)
         return nil, nil, nil, exit_file
     end
     return pid, exit_file, config_file
-end
-
--- collect a download's process once done, or it's a zombie until KOReader closes (curl's are said to be done at once)
-function HttpDownload.collect(pid)
-    if not pid or ffiutil.isSubProcessDone(pid) then
-        return
-    end
-    Guard.scheduleIn(COLLECT_INTERVAL, "collecting a download's process", function()
-        HttpDownload.collect(pid)
-    end, Guard.quiet)
 end
 
 return HttpDownload
