@@ -218,6 +218,8 @@ kindlefetch.koplugin/
 ├── _meta.lua                  # Plugin metadata and KOReader integration
 ├── settings/
 │   ├── settings.lua           # Persistent storage and management of user preferences
+│   ├── savedlibrary.lua       # A library you've added, as it's saved: its catalogue, how it's searched, and its login
+│   ├── savedzlibaccount.lua   # The Z-Library account logged into, as it's saved: its email, user id and key
 │   └── settingspage.lua       # UI for configuring user preferences, and clearing the caches
 ├── api/
 │   ├── downloader.lua         # Downloads books from the site they were found on, finding each one's link, keeping the device awake while they download
