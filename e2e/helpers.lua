@@ -213,13 +213,27 @@ H.SITES = {
     ["Z-Library"] = "zlib",
 }
 
+-- the name a site is searched as (see Sources), by the name it's said with: one Kindle Fetch knows (see SITES), or a
+-- library added in the settings
+local function sourceOf(site)
+    if H.SITES[site] then
+        return H.SITES[site]
+    end
+    for _, library in ipairs(require("settings.settings"):getLibraries()) do
+        if library.name == site then
+            return require("api.libraries").source(library)
+        end
+    end
+    error("no site " .. tostring(site))
+end
+
 -- tick the sites to search (by name: Library Genesis, unless given, or a list of them), as the search box's Sites menu
 -- does
 function H.tickSites(sites)
     sites = type(sites) == "table" and sites or { sites or "Library Genesis" }
     local sources = {}
     for _, site in ipairs(sites) do
-        table.insert(sources, (assert(H.SITES[site], "no site " .. tostring(site))))
+        table.insert(sources, sourceOf(site))
     end
     assert(require("settings.settings"):setSearchSources(sources))
 end
@@ -296,12 +310,17 @@ function H.tapMenuEntry(menu, predicate)
     end
     assert(index, "no such entry in the menu")
 
-    for page, indexes in ipairs(menu.page_items) do
-        for _, i in ipairs(indexes) do
-            if i == index then
-                menu:onGotoPage(page)
+    -- (the results' own menu says which entries are on each page, see BookMenu, and KOReader's how many are)
+    if menu.page_items then
+        for page, indexes in ipairs(menu.page_items) do
+            for _, i in ipairs(indexes) do
+                if i == index then
+                    menu:onGotoPage(page)
+                end
             end
         end
+    else
+        menu:onGotoPage(math.ceil(index / menu.perpage))
     end
     H.pump()
 
@@ -396,6 +415,17 @@ function H.errorShown()
     for _, window in ipairs(H.windows()) do
         if window.icon == "notice-warning" and type(window.text) == "string" then
             return window.text
+        end
+    end
+end
+
+-- tap away the message saying what went wrong, as it stays over what's behind it until it's tapped (see NotifyUtil)
+function H.dismissError()
+    for _, window in ipairs(H.windows()) do
+        if window.icon == "notice-warning" and type(window.text) == "string" then
+            H.tap(window)
+            H.pump()
+            return
         end
     end
 end

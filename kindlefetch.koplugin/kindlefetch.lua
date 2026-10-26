@@ -25,6 +25,7 @@ local Menu = require("ui/widget/menu")
 local WaitingMessage = require("ui.waitingmessage")
 local ZlibLogin = require("ui.zliblogin")
 local ZlibAccount = require("api.zlibaccount")
+local Libraries = require("api.libraries")
 local SearchCache = require("cache.searchcache")
 local UrlCache = require("cache.urlcache")
 local CurlUpdater = require("updater.curlupdater")
@@ -50,6 +51,8 @@ local MAX_QUERY_LENGTH = 100
 -- dialogs once a session searches with (see addFileDialogButtons)
 local latest
 local file_dialog_buttons_added = false
+-- the libraries said this session not to be reachable, which aren't said to be again (see sayFailed)
+local unreachable_said = {}
 
 local function updateCheckDue()
     local last_check = KindleFetchSettings:getLastUpdateCheck()
@@ -208,6 +211,8 @@ function KindleFetch:init()
     -- load settings
     KindleFetchSettings:load()
     latest = self
+    -- and offer the libraries added to search with the other sites
+    Libraries.register()
 
     if not version_checked then
         version_checked = true
@@ -883,10 +888,17 @@ function KindleFetch:searchFrom(query, pages)
     })
 end
 
--- say over the books found which sites failed, and why, as each is found to have, emptying failures once it has
+-- say over the books found which sites failed, and why, as each is found to have, emptying failures once it has. a
+-- library that can't be reached is only said to have once a session, rather than with every search, as it can be one
+-- that's only there at home, say
 function KindleFetch:sayFailed(failures)
     for __, failure in ipairs(failures) do
-        NotifyUtil.error(T(_("Searching %1 failed: %2"), Sources[failure.source].NAME, failure.err))
+        if failure.err ~= Errors.LIBRARY_UNREACHABLE or not unreachable_said[failure.source] then
+            NotifyUtil.error(T(_("Searching %1 failed: %2"), Sources[failure.source].NAME, failure.err))
+        end
+        if failure.err == Errors.LIBRARY_UNREACHABLE then
+            unreachable_said[failure.source] = true
+        end
     end
     for i = #failures, 1, -1 do
         failures[i] = nil
@@ -966,6 +978,17 @@ function KindleFetch:fixes(err, retry)
                 end,
             },
         }
+    elseif err == Errors.LIBRARY_LOGIN then
+        return {
+            {
+                text = _("Your Libraries…"),
+                callback = function()
+                    SettingsPage:changeLibraries()
+                end,
+            },
+        }
+    elseif err == Errors.LIBRARY_UNREACHABLE and retry then
+        return { { text = _("Try again"), callback = retry } }
     elseif err == Errors.NO_CONNECTION and retry then
         if not NetworkMgr:isWifiOn() then
             return {

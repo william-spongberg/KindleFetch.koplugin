@@ -229,6 +229,58 @@ describe("KindleFetchSettings", function()
         end)
     end)
 
+    -- the OPDS catalogues the user has added (see Libraries)
+    describe("libraries", function()
+        local library = {
+            id = "a1",
+            name = "Books",
+            url = "http://nas:8080/opds?library_id=Books",
+            kind = "calibre",
+            search_url = "http://nas:8080/opds/search/{searchTerms}?library_id=Books",
+            username = "will",
+            password = "secretpassword",
+        }
+
+        it("are none to begin with", function()
+            assert.are.same({}, Settings:getLibraries())
+        end)
+
+        it("are kept with their logins, without logging them", function()
+            assert.is_true(Settings:setLibraries({ library }))
+            assert.are.same({ library }, Settings:getLibraries())
+            assert.are.same({ library }, pluginSettings().libraries)
+            for _, log in ipairs(helper.state.logs) do
+                for i = 2, #log do
+                    assert.is_nil(tostring(log[i]):find("secretpassword", 1, true))
+                end
+            end
+        end)
+
+        -- e.g. by hand, which what reads them would fail on
+        it("leave out what isn't saved as a library should be", function()
+            Settings:setLibraries({
+                library,
+                { id = "b2" },
+                "not a library",
+                { id = "c3", name = "C", url = "javascript:alert(1)", kind = "opds", search_url = "x" },
+                { id = "d4", name = "D", url = "http://nas:8083/opds", kind = "calibre-web", search_url = "x" },
+            })
+            local libraries = Settings:getLibraries()
+            assert.are.equal(2, #libraries)
+            assert.are.equal("Books", libraries[1].name)
+            -- with no login, where it needs none
+            assert.are.equal("", libraries[2].username)
+            assert.are.equal("", libraries[2].password)
+        end)
+
+        it("say when they couldn't be saved", function()
+            helper.state.settings_unwritable = true
+            local ok, err = Settings:setLibraries({ library })
+            assert.is_nil(ok)
+            assert.are.equal("Kindle Fetch's settings couldn't be saved", err)
+        end)
+    end)
+
     describe("Z-Library account", function()
         it("is none to begin with", function()
             assert.is_nil(Settings:getZlibAccount())

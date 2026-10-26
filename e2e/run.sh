@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs KindleFetch's end-to-end tests in a real KOReader, without a window, for each emulated device.
 # These search Library Genesis, Internet Archive and Z-Library and download real books, so they need internet access
-# and aren't run in CI. Z-Library's are skipped unless KINDLEFETCH_ZLIB_EMAIL and KINDLEFETCH_ZLIB_PASSWORD are set.
+# and aren't run in CI. Z-Library's are skipped unless KINDLEFETCH_ZLIB_EMAIL and KINDLEFETCH_ZLIB_PASSWORD are set,
+# and the libraries' unless Calibre is installed, whose content server they search.
 #
 # Usage: e2e/run.sh [-p profile]... [-k koreader_dir] [filter]
 #   -p profile       device to emulate (kindle, kindle-paperwhite, kobo-aura-one, android), can be repeated;
@@ -19,7 +20,7 @@ profiles=()
 koreader_dir=""
 
 usage() {
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while getopts "p:k:h" opt; do
@@ -43,6 +44,46 @@ if [[ -z "${koreader_dir}" ]] && ! flatpak info rocks.koreader.KOReader >/dev/nu
     exit 2
 fi
 
+# Calibre's content server, on a library holding Pride and Prejudice, for the tests of the libraries added
+# (e2e/library_e2e.lua), where Calibre is installed. it needs logging in to, as Calibre asks without HTTPS (the
+# Digest way). only one can run at a time, so it's left out while Calibre itself is open
+calibre_vars=()
+if command -v calibre-server >/dev/null 2>&1 && command -v calibredb >/dev/null 2>&1; then
+    calibre="${repo}/e2e/.tmp/calibre"
+    calibre_port=8399
+    rm -rf "${calibre}/library" "${calibre}/users.sqlite"
+    mkdir -p "${calibre}/library"
+    # (kept from one run to the next)
+    if [[ ! -s "${calibre}/pride.epub" ]]; then
+        curl -fsSL -o "${calibre}/pride.epub" "https://www.gutenberg.org/ebooks/1342.epub.noimages" || true
+    fi
+    if calibredb add --library-path "${calibre}/library" "${calibre}/pride.epub" >"${calibre}/add.log" 2>&1 \
+        && calibre-server --userdb "${calibre}/users.sqlite" --manage-users -- add kindlefetch "e2e password" \
+            >"${calibre}/users.log" 2>&1; then
+        calibre-server --port "${calibre_port}" --listen-on 127.0.0.1 --disable-use-bonjour --enable-auth \
+            --userdb "${calibre}/users.sqlite" "${calibre}/library" >"${calibre}/server.log" 2>&1 &
+        calibre_pid=$!
+        trap 'kill "${calibre_pid}" 2>/dev/null' EXIT
+        for _ in $(seq 1 30); do
+            if curl -s -o /dev/null "http://127.0.0.1:${calibre_port}/opds"; then
+                calibre_vars=(
+                    "E2E_CALIBRE_URL=http://127.0.0.1:${calibre_port}"
+                    "E2E_CALIBRE_USER=kindlefetch"
+                    "E2E_CALIBRE_PASSWORD=e2e password"
+                )
+                break
+            fi
+            if ! kill -0 "${calibre_pid}" 2>/dev/null; then
+                break
+            fi
+            sleep 1
+        done
+    fi
+    if [[ ${#calibre_vars[@]} -eq 0 ]]; then
+        echo "Calibre's content server couldn't be started (see ${calibre}), so its tests are skipped" >&2
+    fi
+fi
+
 status=0
 for profile in "${profiles[@]}"; do
     work="${repo}/e2e/.tmp/${profile}"
@@ -56,6 +97,7 @@ for profile in "${profiles[@]}"; do
         "E2E_WORK=${work}"
         "E2E_FILTER=${filter}"
         "KO_HOME=${work}/koreader"
+        "${calibre_vars[@]}"
     )
 
     echo "== ${profile}"

@@ -449,7 +449,10 @@ function pollDownload(transfer)
 
         FileUtil.removeFile(part_path)
         local err = exit_code == 0 and _("download produced empty file") or CurlUtil.explainExitCode(exit_code)
-        if http_status then
+        if http_status == 401 and transfer.site.library then
+            -- a library that turned its login down (see OpdsSearch)
+            err = Errors.LIBRARY_LOGIN
+        elseif http_status then
             -- its servers failing, as they do while very busy, rather than e.g. the book not being there
             err = http_status >= 500
                     and T(
@@ -501,6 +504,8 @@ function Downloader:_startDownload(book, filepath, callback, retrying, failed_ur
     -- one, and a book being downloaded over is kept until then
     local transfer = {
         book = book,
+        -- the site it's from (see Sources)
+        site = source,
         part_path = filepath .. ".part",
         resume = true,
         expected = {},

@@ -11,6 +11,7 @@ local CurlUtil = require("util.curlutil")
 local HttpUtil = require("util.httputil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
+local StringUtil = require("util.stringutil")
 local NotifyUtil = require("util.notifyutil")
 local PathUtil = require("util.pathutil")
 local ProxyUtil = require("util.proxyutil")
@@ -86,6 +87,21 @@ function Diagnostics.report(tested)
         "Z-Library",
         (ZlibAccount:isLoggedIn() and "logged in" or "not logged in") .. ", at " .. list(UrlApi:peekZlibUrls())
     )
+    -- by their names and kinds, rather than their addresses, and whether they're logged into, but never how
+    local libraries = {}
+    for __, library in ipairs(KindleFetchSettings:getLibraries()) do
+        table.insert(
+            libraries,
+            string.format(
+                "%s (%s, %s%s)",
+                library.name,
+                library.kind,
+                StringUtil.isLocalUrl(library.url) and "on the local network" or "on the internet",
+                library.username ~= "" and ", logged into" or ""
+            )
+        )
+    end
+    add("Libraries", list(libraries))
     add("Languages", list(KindleFetchSettings:getPreferredLanguages()))
     add("File types", list(KindleFetchSettings:getPreferredFileTypes()))
     add("Book types", list(KindleFetchSettings:getPreferredBookTypes()))
@@ -164,10 +180,13 @@ function Diagnostics.show(tested)
     UIManager:show(viewer)
 end
 
+-- the names of the libraries whose catalogues are tested, by their addresses (see testUrls)
+local library_names = {}
+
 -- what to test connecting to: Wikipedia, where the mirrors are looked up, Library Genesis' mirrors and Z-Library's
--- addresses as they are (without looking them up again, or changing them, see UrlApi.peekLibgenUrls), Internet Archive
--- and Project Gutenberg's catalogue. Z-Library's at its API, as Kindle Fetch asks it, which answers without a cookie,
--- where its home page sends what hasn't one back to it, again and again
+-- addresses as they are (without looking them up again, or changing them, see UrlApi.peekLibgenUrls), Internet Archive,
+-- Project Gutenberg's catalogue and the libraries'. Z-Library's at its API, as Kindle Fetch asks it, which answers
+-- without a cookie, where its home page sends what hasn't one back to it, again and again
 local function testUrls()
     local urls = { UrlApi.LIBGEN_PAGE }
     for __, url in ipairs(UrlApi:peekLibgenUrls()) do
@@ -178,12 +197,18 @@ local function testUrls()
     for __, url in ipairs(UrlApi:peekZlibUrls()) do
         table.insert(urls, url .. "/eapi/info/languages")
     end
+    -- and each library's catalogue, said by the library's name rather than its address (see result)
+    library_names = {}
+    for __, library in ipairs(KindleFetchSettings:getLibraries()) do
+        table.insert(urls, library.url)
+        library_names[library.url] = library.name
+    end
     return urls
 end
 
 -- how asking url went, as a line of the report: whatever it answered with, it can be connected to
 local function result(url, body, err, status)
-    local site = LogUtil.site(url)
+    local site = library_names[url] or LogUtil.site(url)
     if status then
         return string.format("%s answered (HTTP %s)", site, tostring(status))
     elseif body then

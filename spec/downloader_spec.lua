@@ -1177,6 +1177,35 @@ describe("Downloader", function()
             assert.matches("curl exit code 22 %(HTTP error response, HTTP 503%)", helper.logged("warn", "failed after"))
         end)
 
+        -- e.g. once its password has been changed there since the search
+        it("says when a library turned its login down", function()
+            local OpdsSearch = require("api.opdssearch")
+            require("api.multisearch").addSite(
+                "library_1",
+                OpdsSearch.new("library_1", {
+                    name = "Books",
+                    kind = OpdsSearch.CALIBRE,
+                    url = "http://nas:8080/opds",
+                    search_url = "http://nas:8080/opds/search/{searchTerms}",
+                })
+            )
+            book = {
+                source = "library_1",
+                id = "library_1_emma",
+                title = "Emma",
+                display_title = "Emma",
+                file_type = "epub",
+                download_url = "http://nas:8080/get/epub/2/Books",
+            }
+            download()
+            assert.are.equal("http://nas:8080/get/epub/2/Books", spawned[1].url)
+            helper.writeFile(spawned[1].headers_file, "HTTP/1.1 401 Unauthorized\r\ncontent-length: 0\r\n\r\n")
+            helper.writeFile(spawned[1].exit_file, "22")
+            helper.runScheduled()
+
+            assert.are.same({ { ok = false, err = require("util.errors").LIBRARY_LOGIN } }, results)
+        end)
+
         it("says which HTTP error stopped the download when it isn't Library Genesis' servers failing", function()
             download()
             helper.writeFile(spawned[1].headers_file, "HTTP/2 404 \r\ncontent-length: 9\r\n\r\n")

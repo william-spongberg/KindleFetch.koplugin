@@ -63,6 +63,7 @@ describe("SettingsPage", function()
             "Show Book Covers: ☑",
             "Download Folder: " .. SettingsPage.shortenFolder(helper.abs(data_dir)),
             "Z-Library Account: Not logged in",
+            "Your Libraries: None",
             -- by name, rather than the codes they're saved as
             "Preferred Languages: English",
             "Preferred File Types: All",
@@ -84,8 +85,28 @@ describe("SettingsPage", function()
         SettingsPage:showSettings()
 
         -- in the order they're listed in
-        assert.are.equal("Preferred File Types: epub, pdf", lastMenu().item_table[5].text)
-        assert.are.equal("Preferred Book Types: Fiction, Non-fiction", lastMenu().item_table[6].text)
+        assert.are.equal("Preferred File Types: epub, pdf", lastMenu().item_table[6].text)
+        assert.are.equal("Preferred Book Types: Fiction, Non-fiction", lastMenu().item_table[7].text)
+    end)
+
+    -- such as Calibre's content server (see LibrarySettings)
+    it("names the libraries added, and opens them", function()
+        Settings:setLibraries({
+            {
+                id = "a1",
+                name = "Books",
+                url = "http://nas:8080/opds?library_id=Books",
+                kind = "calibre",
+                search_url = "http://nas:8080/opds/search/{searchTerms}?library_id=Books",
+            },
+        })
+        SettingsPage:showSettings()
+        local item = lastMenu().item_table[4]
+        assert.are.equal("Your Libraries: Books", item.text)
+
+        item.callback()
+        assert.are.equal("Your Libraries", lastMenu().title)
+        assert.are.same({ "Add a library…", "Books · Calibre" }, itemTexts(lastMenu()))
     end)
 
     describe("Z-Library account", function()
@@ -183,7 +204,7 @@ describe("SettingsPage", function()
         tap("Check for Updates Automatically")
 
         assert.is_false(Settings:getCheckForUpdates())
-        assert.are.equal("Check for Updates Automatically: ☐", lastMenu().item_table[7].text)
+        assert.are.equal("Check for Updates Automatically: ☐", lastMenu().item_table[8].text)
         assert.are.equal(0, #helper.state.notifications)
 
         tap("Check for Updates Automatically")
@@ -206,7 +227,7 @@ describe("SettingsPage", function()
             assert.are.equal(0, #helper.state.notifications)
             -- back in the settings, which were open underneath
             assert.is_true(helper.wasClosed(choices))
-            assert.are.equal("Keep Searches For: 30 days", lastMenu().item_table[8].text)
+            assert.are.equal("Keep Searches For: 30 days", lastMenu().item_table[9].text)
             assert.are.equal(2, #helper.state.shown)
         end)
 
@@ -216,7 +237,7 @@ describe("SettingsPage", function()
             tap("1 day")
 
             assert.are.equal(1, Settings:getMirrorCacheExpiryDays())
-            assert.are.equal("Keep Mirrors For: 1 day", lastMenu().item_table[9].text)
+            assert.are.equal("Keep Mirrors For: 1 day", lastMenu().item_table[10].text)
         end)
     end)
 
@@ -235,7 +256,7 @@ describe("SettingsPage", function()
             assert.is_true(helper.wasClosed(dialog))
             assert.are.equal("http://reader:secret@proxy.example:8080", require("socket.http").PROXY)
             assert.is_true(helper.state.reader_settings.http_proxy_enabled)
-            assert.are.equal("HTTP Proxy: http://proxy.example:8080", lastMenu().item_table[10].text)
+            assert.are.equal("HTTP Proxy: http://proxy.example:8080", lastMenu().item_table[11].text)
             for _, log in ipairs(helper.state.logs) do
                 for i = 3, #log do
                     assert.is_nil(tostring(log[i]):find("secret", 1, true))
@@ -246,7 +267,7 @@ describe("SettingsPage", function()
         it("turns it off, keeping its address for next time", function()
             require("ui/network/manager"):setHTTPProxy("http://proxy.example:8080")
             SettingsPage:showSettings()
-            assert.are.equal("HTTP Proxy: http://proxy.example:8080", lastMenu().item_table[10].text)
+            assert.are.equal("HTTP Proxy: http://proxy.example:8080", lastMenu().item_table[11].text)
             tap("HTTP Proxy")
             local dialog = helper.lastShown()
             assert.are.equal("http://proxy.example:8080", dialog.input)
@@ -255,7 +276,7 @@ describe("SettingsPage", function()
             assert.is_nil(require("socket.http").PROXY)
             assert.is_false(helper.state.reader_settings.http_proxy_enabled)
             assert.are.equal("http://proxy.example:8080", helper.state.reader_settings.http_proxy)
-            assert.are.equal("HTTP Proxy: Off", lastMenu().item_table[10].text)
+            assert.are.equal("HTTP Proxy: Off", lastMenu().item_table[11].text)
         end)
 
         it("only turns on what's an address", function()
@@ -275,18 +296,18 @@ describe("SettingsPage", function()
     describe("encrypted DNS", function()
         it("can't be turned on where curl can't look names up with it", function()
             SettingsPage:showSettings()
-            assert.are.equal("Encrypted DNS: ☐", lastMenu().item_table[11].text)
-            assert.is_false(lastMenu().item_table[11].enabled)
+            assert.are.equal("Encrypted DNS: ☐", lastMenu().item_table[12].text)
+            assert.is_false(lastMenu().item_table[12].enabled)
         end)
 
         it("turns on and off, where curl can", function()
             helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
             SettingsPage:showSettings()
-            assert.is_true(lastMenu().item_table[11].enabled)
+            assert.is_true(lastMenu().item_table[12].enabled)
 
             tap("Encrypted DNS")
             assert.is_true(Settings:getEncryptedDns())
-            assert.are.equal("Encrypted DNS: ☑", lastMenu().item_table[11].text)
+            assert.are.equal("Encrypted DNS: ☑", lastMenu().item_table[12].text)
             tap("Encrypted DNS")
             assert.is_false(Settings:getEncryptedDns())
         end)
@@ -354,7 +375,7 @@ describe("SettingsPage", function()
 
             assert.are.same({ "es", "fr" }, Settings:getPreferredLanguages())
             assert.are.equal(0, #helper.state.notifications)
-            assert.are.equal("Preferred Languages: Spanish, French", lastMenu().item_table[4].text)
+            assert.are.equal("Preferred Languages: Spanish, French", lastMenu().item_table[5].text)
         end)
 
         -- there are eight pages of languages, and each tick used to go back to the first

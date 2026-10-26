@@ -10,6 +10,7 @@ local UrlCache = require("cache.urlcache")
 local CoverCache = require("cache.covercache")
 local ZlibAccount = require("api.zlibaccount")
 local ZlibLogin = require("ui.zliblogin")
+local LibrarySettings = require("ui.librarysettings")
 local InputDialog = require("ui/widget/inputdialog")
 local NetworkMgr = require("ui/network/manager")
 local LogUtil = require("util.logutil")
@@ -167,6 +168,13 @@ function SettingsPage:settingsItems()
             text = T(_("Z-Library Account: %1"), ZlibAccount:getEmail() or _("Not logged in")),
             callback = function()
                 this:changeZlibAccount()
+            end,
+        },
+        {
+            -- such as Calibre's content server (see LibrarySettings)
+            text = T(_("Your Libraries: %1"), LibrarySettings.describe()),
+            callback = function()
+                this:changeLibraries()
             end,
         },
         {
@@ -395,6 +403,16 @@ function SettingsPage:changeZlibAccount()
             this:refresh()
         end,
     })
+end
+
+-- add the libraries to search, such as Calibre's content server, or edit or remove those added (see LibrarySettings)
+function SettingsPage:changeLibraries()
+    local this = self
+    LibrarySettings.show(function(title, items)
+        return this:newMenu(title, items)
+    end, function()
+        this:refresh()
+    end)
 end
 
 function SettingsPage:changeDownloadFolder()

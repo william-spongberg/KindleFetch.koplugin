@@ -9,6 +9,8 @@ describe("KindleFetch", function()
     -- whether Z-Library is logged into, and what to do once the login dialog shown since has logged in
     local zlib_logged_in, zlib_logins
     local cancelled_downloads, curl_check_user_requested, leftovers_removed
+    -- how many times the libraries in the settings were opened (see SettingsPage:changeLibraries)
+    local libraries_shown
     -- the downloads the downloader says are in progress, and those it was asked to show the progress of
     local active_downloads, downloads_shown
     -- whether searches can be called off, and the widget that calls each one off when tapped (false without one)
@@ -225,6 +227,13 @@ describe("KindleFetch", function()
                 settings.encrypted_dns = on
                 return true
             end,
+            getLibraries = function()
+                return settings.libraries or {}
+            end,
+            setLibraries = function(_, libraries)
+                settings.libraries = libraries
+                return true
+            end,
         })
 
         cleared = {
@@ -257,6 +266,9 @@ describe("KindleFetch", function()
         helper.stub("settings.settingspage", {
             showSettings = function()
                 settings_shown = settings_shown + 1
+            end,
+            changeLibraries = function()
+                libraries_shown = libraries_shown + 1
             end,
             changeLanguages = chooser("languages"),
             changeFileTypes = chooser("file types"),
@@ -362,6 +374,7 @@ describe("KindleFetch", function()
             end,
         })
         cancelled_downloads = 0
+        libraries_shown = 0
         curl_check_user_requested = nil
         active_downloads, downloads_shown = {}, {}
 
@@ -1296,6 +1309,25 @@ describe("KindleFetch", function()
                 assert.are.same({ "Dune" }, itemTexts(menus[1]))
             end)
 
+            it("opens the libraries in the settings, where a library turned its login down", function()
+                search_results[1] = { nil, require("util.errors").LIBRARY_LOGIN }
+                search(openUI(), "dune")
+
+                local libraries = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Your Libraries…", libraries.text)
+                libraries.callback()
+                assert.are.equal(1, libraries_shown)
+            end)
+
+            it("tries a library that can't be reached again", function()
+                search_results[1] = { nil, require("util.errors").LIBRARY_UNREACHABLE }
+                search(openUI(), "dune")
+                local again = helper.lastShown().other_buttons[1][1]
+                assert.are.equal("Try again", again.text)
+                andSearch(again.callback)
+                assert.are.equal(2, #searches)
+            end)
+
             -- where the network's own DNS may be what's blocking them (#55)
             it(
                 "looks the sites up with encrypted DNS, then searches again, where the network can't find them",
@@ -1569,6 +1601,21 @@ describe("KindleFetch", function()
             assert.are.equal("Searching Internet Archive failed: request timed out", helper.lastError())
         end)
 
+        -- as it can be one that's only there at home, say
+        it("says a site that can't be reached, as a library away from it, only once a session", function()
+            local unreachable = require("util.errors").LIBRARY_UNREACHABLE
+            search_results[1] = { { book("Dune") } }
+            site_results.archive = { { nil, unreachable }, { nil, unreachable } }
+            searchSites("x")
+            assert.are.equal("Searching Internet Archive failed: " .. unreachable, helper.lastError())
+
+            local shown = #helper.state.shown
+            searchSites("y")
+            for i = shown + 1, #helper.state.shown do
+                assert.are_not.equal("notice-warning", helper.state.shown[i].icon)
+            end
+        end)
+
         -- once there are books to say so over
         it("says a site that failed before any books were found did, once they are", function()
             search_results[1] = { nil, "request timed out" }
@@ -1797,6 +1844,23 @@ describe("KindleFetch", function()
             andSearch(button(plugin.search_box, "Search").callback)
             assert.are.same({ { "emma", 1 } }, library_searches)
             assert.are.same({ { "emma", 1 } }, searches)
+        end)
+
+        it("offers the libraries in the settings once KOReader has started", function()
+            settings.libraries = {
+                {
+                    id = "a1",
+                    name = "Books",
+                    url = "http://nas:8080/opds?library_id=Books",
+                    kind = "calibre",
+                    search_url = "http://nas:8080/opds/search/{searchTerms}?library_id=Books",
+                    username = "",
+                    password = "",
+                },
+            }
+            local plugin = openUI()
+            plugin:setupUI()
+            assert.are.equal("Books", rowTexts(sitesMenu(plugin))[1])
         end)
 
         it("says when they're all ticked, with the sites added", function()

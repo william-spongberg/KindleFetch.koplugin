@@ -104,6 +104,39 @@ describe("Diagnostics", function()
             assert.is_nil(log:find("fetching a page", 1, true))
         end)
 
+        -- by their names and kinds, as their addresses can be someone's own, and never how they're logged into
+        it("says which libraries have been added, without their addresses or logins", function()
+            Settings:setLibraries({
+                {
+                    id = "a1",
+                    name = "Books",
+                    url = "http://192.168.1.10:8080/opds?library_id=Books",
+                    kind = "calibre",
+                    search_url = "http://192.168.1.10:8080/opds/search/{searchTerms}?library_id=Books",
+                    username = "will",
+                    password = "secret-password",
+                },
+                {
+                    id = "b2",
+                    name = "Comics",
+                    url = "https://comics.example/opds",
+                    kind = "opds",
+                    search_url = "https://comics.example/opds/search?q={searchTerms}",
+                },
+            })
+            local report = Diagnostics.report()
+
+            assert.matches(
+                "\nLibraries: Books (calibre, on the local network, logged into), Comics (opds, on the internet)\n",
+                report,
+                1,
+                true
+            )
+            assert.is_nil(report:find("192.168.1.10", 1, true))
+            assert.is_nil(report:find("secret-password", 1, true))
+            assert.matches("\nLibraries: none\n", (Settings:setLibraries({}) and Diagnostics.report()), 1, true)
+        end)
+
         -- which would let whoever reads it into the account
         it("says whether Z-Library is logged into, without the account", function()
             Settings:setZlibAccount({ email = "reader@example.com", user_id = 42, user_key = "secret-key" })
@@ -166,6 +199,25 @@ describe("Diagnostics", function()
             assert.is_truthy(helper.logged("info", "^tested the connection: en.wikipedia.org answered"))
             -- with the message saying it was testing closed
             assert.is_nil(helper.state.trap_widget)
+        end)
+
+        it("asks each library's catalogue, saying how it went by the library's name", function()
+            Settings:setLibraries({
+                {
+                    id = "a1",
+                    name = "Books",
+                    url = "http://192.168.1.10:8080/opds?library_id=Books",
+                    kind = "calibre",
+                    search_url = "http://192.168.1.10:8080/opds/search/{searchTerms}?library_id=Books",
+                },
+            })
+            answers["http://192.168.1.10:8080/opds?library_id=Books"] = { "<feed/>", nil, 200 }
+            Diagnostics.show()
+            button("Test connection").callback()
+
+            assert.are.equal("http://192.168.1.10:8080/opds?library_id=Books", asked[#asked])
+            local tested = viewer().text:match("\nConnection test:\n(.-)\n\n")
+            assert.matches("\n  Books answered %(HTTP 200%)$", tested)
         end)
 
         -- rather than looking them up again, or changing them

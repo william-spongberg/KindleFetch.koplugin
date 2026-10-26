@@ -734,6 +734,55 @@ function KindleFetchSettings:clearRecentSearches()
     return KindleFetchSettings:setSetting("recent_searches", {})
 end
 
+-- libraries (the OPDS catalogues the user has added, see Libraries), each { id, name, url, kind, search_url, username,
+-- password }, of those saved as they should be: its id, which its site's name is made from, the name it's shown
+-- with, its catalogue's address, what kind of catalogue it is and the template of its search (see OpdsSearch), and
+-- the username and password to log in to it with ("" where it needs none), which are kept as they are, as a library
+-- asks for them every time (see LibrarySites)
+function KindleFetchSettings:getLibraries()
+    local saved = getSettingsFile():readSetting("libraries")
+    local libraries = {}
+    for __, library in ipairs(type(saved) == "table" and saved or {}) do
+        if
+            type(library) == "table"
+            and StringUtil.assertValidString(library.id)
+            and StringUtil.assertValidString(library.name)
+            and StringUtil.isSafeUrl(library.url)
+            and StringUtil.assertValidString(library.kind)
+            and StringUtil.assertValidString(library.search_url)
+        then
+            table.insert(libraries, {
+                id = library.id,
+                name = library.name,
+                url = library.url,
+                kind = library.kind,
+                search_url = library.search_url,
+                username = type(library.username) == "string" and library.username or "",
+                password = type(library.password) == "string" and library.password or "",
+            })
+        end
+    end
+    return libraries
+end
+-- not logged, as the passwords log into the libraries. returns true, or nil and why not
+function KindleFetchSettings:setLibraries(libraries)
+    local settings_file = getSettingsFile()
+    settings_file:saveSetting("libraries", libraries)
+    settings_file:flush()
+    -- read back to tell they were written (see flush), each by its id
+    local written = LuaSettings:open(settingsPath()):readSetting("libraries")
+    local same = type(written) == "table" and #written == #libraries
+    for i, library in ipairs(libraries) do
+        same = same and type(written[i]) == "table" and written[i].id == library.id
+    end
+    if not same then
+        LogUtil.warn("could not save the libraries in", settingsPath())
+        return nil, _("Kindle Fetch's settings couldn't be saved")
+    end
+    LogUtil.debug("saved", #libraries, "libraries")
+    return true
+end
+
 -- zlib_account (the Z-Library account logged into: its email, and its user id and key, which log into it as the
 -- password does, and are kept instead)
 function KindleFetchSettings:getZlibAccount()
