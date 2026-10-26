@@ -464,6 +464,16 @@ describe("CoverCache", function()
         end)
 
         describe("full-size", function()
+            -- as a library's catalogue gives them (see OpdsSearch)
+            it("are downloaded from the address the site gives for them, where it gives one", function()
+                local b = book("emma", "http://nas:8080/get/thumb/2/Books?sz=200x300")
+                b.full_image_url = "http://nas:8080/get/cover/2/Books"
+
+                assert.is_true(CoverCache:downloadFullSize(b))
+                assert.are.same({ "http://nas:8080/get/cover/2/Books" }, runs[1].urls)
+                assert.are.same({ covers_dir .. "emma_full.jpg" }, runs[1].paths)
+            end)
+
             it("are downloaded from the thumbnail's address without _small, and kept apart from it", function()
                 local b = book("abc", "https://libgen.example/fictioncovers/1000/abc_small.jpg")
                 assert.is_nil(CoverCache:getFullSize(b))

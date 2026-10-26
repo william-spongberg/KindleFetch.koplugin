@@ -36,6 +36,16 @@ local Errors = {
         "none of Z-Library's addresses can be found on this network, which may be blocking them. Try another Wi-Fi "
             .. "network or DNS server"
     ),
+    -- a library the user has added (see Libraries) needs logging in to, or turned down the username and password
+    LIBRARY_LOGIN = _("the library didn't accept the username and password, so check them in Kindle Fetch's settings"),
+    -- Calibre's content server has stopped letting the device log in for a while, after too many that failed, as it
+    -- can be set up to
+    LIBRARY_LOCKED_OUT = _(
+        "the library has stopped letting this device log in for a while, after too many wrong passwords. Wait a few "
+            .. "minutes, then try again"
+    ),
+    -- a library couldn't be connected to at all, as when the device isn't on the network it's on
+    LIBRARY_UNREACHABLE = _("the library can't be reached. Check it's running, and that this device is on its network"),
     -- none of Library Genesis' mirrors' names could be looked up, though Wikipedia's could (#55)
     UNFOUND = _(
         "none of Library Genesis' sites can be found on this network, which may be blocking them. Try "

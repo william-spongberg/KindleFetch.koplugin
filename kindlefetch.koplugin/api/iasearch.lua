@@ -5,6 +5,7 @@ local StringUtil = require("util.stringutil")
 local HttpUtil = require("util.httputil")
 local KindleFetchSettings = require("settings.settings")
 local SearchCache = require("cache.searchcache")
+local LanguageCodes = require("util.languagecodes")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
@@ -33,127 +34,8 @@ local FORMATS = {
     cbz = { "Comic Book ZIP" },
     cbr = { "Comic Book RAR" },
 }
--- Internet Archive's codes for each language the settings offer, as it has most books' languages (with the two
--- codes some languages have), besides its name and its code in the settings, which some books have instead
-local LANGUAGE_CODES = {
-    en = { "eng" },
-    es = { "spa" },
-    fr = { "fre", "fra" },
-    de = { "ger", "deu" },
-    it = { "ita" },
-    pt = { "por" },
-    ru = { "rus" },
-    zh = { "chi", "zho" },
-    ja = { "jpn" },
-    nl = { "dut", "nld" },
-    bg = { "bul" },
-    pl = { "pol" },
-    ar = { "ara" },
-    la = { "lat" },
-    he = { "heb" },
-    ["zh-Hant"] = { "chi", "zho" },
-    tr = { "tur" },
-    hu = { "hun" },
-    cs = { "cze", "ces" },
-    sv = { "swe" },
-    da = { "dan" },
-    ko = { "kor" },
-    uk = { "ukr" },
-    id = { "ind" },
-    el = { "gre", "ell" },
-    ro = { "rum", "ron" },
-    lt = { "lit" },
-    bn = { "ben" },
-    ca = { "cat" },
-    no = { "nor" },
-    af = { "afr" },
-    fi = { "fin" },
-    hr = { "hrv" },
-    sr = { "srp" },
-    th = { "tha" },
-    hi = { "hin" },
-    ga = { "gle" },
-    lv = { "lav" },
-    fa = { "per", "fas" },
-    vi = { "vie" },
-    sk = { "slo", "slk" },
-    kn = { "kan" },
-    bo = { "tib", "bod" },
-    cy = { "wel", "cym" },
-    jv = { "jav" },
-    ur = { "urd" },
-    yi = { "yid" },
-    hy = { "arm", "hye" },
-    be = { "bel" },
-    rw = { "kin" },
-    ta = { "tam" },
-    kk = { "kaz" },
-    sl = { "slv" },
-    ml = { "mal" },
-    shn = { "shn" },
-    mn = { "mon" },
-    ka = { "geo", "kat" },
-    mr = { "mar" },
-    eo = { "epo" },
-    et = { "est" },
-    te = { "tel" },
-    fil = { "fil" },
-    gu = { "guj" },
-    gl = { "glg" },
-    ky = { "kir" },
-    ms = { "may", "msa" },
-    az = { "aze" },
-    sw = { "swa" },
-    qu = { "que" },
-    pa = { "pan" },
-    ba = { "bak" },
-    sq = { "alb", "sqi" },
-    uz = { "uzb" },
-    bs = { "bos" },
-    eu = { "baq", "eus" },
-    my = { "bur", "mya" },
-    am = { "amh" },
-    ku = { "kur" },
-    fy = { "fry" },
-    zu = { "zul" },
-    ps = { "pus" },
-    ne = { "nep" },
-    so = { "som" },
-    ug = { "uig" },
-    om = { "orm" },
-    mk = { "mac", "mkd" },
-    ht = { "hat" },
-    lo = { "lao" },
-    tt = { "tat" },
-    si = { "sin" },
-    ckb = { "ckb" },
-    tg = { "tgk" },
-    sn = { "sna" },
-    su = { "sun" },
-    nb = { "nob" },
-    mg = { "mlg" },
-    xh = { "xho" },
-    ha = { "hau" },
-    sd = { "snd" },
-    ny = { "nya" },
-}
-
--- what Internet Archive calls a language, as each of its codes, its name and its code in the settings (all lower
--- case), with the language's name to show
-local language_names
-local function languageNames()
-    if not language_names then
-        language_names = {}
-        for __, language in ipairs(KindleFetchSettings:getAvailableLanguages()) do
-            for __, code in ipairs(LANGUAGE_CODES[language.code] or {}) do
-                language_names[code] = language_names[code] or language.text
-            end
-            language_names[language.text:lower()] = language.text
-            language_names[language.code:lower()] = language_names[language.code:lower()] or language.text
-        end
-    end
-    return language_names
-end
+-- Internet Archive's codes for each language the settings offer (see LanguageCodes), as it has most books' languages
+local LANGUAGE_CODES = LanguageCodes.CODES
 
 -- what Internet Archive calls the languages with these codes in the settings, for searching for books in them, or
 -- nil when every language is chosen
@@ -357,7 +239,7 @@ local function languageName(field)
     for __, value in ipairs(values(field)) do
         for part in value:gmatch("[^;,/]+") do
             part = StringUtil.trim(part)
-            local name = languageNames()[part:lower()] or part
+            local name = LanguageCodes.names()[part:lower()] or part
             if part ~= "" and not seen[name] then
                 seen[name] = true
                 table.insert(names, name)

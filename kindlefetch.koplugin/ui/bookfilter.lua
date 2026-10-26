@@ -139,7 +139,7 @@ BookFilter.FILTERS = {
     {
         id = "size",
         name = _("Sizes"),
-        -- which only Library Genesis and Z-Library say
+        -- which only Library Genesis, Z-Library and libraries' catalogues say
         valuesOf = function(book)
             local size = bytes(book.file_size)
             if not size then

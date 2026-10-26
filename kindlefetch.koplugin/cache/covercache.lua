@@ -104,10 +104,12 @@ function CoverCache:cacheExists(id)
     return self:get(id) ~= nil
 end
 
--- Library Genesis links to thumbnails ending in _small, with the full-size cover at the same path without it.
--- returns the full-size cover as a book of its own, stored alongside the thumbnail, or nil if there isn't one
+-- the book's full-size cover, where a site gives it apart from its thumbnail (as a library's catalogue can, see
+-- OpdsSearch), or Library Genesis' (which links to thumbnails ending in _small, with the full-size cover at the same
+-- path without it). returns the full-size cover as a book of its own, stored alongside the thumbnail, or nil if there
+-- isn't one
 local function fullSizeCover(book)
-    local url = book.image_url and book.image_url:gsub("_small(%.%w+)$", "%1")
+    local url = book.full_image_url or book.image_url and book.image_url:gsub("_small(%.%w+)$", "%1")
     if not book.id or not url or url == book.image_url then
         return nil
     end
