@@ -1,5 +1,6 @@
 local LogUtil = require("util.logutil")
 local ProxyUtil = require("util.proxyutil")
+local LibrarySites = require("util.librarysites")
 local KindleFetchSettings = require("settings.settings")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
@@ -446,8 +447,12 @@ function CurlUtil.canUseEncryptedDns()
 end
 
 -- curl_cmd, looking the sites' names up with DNS over HTTPS (see DOH_URL), where that's turned on in the settings and
--- curl can, as a network's own DNS can be what's blocking them (#55)
-function CurlUtil.applyEncryptedDns(curl_cmd)
+-- curl can, as a network's own DNS can be what's blocking them (#55). but not for url, where given, when it's on the
+-- network the device is on (see StringUtil.isLocalUrl), e.g. a library's, whose name only that network's DNS knows
+function CurlUtil.applyEncryptedDns(curl_cmd, url)
+    if url and StringUtil.isLocalUrl(url) then
+        return curl_cmd
+    end
     if KindleFetchSettings:getEncryptedDns() and CurlUtil.canUseEncryptedDns() then
         return string.format("%s --doh-url %s", curl_cmd, DOH_URL)
     end
@@ -457,9 +462,11 @@ end
 -- curl_cmd, going through KOReader's HTTP proxy, where it's on (see ProxyUtil), which is given to curl in a config
 -- file (see createConfigFile), rather than on its command line, where any program on the device can read it, as it
 -- can have a password in it. the config file is returned too, to remove once curl has read it. without a proxy (or
--- where the file can't be written, when curl goes without, saying so), it's curl_cmd as it was
-function CurlUtil.applyProxy(curl_cmd)
-    local proxy = ProxyUtil.get()
+-- where the file can't be written, when curl goes without, saying so), it's curl_cmd as it was, as it is for url,
+-- where given, when it's on the network the device is on, which a proxy on the internet can't reach (see
+-- ProxyUtil.forUrl)
+function CurlUtil.applyProxy(curl_cmd, url)
+    local proxy = ProxyUtil.forUrl(url)
     if not proxy then
         return curl_cmd
     end
@@ -473,15 +480,21 @@ end
 
 -- a file curl can read more options from (see fetchCommand), for what mustn't be on its command line, where any
 -- program on the device can read it, such as a password: options is a list of each option's name and value, e.g.
--- { { "data", "password=..." } }. nil when a value has a line break in it, which would end the option early
+-- { { "data", "password=..." } }, or its name alone, for one without a value, e.g. { "anyauth" }. nil when a value has
+-- a line break in it, which would end the option early
 function CurlUtil.createConfigFile(options)
     local lines = {}
     for __, option in ipairs(options) do
-        local name, value = option[1], tostring(option[2])
-        if value:find("%c") then
-            return nil
+        local name, value = option[1], option[2]
+        if value == nil then
+            table.insert(lines, name)
+        else
+            value = tostring(value)
+            if value:find("%c") then
+                return nil
+            end
+            table.insert(lines, string.format('%s = "%s"', name, (value:gsub('[\\"]', "\\%0"))))
         end
-        table.insert(lines, string.format('%s = "%s"', name, (value:gsub('[\\"]', "\\%0"))))
     end
 
     local config_file = tmpFile("curl_download", ".config")
@@ -493,6 +506,23 @@ function CurlUtil.createConfigFile(options)
     f:close()
     return config_file
 end
+
+-- the options that log curl in to the site of the library url is on (see LibrarySites), for its config file (see
+-- createConfigFile), whichever way the site asks: the Basic way, or the Digest way, as Calibre's content server does
+-- unless it's set up with HTTPS. curl asks without them first, then sends them only to that site, not on to wherever
+-- it sends the request. nil where it needs no login
+function CurlUtil.loginOptions(url)
+    local login = LibrarySites.loginFor(url)
+    if not login then
+        return nil
+    end
+    return { { "user", login.username .. ":" .. login.password }, { "anyauth" } }
+end
+
+-- how long a site on the network the device is on (see StringUtil.isLocalUrl), e.g. a library's, can take to connect
+-- to, in seconds, before it's given up on: as it does at once when it's there, rather than being one that's only
+-- there at home, say
+local LOCAL_CONNECT_TIMEOUT = 5
 
 -- a command that has curl fetch a web page into page_file, then print the HTTP status it ended with (000 when the
 -- site didn't answer) and curl's own exit code, e.g. "200 0". unlike a download, a page with an error status is
@@ -511,13 +541,15 @@ function CurlUtil.fetchCommand(url, page_file, answer_timeout, page_timeout, con
     end
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, url)
-    cmd = string.format("%s --connect-timeout %d --max-time %d", cmd, answer_timeout, page_timeout)
+    local connect_timeout = StringUtil.isLocalUrl(url) and math.min(LOCAL_CONNECT_TIMEOUT, answer_timeout)
+        or answer_timeout
+    cmd = string.format("%s --connect-timeout %d --max-time %d", cmd, connect_timeout, page_timeout)
     cmd = CurlUtil.abortWhenStalled(cmd, FETCH_STALL_TIME)
-    cmd = CurlUtil.applyEncryptedDns(cmd)
+    cmd = CurlUtil.applyEncryptedDns(cmd, url)
     -- each config file curl is given, removed once it has finished with them
     local config_files = {}
     local proxy_config
-    cmd, proxy_config = CurlUtil.applyProxy(cmd)
+    cmd, proxy_config = CurlUtil.applyProxy(cmd, url)
     if proxy_config then
         table.insert(config_files, CurlUtil.shellQuote(proxy_config))
     end
@@ -570,13 +602,17 @@ end
 -- run cmd in a shell that saves its exit code to exit_file once it has finished. the shell's pid is the one a
 -- background download is followed and stopped by (see echoPid and killPid), so it passes being stopped on to cmd,
 -- which would otherwise carry on by itself, writing to its file, and waits for cmd to stop before saving its exit code
-function CurlUtil.saveExitCode(cmd, exit_file, config_file)
+function CurlUtil.saveExitCode(cmd, exit_file, config_files)
+    -- (those curl was given its options in, once it has finished with them: one, or a list of them)
+    local removed = {}
+    for __, config_file in ipairs(type(config_files) == "table" and config_files or { config_files }) do
+        table.insert(removed, CurlUtil.shellQuote(config_file))
+    end
     local command = string.format(
         "(trap 'kill $c 2>/dev/null' TERM; %s & c=$!; wait $c; s=$?; "
             .. "if kill -0 $c 2>/dev/null; then wait $c; s=$?; fi; %secho $s > %s)",
         cmd,
-        -- (the one curl was given its options in, once it has finished with it)
-        config_file and string.format("rm -f %s; ", CurlUtil.shellQuote(config_file)) or "",
+        #removed > 0 and string.format("rm -f %s; ", table.concat(removed, " ")) or "",
         CurlUtil.shellQuote(exit_file)
     )
     command = string.format("%s >/dev/null 2>&1", command) -- do not print errors to terminal
@@ -605,7 +641,7 @@ local function downloadCommand(download_url, filepath, max_time, opts)
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, download_url)
     cmd = CurlUtil.enableRetry(cmd, 2, 2)
-    cmd = CurlUtil.setTimeout(cmd, 15)
+    cmd = CurlUtil.setTimeout(cmd, StringUtil.isLocalUrl(download_url) and LOCAL_CONNECT_TIMEOUT or 15)
     if max_time then
         cmd = string.format("%s --max-time %d --retry-max-time %d", cmd, max_time, max_time)
     end
@@ -615,12 +651,28 @@ local function downloadCommand(download_url, filepath, max_time, opts)
     if opts.stall_time then
         cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
-    cmd = CurlUtil.applyEncryptedDns(cmd)
+    cmd = CurlUtil.applyEncryptedDns(cmd, download_url)
+    -- each config file curl is given (see applyProxy), removed once it has finished with them
+    local config_files = {}
     local proxy_config
-    cmd, proxy_config = CurlUtil.applyProxy(cmd)
+    cmd, proxy_config = CurlUtil.applyProxy(cmd, download_url)
+    if proxy_config then
+        table.insert(config_files, proxy_config)
+    end
+    -- and the library's login, where it's on a library's site that needs one (see loginOptions)
+    local login = CurlUtil.loginOptions(download_url)
+    if login then
+        local login_config = CurlUtil.createConfigFile(login)
+        if login_config then
+            cmd = string.format("%s -K %s", cmd, CurlUtil.shellQuote(login_config))
+            table.insert(config_files, login_config)
+        else
+            LogUtil.warn("could not give curl the library's login, so it's going without")
+        end
+    end
 
     local exit_file = CurlUtil.createExitFile()
-    cmd = CurlUtil.saveExitCode(cmd, exit_file, proxy_config)
+    cmd = CurlUtil.saveExitCode(cmd, exit_file, config_files)
 
     -- without the link, which can carry a temporary key
     LogUtil.debug("curl downloading from", LogUtil.site(download_url), "to", filepath)
@@ -689,12 +741,36 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
     local function quote(value)
         return (value:gsub("\\", "\\\\"):gsub('"', '\\"'))
     end
+    -- whether the files are all on the network the device is on (see StringUtil.isLocalUrl), e.g. a library's covers,
+    -- which go without the proxy and encrypted DNS, and whether they're all on the one site
+    local all_local, site = #download_urls > 0, StringUtil.siteOf(download_urls[1])
+    for __, download_url in ipairs(download_urls) do
+        all_local = all_local and StringUtil.isLocalUrl(download_url)
+        if StringUtil.siteOf(download_url) ~= site then
+            site = nil
+        end
+    end
     local lines = {}
     -- KOReader's HTTP proxy, where it's on (see ProxyUtil), with the files, rather than on curl's command line (see
     -- applyProxy)
-    local proxy = ProxyUtil.get()
+    local proxy = not all_local and ProxyUtil.get()
     if proxy and not proxy:find("%c") then
         table.insert(lines, string.format('proxy = "%s"\n', quote(proxy)))
+    end
+    -- and the login of the library the files are from, given to curl once for all of them, so only where they're all
+    -- on its site (as CoverCache downloads each library's covers apart from the rest), never where any isn't, which
+    -- would send it to that site too
+    local login = CurlUtil.loginOptions(download_urls[1] or "")
+    if login and not site then
+        LogUtil.warn("downloading files from several sites, so without the login of the library one is on")
+        login = nil
+    end
+    for __, option in ipairs(login or {}) do
+        if option[2] == nil then
+            table.insert(lines, option[1] .. "\n")
+        elseif not option[2]:find("%c") then
+            table.insert(lines, string.format('%s = "%s"\n', option[1], quote(option[2])))
+        end
     end
     for i, download_url in ipairs(download_urls) do
         -- an address with a line break in it would add lines of its own to the config file, so leave it out
@@ -732,14 +808,16 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
     if enable_retry then
         cmd = CurlUtil.enableRetry(cmd, 2, 2)
     end
-    cmd = CurlUtil.setTimeout(cmd, timeout)
+    cmd = CurlUtil.setTimeout(cmd, all_local and math.min(LOCAL_CONNECT_TIMEOUT, timeout) or timeout)
     -- give up on files that take too long, so they don't hold up the rest
     cmd = string.format("%s --max-time %d", cmd, timeout * 2)
     if opts.stall_time then
         cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
     cmd = CurlUtil.enableParallel(cmd, num_parallel_jobs)
-    cmd = CurlUtil.applyEncryptedDns(cmd)
+    if not all_local then
+        cmd = CurlUtil.applyEncryptedDns(cmd)
+    end
     -- write each file's result, as some may download when others fail. where curl can, to its stderr, which isn't
     -- buffered like its stdout, so each file's result is there as soon as it has downloaded (and been written out
     -- in full), rather than once they all have

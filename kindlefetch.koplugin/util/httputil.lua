@@ -7,6 +7,8 @@ local CurlUtil = require("util.curlutil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
 local ProxyUtil = require("util.proxyutil")
+local LibrarySites = require("util.librarysites")
+local HttpLogin = require("util.httplogin")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
@@ -95,21 +97,28 @@ local function formBody(form)
 end
 
 -- fetch a page with curl, which asks for it compressed, and doesn't hold KOReader up while it waits when called
--- from inside Trapper:wrap. the form and cookies (see getBody) are passed to curl in a file, rather than on its
--- command line, where any program on the device can read them, as the proxy is (see CurlUtil.applyProxy)
+-- from inside Trapper:wrap. the form and cookies (see getBody), and the login of the library whose site it's on (see
+-- CurlUtil.loginOptions), are passed to curl in a file, rather than on its command line, where any program on the
+-- device can read them, as the proxy is (see CurlUtil.applyProxy)
 local function requestBodyWithCurl(request_url, opts)
     local config_file
+    local options = {}
     if opts.form or opts.cookies then
         -- with curl keeping the cookies it's sent, as a site's check that it isn't a bot can answer with a cookie,
         -- and a redirect back to where it was, to be asked again with it. curl only keeps them when not given any
         -- cookies of its own to send, so those are sent in a header (which curl only sends to the same site)
-        local options = { { "cookie", "" } }
+        table.insert(options, { "cookie", "" })
         if opts.cookies and opts.cookies ~= "" then
             table.insert(options, { "header", "Cookie: " .. opts.cookies })
         end
         if opts.form then
             table.insert(options, { "data", formBody(opts.form) })
         end
+    end
+    for __, option in ipairs(CurlUtil.loginOptions(request_url) or {}) do
+        table.insert(options, option)
+    end
+    if #options > 0 then
         config_file = CurlUtil.createConfigFile(options)
         if not config_file then
             return nil, _("could not write the request for curl")
@@ -170,9 +179,43 @@ local function setCookie(headers)
     return type(set_cookie) == "string" and set_cookie:match("^%s*([^;,%s]+=[^;,]*)") or nil
 end
 
+-- the page's body and HTTP status from what luasocket's request returned (ok, status, and the sink's table of what
+-- arrived), or nil and what went wrong
+local function bodyFrom(ok, status, response_body)
+    -- status is the HTTP status code, or what went wrong if there wasn't a response
+    local body = table.concat(response_body)
+    if not ok then
+        return nil, explainFailure(status)
+    end
+    if body == "" then
+        return nil, T(_("empty response (HTTP %1)"), tostring(status)), status
+    end
+
+    return body, nil, status
+end
+
+-- fetch a page on a library's site (see LibrarySites) with KOReader's own HTTP, logging in to it where it asks to
+-- (see HttpLogin), going through no proxy where it's on the network the device is on (see ProxyUtil.forUrl)
+local function requestLibraryBody(request_url)
+    socketutil:set_timeout(ANSWER_TIMEOUT, PAGE_TIMEOUT)
+    local response_body = {}
+    local ok, status = HttpLogin.request(request_url, { ["User-Agent"] = "Mozilla/5.0" }, function()
+        response_body = {}
+        return socketutil.table_sink(response_body)
+    end)
+    socketutil:reset_timeout()
+    if not ok then
+        LogUtil.warn("KOReader's HTTP couldn't fetch from", LogUtil.site(request_url) .. ":", tostring(status))
+    end
+    return bodyFrom(ok, status, response_body)
+end
+
 -- fetch a page with KOReader's own HTTP, which holds KOReader up until it has, going through its HTTP proxy, where
 -- it's on (see ProxyUtil)
 local function requestBodyWithKOReader(request_url, opts)
+    if LibrarySites.isLibrary(request_url) and not (opts.form or opts.cookies) then
+        return requestLibraryBody(request_url)
+    end
     -- set through KOReader, as https requests ignore luasocket's own timeout and wait a minute instead
     socketutil:set_timeout(ANSWER_TIMEOUT, PAGE_TIMEOUT)
 
@@ -214,16 +257,7 @@ local function requestBodyWithKOReader(request_url, opts)
     end
     socketutil:reset_timeout()
 
-    -- status is the HTTP status code, or what went wrong if there wasn't a response
-    local body = table.concat(response_body)
-    if not ok then
-        return nil, explainFailure(status)
-    end
-    if body == "" then
-        return nil, T(_("empty response (HTTP %1)"), tostring(status)), status
-    end
-
-    return body, nil, status
+    return bodyFrom(ok, status, response_body)
 end
 
 -- how many pages in a row curl couldn't connect to securely, where KOReader's own HTTP could, after which pages are
@@ -241,7 +275,9 @@ function HttpUtil.requestBody(request_url, opts)
     end
 
     local body, err, status = requestBodyWithCurl(request_url, opts)
-    if body or not CurlUtil.isTlsFailure(err) then
+    -- (other than on a library's site, whose certificate isn't to be passed over, as KOReader's HTTP may not check it,
+    -- nor to stop curl fetching every site's pages, see LibrarySites)
+    if body or not CurlUtil.isTlsFailure(err) or LibrarySites.isLibrary(request_url) then
         if body then
             tls_fallbacks = 0
         end
@@ -302,14 +338,31 @@ local function downloadWithKOReader(url, path)
     end
 
     socketutil:set_timeout(ANSWER_TIMEOUT, FILE_TIMEOUT)
-    local ok, status = request {
-        url = url,
-        headers = {
-            ["User-Agent"] = "Mozilla/5.0",
-        },
-        sink = socketutil.file_sink(file),
-        redirect = true,
-    }
+    local ok, status
+    if LibrarySites.isLibrary(url) then
+        -- logging in to it where it asks to (see HttpLogin), into the file afresh each time it's asked, as what it
+        -- says when asked without the login isn't the file
+        local sinks = 0
+        ok, status = HttpLogin.request(url, { ["User-Agent"] = "Mozilla/5.0" }, function()
+            sinks = sinks + 1
+            if sinks > 1 then
+                if io.type(file) == "file" then
+                    file:close()
+                end
+                file = io.open(path, "wb")
+            end
+            return socketutil.file_sink(file)
+        end)
+    else
+        ok, status = request {
+            url = url,
+            headers = {
+                ["User-Agent"] = "Mozilla/5.0",
+            },
+            sink = socketutil.file_sink(file),
+            redirect = true,
+        }
+    end
     socketutil:reset_timeout()
     -- which KOReader's sink has done once the whole file has arrived, but not when none of it did
     if io.type(file) == "file" then

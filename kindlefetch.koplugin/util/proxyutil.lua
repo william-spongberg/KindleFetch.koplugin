@@ -8,6 +8,15 @@ function ProxyUtil.get()
     return type(url) == "string" and url ~= "" and url or nil
 end
 
+-- the proxy to go through for url: none for an address on the network the device is on (see StringUtil.isLocalUrl),
+-- such as a library's, which a proxy on the internet can't reach, otherwise KOReader's (see get)
+function ProxyUtil.forUrl(url)
+    if url and require("util.stringutil").isLocalUrl(url) then
+        return nil
+    end
+    return ProxyUtil.get()
+end
+
 -- the proxy's address without who it's logged into as, for saying which it is
 function ProxyUtil.describe(url)
     return (url:gsub("^(%a[%w+.-]*://)[^@/]*@", "%1"))

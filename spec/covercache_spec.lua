@@ -284,6 +284,32 @@ describe("CoverCache", function()
             assert.are.same({ "KindleFetchCoversDownloaded" }, helper.state.broadcasts)
         end)
 
+        -- as curl is given a library's login once for all of a download's files, which mustn't go to the other sites
+        it("downloads the covers on each library's site apart from the rest, finishing once they all have", function()
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            local books = {
+                book("a", "https://covers.example/a.jpg"),
+                book("b", "http://nas:8080/get/thumb/2"),
+                book("c", "https://covers.example/c.jpg"),
+                book("d", "http://nas:8080/get/thumb/4"),
+            }
+
+            assert.is_true(CoverCache:downloadMultiple(books, 6, onDone))
+            assert.are.equal(2, #runs)
+            assert.are.same({ "https://covers.example/a.jpg", "https://covers.example/c.jpg" }, runs[1].urls)
+            assert.are.same({ "http://nas:8080/get/thumb/2", "http://nas:8080/get/thumb/4" }, runs[2].urls)
+            assert.are.same({ covers_dir .. "b.jpg", covers_dir .. "d.jpg" }, runs[2].paths)
+
+            finishRun(runs[2], { true, true })
+            helper.tick()
+            assert.are.same({}, results)
+            finishRun(runs[1], { true, false })
+            helper.tick()
+            assert.are.same({ 3 }, results)
+            assert.is_true(CoverCache:cacheExists("d"))
+            assert.is_false(CoverCache:isComing(books[3]))
+        end)
+
         -- rather than once the slowest has, which curl can wait on for a while before giving up
         describe("as they arrive", function()
             local results_file, cache_file

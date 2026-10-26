@@ -246,6 +246,33 @@ describe("CurlUtil", function()
             assert.is_nil(cmd:find("--doh-url", 1, true))
         end)
 
+        -- e.g. a library's, whose name only that network's DNS knows, and which a proxy on the internet can't reach,
+        -- and is given up on soon, rather than when one that's only there at home isn't
+        it("goes without encrypted DNS and the proxy on the network the device is on", function()
+            installedCurl("curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0")
+            require("settings.settings"):setEncryptedDns(true)
+            helper.stubs.http.PROXY = "http://proxy.example:3128"
+
+            local cmd = CurlUtil.fetchCommand("http://nas.local:8080/opds", "page", 10, 60)
+            assert.is_nil(cmd:find("--doh-url", 1, true))
+            assert.is_nil(proxyGiven(cmd))
+            assert.matches("--connect-timeout 5 --max-time 60", cmd, 1, true)
+
+            cmd = CurlUtil.fetchCommand("https://books.example/opds", "page", 10, 60)
+            assert.matches(" --doh-url ", cmd, 1, true)
+            assert.are.equal("http://proxy.example:3128", proxyGiven(cmd))
+        end)
+
+        -- which curl answers whichever way the site asks: Basic, or Digest, as Calibre's content server does
+        it("logs in to a library's site, giving curl the login in a file", function()
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            assert.are.same(
+                { { "user", "will:secret" }, { "anyauth" } },
+                CurlUtil.loginOptions("http://nas:8080/opds/search/dune")
+            )
+            assert.is_nil(CurlUtil.loginOptions("https://libgen.example/index.php"))
+        end)
+
         it("fetches into a file of its own in the plugin's tmp dir", function()
             local page_file = CurlUtil.createPageFile()
             assert.matches(data_dir .. "/settings/tmp/curl_download_", page_file, 1, true)
@@ -266,6 +293,11 @@ describe("CurlUtil", function()
                     'cookie = ""\ndata = "email=a%40b.c&note=say \\"hi\\" \\\\ bye"\n',
                     helper.readFile(config_file)
                 )
+            end)
+
+            it("writes an option without a value by its name alone", function()
+                local config_file = CurlUtil.createConfigFile({ { "user", "will:secret" }, { "anyauth" } })
+                assert.are.equal('user = "will:secret"\nanyauth\n', helper.readFile(config_file))
             end)
 
             -- which would end the option early, and could start another
@@ -618,6 +650,33 @@ describe("CurlUtil", function()
             assert.are.equal("http://proxy.example:8080", proxyGiven(helper.state.executed[#helper.state.executed]))
         end)
 
+        -- in a file of its own, rather than on its command line, removed with the proxy's once curl has finished
+        it("logs in to a library's site, where it needs a login", function()
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            helper.stubs.http.PROXY = "http://proxy.example:3128"
+            local login, login_file
+            helper.stubExecute("curl -sL -f -o", function(cmd)
+                for config_file in cmd:gmatch("%-K '([^']+)'") do
+                    if not login then
+                        login, login_file = helper.readFile(config_file):match("^user = .*"), config_file
+                    end
+                end
+                fakeCurl("epub data")(cmd)
+            end)
+
+            assert.is_true(CurlUtil.download("http://nas:8080/get/epub/1", filepath))
+            assert.are.equal('user = "will:secret"\nanyauth\n', login)
+            local cmd = helper.state.executed[#helper.state.executed]
+            assert.is_nil(cmd:find("secret", 1, true))
+            assert.matches("; rm -f '" .. login_file .. "'; ", cmd, 1, true)
+            -- (and goes without the proxy, as the library is on the network the device is on)
+            assert.is_nil(proxyGiven(cmd))
+            assert.matches("--connect-timeout 5", cmd, 1, true)
+
+            CurlUtil.download("https://libgen.example/get.php", filepath)
+            assert.is_nil(helper.state.executed[#helper.state.executed]:find("user =", 1, true))
+        end)
+
         -- which was said to have failed with "(curl exit code nil)"
         it("says when curl couldn't be started", function()
             helper.stubExecute("curl -sL -f -o", function()
@@ -768,6 +827,54 @@ describe("CurlUtil", function()
 
             local _, _, config_file = CurlUtil.downloadMultiple(urls, paths, true, 4, false, 15)
             assert.matches('^proxy = "http://koreader.example:3128"\nurl = ', helper.readFile(config_file))
+        end)
+
+        -- e.g. a library's covers, which CoverCache downloads apart from the rest
+        it("logs in to a library's site where every file is on it", function()
+            helper.stubCommand("& echo $!", "4242\n")
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+            local library_urls = { "http://nas:8080/get/thumb/1", "http://nas:8080/get/thumb/2" }
+
+            local _, _, config_file = CurlUtil.downloadMultiple(library_urls, paths, true, 4, false, 15)
+            assert.matches('^user = "will:secret"\nanyauth\nurl = ', helper.readFile(config_file))
+            assert.is_nil(helper.state.popen_calls[#helper.state.popen_calls]:find("secret", 1, true))
+        end)
+
+        -- as curl is given the login once for all of them
+        it("never sends a library's login to the other sites' files it's given with its own", function()
+            helper.stubCommand("& echo $!", "4242\n")
+            require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+
+            local _, _, config_file = CurlUtil.downloadMultiple(
+                { "http://nas:8080/get/thumb/1", "https://covers.example/b.jpg" },
+                paths,
+                true,
+                4,
+                false,
+                15
+            )
+            assert.is_nil(helper.readFile(config_file):find("secret", 1, true))
+            assert.is_truthy(helper.logged("warn", "^downloading files from several sites, so without the login"))
+        end)
+
+        -- e.g. a library's covers, on the network the device is on
+        it("goes without the proxy and encrypted DNS where every file is on the network the device is on", function()
+            helper.stubCommand("curl --version", "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0\n")
+            helper.stubCommand("& echo $!", "4242\n")
+            CurlUtil.forgetVersion()
+            require("settings.settings"):setEncryptedDns(true)
+            helper.stubs.http.PROXY = "http://proxy.example:3128"
+            local local_urls = { "http://192.168.1.10:8080/get/thumb/1", "http://192.168.1.10:8080/get/thumb/2" }
+
+            local _, _, config_file = CurlUtil.downloadMultiple(local_urls, paths, true, 4, false, 15)
+            assert.matches("^url = ", helper.readFile(config_file))
+            local cmd = helper.state.popen_calls[#helper.state.popen_calls]
+            assert.is_nil(cmd:find("--doh-url", 1, true))
+            assert.matches("--connect-timeout 5", cmd, 1, true)
+
+            _, _, config_file = CurlUtil.downloadMultiple(urls, paths, true, 4, false, 15)
+            assert.matches("^proxy = ", helper.readFile(config_file))
+            assert.matches("--doh-url", helper.state.popen_calls[#helper.state.popen_calls], 1, true)
         end)
 
         -- the next page's covers are fetched once these have finished, and older curls only say once they all have

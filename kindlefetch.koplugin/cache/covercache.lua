@@ -8,6 +8,8 @@ local CurlUtil = require("util.curlutil")
 local HttpDownload = require("util.httpdownload")
 local FileCheck = require("util.filecheck")
 local ProxyUtil = require("util.proxyutil")
+local LibrarySites = require("util.librarysites")
+local StringUtil = require("util.stringutil")
 local LogUtil = require("util.logutil")
 local Guard = require("util.guard")
 
@@ -271,6 +273,24 @@ local function startDownloads(download_urls, filepaths, parallel_jobs, on_progre
     end)
 end
 
+-- the covers' addresses and paths split up by the site they're on, for those on a library's site (see
+-- LibrarySites), which are each downloaded apart from the rest, as curl is given a library's login once for all of a
+-- download's files (see CurlUtil.downloadMultiple), and is told the site they're from. each { urls = ..., paths = ...
+-- }, in the order they come
+local function bySite(download_urls, filepaths)
+    local groups, by_site = {}, {}
+    for i, url in ipairs(download_urls) do
+        local site = LibrarySites.isLibrary(url) and StringUtil.siteOf(url) or ""
+        if not by_site[site] then
+            by_site[site] = { urls = {}, paths = {} }
+            table.insert(groups, by_site[site])
+        end
+        table.insert(by_site[site].urls, url)
+        table.insert(by_site[site].paths, filepaths[i])
+    end
+    return groups
+end
+
 -- download missing covers in the background, calling on_done with the number downloaded once finished, and
 -- letting open search results and download prompts know with a KindleFetchCoversDownloaded event, so they
 -- can replace the placeholders: as covers arrive, rather than once the slowest has, and once they've all
@@ -352,7 +372,20 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
         on_done(count)
     end
 
-    startDownloads(download_urls, filepaths, parallel_jobs, onProgress, finish)
+    -- the covers on each library's site apart from the rest (see bySite), finishing once they all have
+    local groups = bySite(download_urls, filepaths)
+    local remaining, downloaded = #groups, {}
+    for __, group in ipairs(groups) do
+        startDownloads(group.urls, group.paths, parallel_jobs, onProgress, function(paths)
+            for __, path in ipairs(paths) do
+                table.insert(downloaded, path)
+            end
+            remaining = remaining - 1
+            if remaining == 0 then
+                finish(downloaded)
+            end
+        end)
+    end
 
     return true
 end

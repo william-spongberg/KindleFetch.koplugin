@@ -5,6 +5,8 @@ local CurlUtil = require("util.curlutil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
 local Guard = require("util.guard")
+local LibrarySites = require("util.librarysites")
+local HttpLogin = require("util.httplogin")
 local _ = require("gettext")
 
 -- downloads with KOReader's own HTTP, where curl can't (see CurlUtil.canFetch): a device without curl, such as a Kobo
@@ -34,17 +36,36 @@ local function download(url, path, opts)
     -- giving up once nothing has arrived for stall_time, but however long it all takes, as a book can be large
     socketutil:set_timeout(opts.stall_time or 30, opts.max_time or -1)
     local site = url:match("^(https?://[^/]+)")
-    local requested, ok, code, headers, status_line = pcall(http.request, {
-        url = url,
-        headers = {
-            ["User-Agent"] = "Mozilla/5.0",
-            -- as curl sends it, as Library Genesis sends empty covers without one
-            ["Referer"] = site and site .. "/",
-        },
-        sink = socketutil.file_sink(file),
-        redirect = true,
-        proxy = opts.proxy,
-    })
+    local request_headers = {
+        ["User-Agent"] = "Mozilla/5.0",
+        -- as curl sends it, as Library Genesis sends empty covers without one
+        ["Referer"] = site and site .. "/",
+    }
+    local requested, ok, code, headers, status_line
+    if LibrarySites.isLibrary(url) then
+        -- logging in to it where it asks to (see HttpLogin), into the file afresh each time it's asked, as what it
+        -- says when asked without the login isn't the book
+        local sinks = 0
+        requested = true
+        ok, code, headers, status_line = HttpLogin.request(url, request_headers, function()
+            sinks = sinks + 1
+            if sinks > 1 then
+                if io.type(file) == "file" then
+                    file:close()
+                end
+                file = io.open(path, "wb")
+            end
+            return socketutil.file_sink(file)
+        end)
+    else
+        requested, ok, code, headers, status_line = pcall(http.request, {
+            url = url,
+            headers = request_headers,
+            sink = socketutil.file_sink(file),
+            redirect = true,
+            proxy = opts.proxy,
+        })
+    end
     socketutil:reset_timeout()
     if io.type(file) == "file" then
         file:close()

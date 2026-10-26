@@ -51,6 +51,30 @@ describe("HttpDownload", function()
         assert.is_nil(helper.state.http_timeouts)
     end)
 
+    -- the Digest way, as Calibre's content server asks unless it's set up with HTTPS (see HttpLogin)
+    it("logs in to a library's site the way it asks, keeping only the book it sends once it has", function()
+        require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
+        local answers = {
+            { "<html>Unauthorized</html>", 401, { ["www-authenticate"] = 'Digest realm="calibre", nonce="n"' } },
+            { "epub data", 200, { ["content-length"] = "9" } },
+        }
+        helper.stubs.http.request = function(request)
+            table.insert(requests, request)
+            local reply = table.remove(answers, 1)
+            request.sink(reply[1])
+            return 1, reply[2], reply[3], "HTTP/1.1 " .. reply[2]
+        end
+        local _, exit_file = HttpDownload.start("http://nas:8080/get/epub/1", path, { headers_file = headers_file })
+
+        assert.are.equal(0, CurlUtil.getExitCode(exit_file))
+        assert.are.equal("epub data", helper.readFile(path))
+        -- noting down the headers of what was sent once logged in
+        assert.are.equal(200, CurlUtil.getDownloadStatus(headers_file))
+        assert.are.equal(9, CurlUtil.getDownloadSize(headers_file))
+        assert.matches('^Digest username="will"', requests[2].headers.Authorization)
+        assert.are.equal("http://nas:8080/", requests[2].headers["Referer"])
+    end)
+
     it("says the site answered with an error as curl does", function()
         answer("<html>Not Found</html>", 1, 404, {}, "HTTP/1.1 404 Not Found")
         local _, exit_file = HttpDownload.start("https://libgen.example/get.php", path, { headers_file = headers_file })
