@@ -1006,9 +1006,18 @@ function helper.useLiveHttp()
                 config:close()
                 cmd = cmd .. " -K " .. quote(config_file)
             end
-            local pipe = real_popen(cmd)
-            local output = pipe:read("*a")
-            pipe:close()
+            -- asking once more when it times out (other than with a form, which mustn't be sent twice), as a site can
+            -- be slow for a moment, which isn't what the live tests are for, as Project Gutenberg was from GitHub's
+            -- servers when the canary asked it
+            local output
+            for _ = 1, form and 1 or 2 do
+                local pipe = real_popen(cmd)
+                output = pipe:read("*a")
+                pipe:close()
+                if not output:find(" 28$") then
+                    break
+                end
+            end
             if config_file then
                 os.remove(config_file)
             end

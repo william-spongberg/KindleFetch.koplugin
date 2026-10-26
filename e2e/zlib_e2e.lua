@@ -18,7 +18,7 @@ describe("Z-Library", function()
         end
     end)
 
-    if not (email and password) then
+    if not (email and email ~= "" and password and password ~= "") then
         pending("needs KINDLEFETCH_ZLIB_EMAIL and KINDLEFETCH_ZLIB_PASSWORD")
         return
     end

@@ -407,7 +407,8 @@ describe("ZlibSearch", function()
     -- KINDLEFETCH_ZLIB_PASSWORD, so it's skipped without them (as in CI). the download link isn't asked for, as each
     -- one counts towards how many books the account can download a day
     local email, password = os.getenv("KINDLEFETCH_ZLIB_EMAIL"), os.getenv("KINDLEFETCH_ZLIB_PASSWORD")
-    if email and password then
+    -- (or empty, as the Canary workflow gives them where the repository has no secrets of those names)
+    if email and email ~= "" and password and password ~= "" then
         it("finds books on the live Z-Library site #live", function()
             web.live = true
             -- at the addresses Wikipedia lists
