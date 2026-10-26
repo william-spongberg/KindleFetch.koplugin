@@ -836,7 +836,7 @@ describe("KindleFetch", function()
             )
         end)
 
-        -- where the sites are chosen (see chooseSites)
+        -- where the sites are chosen (see SearchBox.chooseSites)
         it("has the one Search, rather than one for each site", function()
             local plugin = openUI()
             assert.is_nil(menuItem(plugin, "Search Library Genesis"))

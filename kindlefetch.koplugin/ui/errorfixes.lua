@@ -1,4 +1,6 @@
 local NetworkMgr = require("ui/network/manager")
+local UIManager = require("ui/uimanager")
+local ConfirmBox = require("ui/widget/confirmbox")
 local KindleFetchSettings = require("settings.settings")
 local SettingsPage = require("settings.settingspage")
 local ZlibLogin = require("ui.zliblogin")
@@ -83,6 +85,31 @@ function ErrorFixes.buttons(err, retry)
     local fix = ErrorFixes.FIXES[Errors.fixOf(err)]
     local button = fix and fix(retry)
     return button and { button } or {}
+end
+
+-- say text with what fixes err (see buttons) and other_rows, in a message that stays, or else as an error
+function ErrorFixes.show(text, err, retry, other_rows)
+    local rows = {}
+    local fixes = ErrorFixes.buttons(err, retry)
+    if #fixes > 0 then
+        table.insert(rows, fixes)
+    end
+    for __, row in ipairs(other_rows or {}) do
+        if #row > 0 then
+            table.insert(rows, row)
+        end
+    end
+    if #rows == 0 then
+        NotifyUtil.error(text)
+        return
+    end
+    UIManager:show(ConfirmBox:new {
+        text = text,
+        icon = "notice-warning",
+        no_ok_button = true,
+        cancel_text = _("Close"),
+        other_buttons = rows,
+    })
 end
 
 return ErrorFixes

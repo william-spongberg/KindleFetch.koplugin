@@ -213,7 +213,7 @@ KOReader's `crash.log`, in its `koreader` folder, says what Kindle Fetch was doi
 ``` architecture
 kindlefetch.koplugin/
 ├── main.lua                   # Loads Kindle Fetch, or when it can't be loaded or started, what safemode.lua leaves
-├── kindlefetch.lua            # The plugin itself; manages search UI, results display, and download initiation
+├── kindlefetch.lua            # The plugin itself: its menus, starting searches one at a time and saying what they found, and downloading and opening books
 ├── safemode.lua               # What's left when Kindle Fetch can't start (e.g. after an update that doesn't work with your KOReader): its menu, saying why, and going back to the version before
 ├── _meta.lua                  # Plugin metadata and KOReader integration
 ├── settings/
@@ -225,6 +225,7 @@ kindlefetch.koplugin/
 │   ├── site.lua               # What every site does: searching it a page at a time, saving the results and explaining failures, so each site only says how to search it and read its results
 │   ├── book.lua               # The books the sites find: the names their files download as, their titles and authors as shown, and their sizes
 │   ├── sites.lua              # The sites books can be searched for and downloaded from
+│   ├── searchsession.lua      # A search and what it has found: its books, each site's next page, and which of the books are shown
 │   ├── multisearch.lua        # Searches the sites ticked at once, each in a coroutine of its own, passing on each one's books as soon as it has found them
 │   ├── libgensearch.lua       # Searches Library Genesis and finds its download links, reading its pages of results until enough books are found
 │   ├── iasearch.lua           # Searches Internet Archive's books that anyone can download, and finds their files, with its search API
@@ -235,6 +236,8 @@ kindlefetch.koplugin/
 │   ├── zlibsearch.lua         # Searches Z-Library and finds its download links with the API its app uses, while the account can download more today
 │   └── urlapi.lua             # Scrapes Wikipedia to discover the current Library Genesis mirrors and Z-Library addresses
 ├── ui/
+│   ├── searchbox.lua          # The search box: what's searched for, on which sites, and narrowed down to what
+│   ├── resultsview.lua        # The menu of a search's books, with looking through them, showing only some, and searching again
 │   ├── bookmenu.lua           # Custom menu for displaying search results with cover images and pagination
 │   ├── bookfilter.lua         # What the books found can be shown by without searching again (their sites, languages, file types, book types, decades, sizes, and whether they're downloaded), with how many have each
 │   ├── coverplaceholder.lua   # Placeholder shown in place of a cover while it downloads
@@ -299,7 +302,7 @@ kindlefetch.koplugin/
    - Book cover loading can be toggled on/off (for efficiency)
    - All settings are persisted and applied to future searches
 
-2. **Search Phase** (`MultiSearch`, and each `Site`: `LibgenSearch`, `IaSearch`, `GutenbergSearch`, `ZlibSearch`, `OpdsSearch`)
+2. **Search Phase** (`SearchBox`, `MultiSearch`, `SearchSession`, `ResultsView`, and each `Site`: `LibgenSearch`, `IaSearch`, `GutenbergSearch`, `ZlibSearch`, `OpdsSearch`)
    - User enters a search query via InputDialog, or chooses one of the last 10 from its Recent button
    - The sites ticked in the search box (`MultiSearch`) are searched at once, each in a coroutine of its own, so each one's books are shown as soon as it has found them, with the sites still being searched listed at the end. Where pages are fetched with KOReader's own HTTP, which holds KOReader up, they're searched one after another instead, with what has been found shown in between. A site that fails is said to have over the books the others found, Load more carries on from each site that has more, and Cancel calls them all off
    - Plugin resolves the current Library Genesis mirror URL (cached for a week by default)

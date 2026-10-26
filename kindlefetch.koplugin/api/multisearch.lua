@@ -3,6 +3,9 @@ local Sites = require("api.sites")
 local HttpUtil = require("util.httputil")
 local Guard = require("util.guard")
 local Errors = require("util.errors")
+local ZlibAccount = require("api.zlibaccount")
+local T = require("ffi/util").template
+local _ = require("gettext")
 
 -- searches sites at once in coroutines, to show each one's books when found, or in turn where KOReader's HTTP blocks
 local MultiSearch = {}
@@ -42,6 +45,44 @@ function MultiSearch.removeSite(source)
             return
         end
     end
+end
+
+-- whether it can be searched now: one needing an account only once logged into, not asking to log in for every search
+function MultiSearch.canSearch(source)
+    return not Sites[source].NEEDS_LOGIN or ZlibAccount:isLoggedIn()
+end
+
+-- the sites' names, as they're said together, e.g. "Library Genesis and Internet Archive"
+function MultiSearch.sitesName(sources)
+    local names = {}
+    for __, source in ipairs(sources) do
+        table.insert(names, Sites[source].NAME)
+    end
+    if #names <= 1 then
+        return names[1] or ""
+    end
+    local last = table.remove(names)
+    return T(_("%1 and %2"), table.concat(names, ", "), last)
+end
+
+-- the sites in pages (see start), in the order they're offered
+function MultiSearch.sourcesOf(pages)
+    local sources = {}
+    for __, source in ipairs(MultiSearch.sources()) do
+        if pages[source] then
+            table.insert(sources, source)
+        end
+    end
+    return sources
+end
+
+-- the first page of each site's results, to search from (see start)
+function MultiSearch.firstPages(sources)
+    local pages = {}
+    for __, source in ipairs(sources) do
+        pages[source] = 1
+    end
+    return pages
 end
 
 -- whether the site can narrow a search down to scope, e.g. "author" (see SCOPES in Site)

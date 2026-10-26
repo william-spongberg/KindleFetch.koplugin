@@ -5,7 +5,7 @@ local StringUtil = require("util.stringutil")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- what the books found can be shown by (see KindleFetch:chooseShown), hiding values unticked, so new ones still show
+-- what the books found can be shown by (see ResultsView.chooseShown), hiding values unticked, so new ones still show
 local BookFilter = {}
 
 -- the value of a book that doesn't say, e.g. one without a language
