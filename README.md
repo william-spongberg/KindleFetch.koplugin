@@ -220,7 +220,8 @@ kindlefetch.koplugin/
 │   ├── settings.lua           # Persistent storage and management of user preferences
 │   └── settingspage.lua       # UI for configuring user preferences, and clearing the caches
 ├── api/
-│   ├── downloader.lua         # Downloads books from the site they were found on, with progress tracking and error recovery
+│   ├── downloader.lua         # Downloads books from the site they were found on, finding each one's link, keeping the device awake while they download
+│   ├── transfer.lua           # A book downloading: its link found, downloading (paused while Wi-Fi is off), checked, then done or failed, with what it tries again
 │   ├── site.lua               # What every site does: searching it a page at a time, saving the results and explaining failures, so each site only says how to search it and read its results
 │   ├── book.lua               # The books the sites find: the names their files download as, their titles and authors as shown, and their sizes
 │   ├── sites.lua              # The sites books can be searched for and downloaded from
@@ -318,7 +319,7 @@ kindlefetch.koplugin/
    - If a cover can't be downloaded, or what arrives isn't an image, its book is shown without one
    - Tapping a cover in the download prompt downloads the full-size cover, showing the thumbnail until it arrives
 
-4. **Download Phase** (`Downloader`)
+4. **Download Phase** (`Downloader`, `Transfer`)
    - User selects a book and optionally changes the save location via DownloadPrompt
    - If a file of that name is already there, the plugin asks whether to overwrite it or read the existing book
    - Before the book's link is looked up, the folder is checked: that it's there and can be written to (downloading to the default folder for now when the one chosen in the settings is missing, as on an SD card that has been taken out), and that no other book is downloading to the same name
