@@ -238,7 +238,7 @@ function OpdsSearch:parseBook(entry, base_url, wanted, file_types)
     -- leaving out a book only in other languages, where it says (Calibre's search does so, see calibreSearch)
     local languages, seen, in_chosen = {}, {}, false
     for __, value in ipairs(entry.languages) do
-        local language = LanguageCodes.find(value)
+        local language = LanguageCodes.find(value, KindleFetchSettings:getAvailableLanguages())
         if language and not seen[language.text] then
             seen[language.text] = true
             table.insert(languages, language.text)

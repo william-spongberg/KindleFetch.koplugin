@@ -227,7 +227,7 @@ local function languageName(field)
     for __, value in ipairs(values(field)) do
         for part in value:gmatch("[^;,/]+") do
             part = StringUtil.trim(part)
-            local name = LanguageCodes.names()[part:lower()] or part
+            local name = LanguageCodes.names(KindleFetchSettings:getAvailableLanguages())[part:lower()] or part
             if part ~= "" and not seen[name] then
                 seen[name] = true
                 table.insert(names, name)

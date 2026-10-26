@@ -83,26 +83,27 @@ describe("OpdsFeed", function()
 end)
 
 describe("LanguageCodes", function()
-    local LanguageCodes
+    local LanguageCodes, languages
 
     before_each(function()
         helper.reset()
         helper.state.data_dir = helper.tmpdir("data")
         LanguageCodes = require("util.languagecodes")
+        languages = require("settings.settings"):getAvailableLanguages()
     end)
 
     after_each(helper.cleanup)
 
     it("finds a language by the codes and names sites give it", function()
         for _, value in ipairs({ "eng", "en", "en-GB", "English", " ENG " }) do
-            assert.are.same({ text = "English", code = "en" }, LanguageCodes.find(value), value)
+            assert.are.same({ text = "English", code = "en" }, LanguageCodes.find(value, languages), value)
         end
-        assert.are.equal("German", LanguageCodes.find("ger").text)
-        assert.are.equal("German", LanguageCodes.find("deu").text)
+        assert.are.equal("German", LanguageCodes.find("ger", languages).text)
+        assert.are.equal("German", LanguageCodes.find("deu", languages).text)
     end)
 
     it("doesn't find one the settings don't offer", function()
-        assert.is_nil(LanguageCodes.find("xyz"))
-        assert.is_nil(LanguageCodes.find(nil))
+        assert.is_nil(LanguageCodes.find("xyz", languages))
+        assert.is_nil(LanguageCodes.find(nil, languages))
     end)
 end)

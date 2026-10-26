@@ -1,5 +1,3 @@
-local KindleFetchSettings = require("settings.settings")
-
 -- the settings' languages by sites' codes for them: MARC (ISO 639-2, both where there are two), as OPDS catalogues give
 local LanguageCodes = {}
 
@@ -107,30 +105,35 @@ LanguageCodes.CODES = {
     ny = { "nya" },
 }
 
--- each language's name to show, by what sites call it: its codes, name and code in the settings, all in small letters
-local names
-function LanguageCodes.names()
+-- the names of the languages in each list given to names, worked out once a list (see names)
+local names_of = setmetatable({}, { __mode = "k" })
+
+-- each name to show of languages (each { code, text }), by what sites call it: its codes, name and code, lowercase
+function LanguageCodes.names(languages)
+    local names = names_of[languages]
     if not names then
         names = {}
-        for __, language in ipairs(KindleFetchSettings:getAvailableLanguages()) do
+        for __, language in ipairs(languages) do
             for __, code in ipairs(LanguageCodes.CODES[language.code] or {}) do
                 names[code] = names[code] or language.text
             end
             names[language.text:lower()] = language.text
             names[language.code:lower()] = names[language.code:lower()] or language.text
         end
+        names_of[languages] = names
     end
     return names
 end
 
--- the settings' language a site's code or name for it is, or nil when the settings don't offer it
-function LanguageCodes.find(value)
+-- the one of languages (see names) a site's code or name for it is, or nil where it isn't one of them
+function LanguageCodes.find(value, languages)
     local lower = type(value) == "string" and value:lower():gsub("^%s+", ""):gsub("%s+$", "") or ""
-    local name = LanguageCodes.names()[lower] or LanguageCodes.names()[lower:match("^(%a+)[-_]")]
+    local names = LanguageCodes.names(languages)
+    local name = names[lower] or names[lower:match("^(%a+)[-_]")]
     if not name then
         return nil
     end
-    for __, language in ipairs(KindleFetchSettings:getAvailableLanguages()) do
+    for __, language in ipairs(languages) do
         if language.text == name then
             return language
         end
