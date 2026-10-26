@@ -208,6 +208,44 @@ describe("MultiSearch", function()
         assert.are.equal(1, done)
     end)
 
+    -- e.g. a library the user has added
+    describe("sites added while KOReader runs", function()
+        it("offers them first, and searches them", function()
+            local library = fakeSite("Home library")
+            MultiSearch.addSite("library_1", library)
+            assert.are.same({ "library_1", "zlib", "libgen", "archive", "gutenberg" }, MultiSearch.sources())
+            assert.are.equal(library, sites.library_1)
+
+            local search = MultiSearch.start("dune", { libgen = 1, library_1 = 1 }, nil, handlers)
+            helper.runScheduled()
+            assert.are.equal(1, #searched("Home library"))
+            assert.are.same({ "library_1", "libgen" }, search:pendingSources())
+        end)
+
+        -- e.g. once the library's address has been changed
+        it("puts a site added again in place of the one before, offering it once", function()
+            MultiSearch.addSite("library_1", fakeSite("Home library"))
+            local changed = fakeSite("Books")
+            MultiSearch.addSite("library_1", changed)
+            assert.are.same({ "library_1", "zlib", "libgen", "archive", "gutenberg" }, MultiSearch.sources())
+            assert.are.equal(changed, sites.library_1)
+        end)
+
+        -- so the books found on it that are showing can still be downloaded
+        it("stops offering one removed, keeping it for the books found on it", function()
+            local library = fakeSite("Home library")
+            MultiSearch.addSite("library_1", library)
+            MultiSearch.addSite("library_2", fakeSite("Comics"))
+            MultiSearch.removeSite("library_1")
+            assert.are.same({ "library_2", "zlib", "libgen", "archive", "gutenberg" }, MultiSearch.sources())
+            assert.are.equal(library, sites.library_1)
+
+            MultiSearch.start("dune", { library_1 = 1, libgen = 1 }, nil, handlers)
+            helper.runScheduled()
+            assert.are.same({}, searched("Home library"))
+        end)
+    end)
+
     it("finishes straight away when there are no sites to search", function()
         MultiSearch.start("dune", {}, nil, handlers)
         helper.runScheduled()

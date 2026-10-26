@@ -19,12 +19,13 @@ end
 
 -- where the site is among those offered, for listing them in that order
 local function siteRank(code)
-    for i, source in ipairs(MultiSearch.SOURCES) do
+    local sources = MultiSearch.sources()
+    for i, source in ipairs(sources) do
         if source == code then
             return i
         end
     end
-    return #MultiSearch.SOURCES + 1
+    return #sources + 1
 end
 
 -- the values most of the books found have first, then by name, with Unknown last

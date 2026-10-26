@@ -1764,6 +1764,67 @@ describe("KindleFetch", function()
             assert.are.equal("Sites: All", buttonWithId(plugin.search_box, "sites").text)
         end)
 
+        -- e.g. a library the user has added (see MultiSearch.addSite), returning what it's asked to search for
+        local function addLibrary()
+            local library_searches = {}
+            require("api.multisearch").addSite("library_1", {
+                NAME = "Home library",
+                search = function(_, query, page, scope)
+                    table.insert(library_searches, { query, page, scope })
+                    return {}, nil, nil, 0
+                end,
+                isCached = function()
+                    return false
+                end,
+            })
+            return library_searches
+        end
+
+        it("offers the sites added while KOReader runs first, searching them once ticked", function()
+            local plugin = openUI()
+            local library_searches = addLibrary()
+            plugin:setupUI()
+            local menu = sitesMenu(plugin)
+            assert.are.same(
+                { "Home library", "Z-Library", "✓ Library Genesis", "Internet Archive", "Project Gutenberg" },
+                rowTexts(menu)
+            )
+
+            menu.buttons[1][1].callback()
+            assert.are.same({ "library_1", "libgen" }, settings.search_sources)
+            assert.are.equal("Sites: Home library and Library Genesis", buttonWithId(plugin.search_box, "sites").text)
+            plugin.search_box.input_text = "emma"
+            andSearch(button(plugin.search_box, "Search").callback)
+            assert.are.same({ { "emma", 1 } }, library_searches)
+            assert.are.same({ { "emma", 1 } }, searches)
+        end)
+
+        it("says when they're all ticked, with the sites added", function()
+            settings.search_sources = { "zlib", "gutenberg", "libgen", "archive", "library_1" }
+            local plugin = openUI()
+            addLibrary()
+            plugin:setupUI()
+            assert.are.equal("Sites: All", buttonWithId(plugin.search_box, "sites").text)
+        end)
+
+        it("stops offering or searching a site that has been removed, though it was ticked", function()
+            settings.search_sources = { "library_1", "libgen" }
+            local plugin = openUI()
+            local library_searches = addLibrary()
+            require("api.multisearch").removeSite("library_1")
+            plugin:setupUI()
+            assert.are.equal("Sites: Library Genesis", buttonWithId(plugin.search_box, "sites").text)
+            assert.are.same(
+                { "Z-Library", "✓ Library Genesis", "Internet Archive", "Project Gutenberg" },
+                rowTexts(sitesMenu(plugin))
+            )
+
+            plugin.search_box.input_text = "emma"
+            andSearch(button(plugin.search_box, "Search").callback)
+            assert.are.same({}, library_searches)
+            assert.are.same({ { "emma", 1 } }, searches)
+        end)
+
         -- as it can only be searched with an account
         it("logs in to Z-Library before ticking it", function()
             zlib_logged_in = false

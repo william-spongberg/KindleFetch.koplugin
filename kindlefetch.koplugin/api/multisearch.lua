@@ -11,8 +11,46 @@ local Errors = require("util.errors")
 local MultiSearch = {}
 MultiSearch.__index = MultiSearch
 
--- the sites, in the order they're offered, and searched in where it's one after another
-MultiSearch.SOURCES = { "zlib", "libgen", "archive", "gutenberg" }
+-- the sites Kindle Fetch knows, in the order they're offered, and those added since KOReader started (see addSite),
+-- in the order they were added, which are offered before them
+local KNOWN_SOURCES = { "zlib", "libgen", "archive", "gutenberg" }
+local added_sources = {}
+
+-- the sites, by their names in Sources, in the order they're offered, and searched in where it's one after another:
+-- those added (see addSite), then those Kindle Fetch knows
+function MultiSearch.sources()
+    local sources = {}
+    for __, list in ipairs({ added_sources, KNOWN_SOURCES }) do
+        for __, source in ipairs(list) do
+            table.insert(sources, source)
+        end
+    end
+    return sources
+end
+
+-- offer site to search as source (its name in Sources, which the books found on it are saved with), before the sites
+-- Kindle Fetch knows, e.g. a library the user has added, in place of the site added as source before, where there was
+-- one
+function MultiSearch.addSite(source, site)
+    Sources[source] = site
+    for __, added in ipairs(added_sources) do
+        if added == source then
+            return
+        end
+    end
+    table.insert(added_sources, source)
+end
+
+-- stop offering the site added as source (see addSite). it's kept in Sources, so the books found on it before, where
+-- they're showing, are still listed with its name, and can still be downloaded
+function MultiSearch.removeSite(source)
+    for i, added in ipairs(added_sources) do
+        if added == source then
+            table.remove(added_sources, i)
+            return
+        end
+    end
+end
 
 -- whether the site can narrow a search down to scope, e.g. "author" (see SCOPES in Sources)
 function MultiSearch.canNarrow(source, scope)
@@ -51,7 +89,7 @@ function MultiSearch.start(query, pages, scope, handlers)
         queue = {},
         traps = {},
     }, MultiSearch)
-    for __, source in ipairs(MultiSearch.SOURCES) do
+    for __, source in ipairs(MultiSearch.sources()) do
         if pages[source] then
             search.pending[source] = true
             table.insert(search.queue, source)
@@ -137,7 +175,7 @@ end
 -- the sites still being searched, in the order they're offered
 function MultiSearch:pendingSources()
     local sources = {}
-    for __, source in ipairs(MultiSearch.SOURCES) do
+    for __, source in ipairs(MultiSearch.sources()) do
         if self.pending[source] then
             table.insert(sources, source)
         end

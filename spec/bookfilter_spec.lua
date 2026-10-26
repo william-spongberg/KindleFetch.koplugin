@@ -1,7 +1,7 @@
 local helper = require("helper")
 
 describe("BookFilter", function()
-    local BookFilter
+    local BookFilter, offered
 
     before_each(function()
         helper.reset()
@@ -9,8 +9,14 @@ describe("BookFilter", function()
             zlib = { NAME = "Z-Library" },
             libgen = { NAME = "Library Genesis" },
             archive = { NAME = "Internet Archive" },
+            library_1 = { NAME = "Home library" },
         })
-        helper.stub("api.multisearch", { SOURCES = { "zlib", "libgen", "archive" } })
+        offered = { "zlib", "libgen", "archive" }
+        helper.stub("api.multisearch", {
+            sources = function()
+                return offered
+            end,
+        })
         BookFilter = require("ui.bookfilter")
     end)
 
@@ -42,6 +48,13 @@ describe("BookFilter", function()
         it("lists the sites in the order they're offered", function()
             local books = { { source = "archive" }, { source = "zlib" }, { source = "archive" } }
             assert.are.same({ "Z-Library (1)", "Internet Archive (2)" }, counted(books, "site"))
+        end)
+
+        -- e.g. a library the user has added, which is offered first (see MultiSearch.addSite)
+        it("lists a site added while KOReader runs where it's offered", function()
+            offered = { "library_1", "zlib", "libgen", "archive" }
+            local books = { { source = "archive" }, { source = "library_1" } }
+            assert.are.same({ "Home library (1)", "Internet Archive (1)" }, counted(books, "site"))
         end)
 
         it("lists the most common first, then by name, with books that don't say last", function()

@@ -1,4 +1,5 @@
--- the sites books can be searched for and downloaded from, by the name a book's source is saved as. each has its NAME,
+-- the sites books can be searched for and downloaded from, by the name a book's source is saved as: those Kindle Fetch
+-- knows, and those added while it runs, e.g. a library the user has added (see MultiSearch.addSite). each has its NAME,
 -- for saying so; SOURCE, that name, for saving its searches (see SearchCache); search and isCached, for searching it
 -- (see LlgiSearch); findDownloadLink, for looking up the link a book downloads from (see Downloader), then nil, nil and
 -- what the site lists its file as, where it does (its md5 and how many bytes it is, which what arrives is checked

@@ -433,7 +433,7 @@ end
 -- the sites in pages (see MultiSearch.start), in the order they're offered
 local function sourcesOf(pages)
     local sources = {}
-    for __, source in ipairs(MultiSearch.SOURCES) do
+    for __, source in ipairs(MultiSearch.sources()) do
         if pages[source] then
             table.insert(sources, source)
         end
@@ -452,11 +452,12 @@ end
 
 -- what the search box's Sites button says: the sites ticked, or that they all are, or all but one, which is shorter
 local function sitesText(sources)
-    if #sources == #MultiSearch.SOURCES then
+    local offered = MultiSearch.sources()
+    if #sources == #offered then
         return _("Sites: All")
     end
-    if #sources == #MultiSearch.SOURCES - 1 and #sources > 1 then
-        for __, source in ipairs(MultiSearch.SOURCES) do
+    if #sources == #offered - 1 and #sources > 1 then
+        for __, source in ipairs(offered) do
             if not isTicked(sources, source) then
                 return T(_("Sites: All but %1"), Sources[source].NAME)
             end
@@ -505,14 +506,15 @@ function KindleFetch:setupUI(query, scope, sources, search_now)
     -- grab self reference for callbacks
     local this = self
     local chosen = sources or KindleFetchSettings:getSearchSources()
+    local offered = MultiSearch.sources()
     self.sources = {}
-    for __, source in ipairs(MultiSearch.SOURCES) do
+    for __, source in ipairs(offered) do
         if isTicked(chosen, source) then
             table.insert(self.sources, source)
         end
     end
     if #self.sources == 0 then
-        self.sources = { MultiSearch.SOURCES[1] }
+        self.sources = { offered[1] }
     end
     self.scope = scope
 
@@ -592,7 +594,7 @@ function KindleFetch:chooseSites()
     end
     local function tick(source, ticked)
         local sources = {}
-        for __, site in ipairs(MultiSearch.SOURCES) do
+        for __, site in ipairs(MultiSearch.sources()) do
             if site == source and ticked or site ~= source and isTicked(this.sources, site) then
                 table.insert(sources, site)
             end
@@ -611,7 +613,7 @@ function KindleFetch:chooseSites()
     end
 
     local rows = {}
-    for __, source in ipairs(MultiSearch.SOURCES) do
+    for __, source in ipairs(MultiSearch.sources()) do
         table.insert(rows, {
             {
                 text = label(source),
@@ -655,7 +657,7 @@ function KindleFetch:chooseScope()
     local dialog
     local row = {}
     local scopes, offered = { false }, {}
-    for __, source in ipairs(MultiSearch.SOURCES) do
+    for __, source in ipairs(MultiSearch.sources()) do
         for __, scope in ipairs(Sources[source].SCOPES or {}) do
             if not offered[scope] then
                 offered[scope] = true
@@ -727,7 +729,7 @@ end
 function KindleFetch:otherSites(query)
     local buttons = {}
     local searched = self:sitesToSearch()
-    for __, source in ipairs(MultiSearch.SOURCES) do
+    for __, source in ipairs(MultiSearch.sources()) do
         if not isTicked(searched, source) and canSearch(source) then
             table.insert(buttons, {
                 text = T(_("Search %1"), Sources[source].NAME),
