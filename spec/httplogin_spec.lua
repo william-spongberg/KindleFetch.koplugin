@@ -40,6 +40,8 @@ describe("HttpLogin", function()
 
     before_each(function()
         helper.reset()
+        -- for the settings, which say how requests go (see Request)
+        helper.state.data_dir = helper.tmpdir("data")
         requests, responses = {}, {}
         helper.stubs.http.request = function(request)
             request.proxy_used = helper.stubs.http.PROXY
@@ -54,6 +56,8 @@ describe("HttpLogin", function()
         LibrarySites = require("util.librarysites")
         LibrarySites.add("http://nas:8080/opds", { username = "will", password = "Circle Of Life" })
     end)
+
+    after_each(helper.cleanup)
 
     describe("the ways a site says it can be logged in to", function()
         it("reads each way and its parameters", function()

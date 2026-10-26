@@ -6,8 +6,7 @@ local Trapper = require("ui/trapper")
 local CurlUtil = require("util.curlutil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
-local ProxyUtil = require("util.proxyutil")
-local LibrarySites = require("util.librarysites")
+local Request = require("util.request")
 local HttpLogin = require("util.httplogin")
 local Errors = require("util.errors")
 local T = require("ffi/util").template
@@ -40,7 +39,7 @@ local function explainFailure(err)
 end
 
 -- http.request, returning what it can raise (e.g. TLS errors), which KOReader would exit on, its timeouts not put back
-local function request(options)
+local function send(options)
     local requested, ok, status, headers = pcall(http.request, options)
     if not requested then
         LogUtil.warn("KOReader's HTTP raised an error rather than returning it:", tostring(ok))
@@ -86,20 +85,21 @@ local function formBody(form)
 end
 
 -- fetch a page with curl, giving it the form, cookies and login in a file, as any program can read its command line
-local function requestBodyWithCurl(request_url, opts)
+local function requestBodyWithCurl(request)
+    local request_url = request.url
     local config_file
     local options = {}
-    if opts.form or opts.cookies then
+    if request.form or request.cookies then
         -- curl keeps cookies for bot checks that set one and redirect back, only if given none, so ours go in a header
         table.insert(options, { "cookie", "" })
-        if opts.cookies and opts.cookies ~= "" then
-            table.insert(options, { "header", "Cookie: " .. opts.cookies })
+        if request.cookies and request.cookies ~= "" then
+            table.insert(options, { "header", "Cookie: " .. request.cookies })
         end
-        if opts.form then
-            table.insert(options, { "data", formBody(opts.form) })
+        if request.form then
+            table.insert(options, { "data", formBody(request.form) })
         end
     end
-    for __, option in ipairs(CurlUtil.loginOptions(request_url) or {}) do
+    for __, option in ipairs(CurlUtil.loginOptions(request) or {}) do
         table.insert(options, option)
     end
     if #options > 0 then
@@ -191,8 +191,9 @@ local function requestLibraryBody(request_url)
 end
 
 -- fetch a page with KOReader's own HTTP, which holds KOReader up until it has, through its HTTP proxy where it's on
-local function requestBodyWithKOReader(request_url, opts)
-    if LibrarySites.isLibrary(request_url) and not (opts.form or opts.cookies) then
+local function requestBodyWithKOReader(request)
+    local request_url, opts = request.url, request
+    if request.library and not (opts.form or opts.cookies) then
         return requestLibraryBody(request_url)
     end
     -- set through KOReader, as https requests ignore luasocket's own timeout and wait a minute instead
@@ -215,11 +216,11 @@ local function requestBodyWithKOReader(request_url, opts)
         if cookies and cookies ~= "" then
             request_headers["Cookie"] = cookies
         end
-        ok, status, headers = request {
+        ok, status, headers = send {
             url = url,
             method = form_body and "POST" or "GET",
             source = form_body and ltn12.source.string(form_body),
-            proxy = ProxyUtil.get(),
+            proxy = request.proxy,
             sink = socketutil.table_sink(response_body),
             headers = request_headers,
             redirect = not (opts.form or opts.cookies),
@@ -244,14 +245,14 @@ local tls_fallbacks = 0
 
 -- fetch a page with curl, or KOReader's own HTTP where curl can't, through KOReader's HTTP proxy where it's on
 function HttpUtil.requestBody(request_url, opts)
-    opts = opts or {}
+    local request = Request.new(request_url, opts)
     if not CurlUtil.canFetch() then
-        return requestBodyWithKOReader(request_url, opts)
+        return requestBodyWithKOReader(request)
     end
 
-    local body, err, status = requestBodyWithCurl(request_url, opts)
+    local body, err, status = requestBodyWithCurl(request)
     -- (not on a library's site, whose certificate KOReader's HTTP may not check, nor to stop curl for every site)
-    if body or not CurlUtil.isTlsFailure(err) or LibrarySites.isLibrary(request_url) then
+    if body or not CurlUtil.isTlsFailure(err) or request.library then
         if body then
             tls_fallbacks = 0
         end
@@ -264,7 +265,7 @@ function HttpUtil.requestBody(request_url, opts)
         "securely:",
         err .. ", so trying KOReader's own HTTP"
     )
-    local fetched, fetch_err, fetch_status = requestBodyWithKOReader(request_url, opts)
+    local fetched, fetch_err, fetch_status = requestBodyWithKOReader(request)
     if not fetched then
         return nil, err, status
     end
@@ -302,7 +303,8 @@ function HttpUtil.getBody(url, opts)
 end
 
 -- download a file with KOReader's own HTTP, leaving nothing behind if it doesn't download
-local function downloadWithKOReader(url, path)
+local function downloadWithKOReader(request, path)
+    local url = request.url
     local file, open_err = io.open(path, "wb")
     if not file then
         return nil, T(_("could not write the file: %1"), tostring(open_err))
@@ -310,7 +312,7 @@ local function downloadWithKOReader(url, path)
 
     socketutil:set_timeout(ANSWER_TIMEOUT, FILE_TIMEOUT)
     local ok, status
-    if LibrarySites.isLibrary(url) then
+    if request.library then
         -- logging in where it asks to, into the file afresh each time, as the answer without the login isn't the file
         local sinks = 0
         ok, status = HttpLogin.request(url, { ["User-Agent"] = "Mozilla/5.0" }, function()
@@ -324,7 +326,7 @@ local function downloadWithKOReader(url, path)
             return socketutil.file_sink(file)
         end)
     else
-        ok, status = request {
+        ok, status = send {
             url = url,
             headers = {
                 ["User-Agent"] = "Mozilla/5.0",
@@ -354,7 +356,7 @@ end
 function HttpUtil.downloadFile(url, path)
     LogUtil.debug("downloading", url, "to", path)
     if not CurlUtil.canFetch() then
-        return downloadWithKOReader(url, path)
+        return downloadWithKOReader(Request.new(url), path)
     end
     local ok, err = CurlUtil.download(url, path, FILE_TIMEOUT, { stall_time = FILE_STALL_TIME })
     if not ok then

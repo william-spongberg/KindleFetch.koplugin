@@ -260,6 +260,7 @@ kindlefetch.koplugin/
     ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from, with the kind of fix each has
     ├── guard.lua              # Runs what KOReader runs later (scheduled tasks, Trapper's functions, event handlers), catching errors, logging where they happened and cleaning up
     ├── httpdownload.lua       # Downloads books and covers with KOReader's own HTTP in a process of its own, where curl can't, followed and stopped as curl's downloads are
+    ├── request.lua            # How each site is asked for something, decided in one place from its address: through the proxy and with encrypted DNS where they're on, but not on the local network, logged in to a library's site, with shorter timeouts there
     ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback; posts forms and sends cookies, giving them to curl in a file rather than on its command line; downloads files with curl, or KOReader's own HTTP where curl can't connect
     ├── httplogin.lua          # Logs in to your libraries' sites with KOReader's own HTTP, the Basic or the Digest way, following where they send requests itself, so the login only goes to its own site
     ├── librarysites.lua       # Your libraries' sites, with the logins for each, which are only sent to their own site, and never logged

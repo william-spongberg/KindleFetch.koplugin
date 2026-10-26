@@ -1,7 +1,5 @@
 local LogUtil = require("util.logutil")
-local ProxyUtil = require("util.proxyutil")
-local LibrarySites = require("util.librarysites")
-local KindleFetchSettings = require("settings.settings")
+local Request = require("util.request")
 local FileUtil = require("util.fileutil")
 local StringUtil = require("util.stringutil")
 local VersionUtil = require("util.versionutil")
@@ -425,20 +423,17 @@ function CurlUtil.canUseEncryptedDns()
     return CurlUtil.canFetch() and curlIsAtLeast(DOH_MIN_VERSION)
 end
 
--- curl_cmd with DNS over HTTPS where set and curl can, as the network's DNS may block sites (#55), unless url is local
-function CurlUtil.applyEncryptedDns(curl_cmd, url)
-    if url and StringUtil.isLocalUrl(url) then
-        return curl_cmd
-    end
-    if KindleFetchSettings:getEncryptedDns() and CurlUtil.canUseEncryptedDns() then
+-- curl_cmd with DNS over HTTPS where the request is to go with it (see Request) and curl can
+function CurlUtil.applyEncryptedDns(curl_cmd, request)
+    if request.encrypted_dns and CurlUtil.canUseEncryptedDns() then
         return string.format("%s --doh-url %s", curl_cmd, DOH_URL)
     end
     return curl_cmd
 end
 
--- curl_cmd through url's proxy, given in a config file (returned, to remove), as any program can read the command line
-function CurlUtil.applyProxy(curl_cmd, url)
-    local proxy = ProxyUtil.forUrl(url)
+-- curl_cmd through the request's proxy, in a config file (returned, to remove), as any program can read command lines
+function CurlUtil.applyProxy(curl_cmd, request)
+    local proxy = request.proxy
     if not proxy then
         return curl_cmd
     end
@@ -476,21 +471,19 @@ function CurlUtil.createConfigFile(options)
     return config_file
 end
 
--- the options logging curl in to url's library whichever way it asks, sent only to that site, or nil if none needed
-function CurlUtil.loginOptions(url)
-    local login = LibrarySites.loginFor(url)
+-- the options logging curl in to the request's library whichever way it asks, or nil where it needs none
+function CurlUtil.loginOptions(request)
+    local login = request.login
     if not login then
         return nil
     end
     return { { "user", login.username .. ":" .. login.password }, { "anyauth" } }
 end
 
--- how long a site on the local network can take to connect, in seconds: not long, as one that's there connects at once
-local LOCAL_CONNECT_TIMEOUT = 5
-
 -- a command that fetches a page to page_file (kept on an error status, for what it says), printing status and exit code
 function CurlUtil.fetchCommand(url, page_file, answer_timeout, page_timeout, config_file)
     checkCurl()
+    local request = Request.new(url)
 
     local cmd = string.format("curl -sL -o %s %s", CurlUtil.shellQuote(page_file), CurlUtil.shellQuote(url))
     if can_decompress then
@@ -499,15 +492,18 @@ function CurlUtil.fetchCommand(url, page_file, answer_timeout, page_timeout, con
     end
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, url)
-    local connect_timeout = StringUtil.isLocalUrl(url) and math.min(LOCAL_CONNECT_TIMEOUT, answer_timeout)
-        or answer_timeout
-    cmd = string.format("%s --connect-timeout %d --max-time %d", cmd, connect_timeout, page_timeout)
+    cmd = string.format(
+        "%s --connect-timeout %d --max-time %d",
+        cmd,
+        request:connectTimeout(answer_timeout),
+        page_timeout
+    )
     cmd = CurlUtil.abortWhenStalled(cmd, FETCH_STALL_TIME)
-    cmd = CurlUtil.applyEncryptedDns(cmd, url)
+    cmd = CurlUtil.applyEncryptedDns(cmd, request)
     -- each config file curl is given, removed once it has finished with them
     local config_files = {}
     local proxy_config
-    cmd, proxy_config = CurlUtil.applyProxy(cmd, url)
+    cmd, proxy_config = CurlUtil.applyProxy(cmd, request)
     if proxy_config then
         table.insert(config_files, CurlUtil.shellQuote(proxy_config))
     end
@@ -583,6 +579,7 @@ end
 -- the command downloading url to filepath and its exit file; opts.resume carries on from what's there, also on retries
 local function downloadCommand(download_url, filepath, max_time, opts)
     opts = opts or {}
+    local request = Request.new(download_url)
 
     local cmd = CurlUtil.getDownloadCMD(download_url, filepath)
     if opts.resume then
@@ -591,7 +588,7 @@ local function downloadCommand(download_url, filepath, max_time, opts)
     cmd = CurlUtil.pretendBrowser(cmd)
     cmd = CurlUtil.setReferer(cmd, download_url)
     cmd = CurlUtil.enableRetry(cmd, 2, 2)
-    cmd = CurlUtil.setTimeout(cmd, StringUtil.isLocalUrl(download_url) and LOCAL_CONNECT_TIMEOUT or 15)
+    cmd = CurlUtil.setTimeout(cmd, request:connectTimeout(15))
     if max_time then
         cmd = string.format("%s --max-time %d --retry-max-time %d", cmd, max_time, max_time)
     end
@@ -601,16 +598,16 @@ local function downloadCommand(download_url, filepath, max_time, opts)
     if opts.stall_time then
         cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
-    cmd = CurlUtil.applyEncryptedDns(cmd, download_url)
+    cmd = CurlUtil.applyEncryptedDns(cmd, request)
     -- each config file curl is given (see applyProxy), removed once it has finished with them
     local config_files = {}
     local proxy_config
-    cmd, proxy_config = CurlUtil.applyProxy(cmd, download_url)
+    cmd, proxy_config = CurlUtil.applyProxy(cmd, request)
     if proxy_config then
         table.insert(config_files, proxy_config)
     end
     -- and the library's login, where it's on a library's site that needs one (see loginOptions)
-    local login = CurlUtil.loginOptions(download_url)
+    local login = CurlUtil.loginOptions(request)
     if login then
         local login_config = CurlUtil.createConfigFile(login)
         if login_config then
@@ -688,27 +685,15 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
     local function quote(value)
         return (value:gsub("\\", "\\\\"):gsub('"', '\\"'))
     end
-    -- whether the files are all on the local network, going without the proxy and encrypted DNS, and all on one site
-    local all_local, site = #download_urls > 0, StringUtil.siteOf(download_urls[1])
-    for __, download_url in ipairs(download_urls) do
-        all_local = all_local and StringUtil.isLocalUrl(download_url)
-        if StringUtil.siteOf(download_url) ~= site then
-            site = nil
-        end
-    end
+    local batch = Request.batch(download_urls)
     local lines = {}
-    -- KOReader's HTTP proxy, where it's on, with the files rather than on curl's command line (see applyProxy)
-    local proxy = not all_local and ProxyUtil.get()
+    -- the proxy, where they go through one, with the files rather than on curl's command line (see applyProxy)
+    local proxy = batch.proxy
     if proxy and not proxy:find("%c") then
         table.insert(lines, string.format('proxy = "%s"\n', quote(proxy)))
     end
-    -- and the library's login, given once for all, so only where all the files are on its site, or it'd go to others
-    local login = CurlUtil.loginOptions(download_urls[1] or "")
-    if login and not site then
-        LogUtil.warn("downloading files from several sites, so without the login of the library one is on")
-        login = nil
-    end
-    for __, option in ipairs(login or {}) do
+    -- and the library's login, given once for all (see Request.batch)
+    for __, option in ipairs(CurlUtil.loginOptions(batch) or {}) do
         if option[2] == nil then
             table.insert(lines, option[1] .. "\n")
         elseif not option[2]:find("%c") then
@@ -751,16 +736,14 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
     if enable_retry then
         cmd = CurlUtil.enableRetry(cmd, 2, 2)
     end
-    cmd = CurlUtil.setTimeout(cmd, all_local and math.min(LOCAL_CONNECT_TIMEOUT, timeout) or timeout)
+    cmd = CurlUtil.setTimeout(cmd, batch:connectTimeout(timeout))
     -- give up on files that take too long, so they don't hold up the rest
     cmd = string.format("%s --max-time %d", cmd, timeout * 2)
     if opts.stall_time then
         cmd = CurlUtil.abortWhenStalled(cmd, opts.stall_time)
     end
     cmd = CurlUtil.enableParallel(cmd, num_parallel_jobs)
-    if not all_local then
-        cmd = CurlUtil.applyEncryptedDns(cmd)
-    end
+    cmd = CurlUtil.applyEncryptedDns(cmd, batch)
     -- each file's result, as some may fail, to stderr where curl can, which is unbuffered, so each shows once done
     local write_out = "%{exitcode} %{filename_effective}\\n"
     if curlIsAtLeast("7.63.0") then

@@ -1,9 +1,8 @@
 local http = require("socket.http")
 local md5 = require("ffi/sha2").md5
 local util = require("util")
-local LibrarySites = require("util.librarysites")
+local Request = require("util.request")
 local StringUtil = require("util.stringutil")
-local ProxyUtil = require("util.proxyutil")
 local LogUtil = require("util.logutil")
 
 -- asks libraries with luasocket, logging in Basic or Digest, as asked each time: Calibre's locks out stale answers
@@ -125,12 +124,12 @@ local function newCnonce()
     return string.format("%08x%08x", math.random(0, 0x7fffffff), os.time() % 0x7fffffff)
 end
 
--- http.request through url's proxy (none for local addresses), returning what it raises, which KOReader would exit on
-local function send(request)
+-- http.request through proxy (none on the local network, see Request), returning what it raises, as KOReader exits
+local function send(options, proxy)
     local saved = http.PROXY
-    http.PROXY = ProxyUtil.forUrl(request.url)
-    request.proxy = http.PROXY
-    local requested, ok, code, headers, status = pcall(http.request, request)
+    http.PROXY = proxy
+    options.proxy = proxy
+    local requested, ok, code, headers, status = pcall(http.request, options)
     http.PROXY = saved
     if not requested then
         return nil, ok
@@ -141,7 +140,8 @@ end
 -- ask a library's site for url, into a new sink each time, following redirects, logging in only on the login's own site
 function HttpLogin.request(url, headers, new_sink)
     for __ = 0, MAX_REDIRECTS do
-        local login = LibrarySites.loginFor(url)
+        local request = Request.new(url)
+        local login = request.login
         local function ask(authorization, basic)
             local request_headers = {}
             for name, value in pairs(headers or {}) do
@@ -157,7 +157,7 @@ function HttpLogin.request(url, headers, new_sink)
                 -- for luasocket to log in the Basic way, which takes the password escaped, as it unescapes it
                 user = basic and login.username or nil,
                 password = basic and util.urlEncode(login.password) or nil,
-            })
+            }, request.proxy)
         end
 
         local ok, code, response_headers, status = ask()

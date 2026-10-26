@@ -5,7 +5,7 @@ local CurlUtil = require("util.curlutil")
 local FileUtil = require("util.fileutil")
 local LogUtil = require("util.logutil")
 local Guard = require("util.guard")
-local LibrarySites = require("util.librarysites")
+local Request = require("util.request")
 local HttpLogin = require("util.httplogin")
 local _ = require("gettext")
 
@@ -36,7 +36,7 @@ local function download(url, path, opts)
         ["Referer"] = site and site .. "/",
     }
     local requested, ok, code, headers, status_line
-    if LibrarySites.isLibrary(url) then
+    if Request.new(url).library then
         -- logging in where it asks to, into the file afresh each time, as the answer without the login isn't the book
         local sinks = 0
         requested = true

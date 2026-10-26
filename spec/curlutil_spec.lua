@@ -265,9 +265,9 @@ describe("CurlUtil", function()
             require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
             assert.are.same(
                 { { "user", "will:secret" }, { "anyauth" } },
-                CurlUtil.loginOptions("http://nas:8080/opds/search/dune")
+                CurlUtil.loginOptions(require("util.request").new("http://nas:8080/opds/search/dune"))
             )
-            assert.is_nil(CurlUtil.loginOptions("https://libgen.example/index.php"))
+            assert.is_nil(CurlUtil.loginOptions(require("util.request").new("https://libgen.example/index.php")))
         end)
 
         it("fetches into a file of its own in the plugin's tmp dir", function()
