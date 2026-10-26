@@ -1,9 +1,6 @@
 local StringUtil = require("util.stringutil")
 
--- reads an OPDS catalogue's feed (Atom, as OPDS 1 is), as the servers people run for their own books send them, e.g.
--- Calibre's content server and Calibre-Web: its title and links, and each entry's title, authors, languages, dates and
--- links, from what each server writes its own way (with or without prefixes before the names of things, quotes of
--- either kind, and text in CDATA)
+-- reads an OPDS catalogue's Atom feed, e.g. Calibre's or Calibre-Web's, however it's written (prefixes, quotes, CDATA)
 local OpdsFeed = {}
 
 -- text as it's shown, from what's between an element's tags, which can be escaped HTML, or have tags of its own
@@ -63,15 +60,12 @@ local function links(xml)
     return found
 end
 
--- the feed in body: { title, author_uri, links, entries }, each entry with its id, title, authors (a list),
--- languages (a list, as given, e.g. "eng"), issued (when it was published, where it says), published (when it was
--- added to the catalogue, as Calibre says, or published, as Calibre-Web does), and links. nil when it isn't a feed
+-- the feed in body, or nil if not one; an entry's published is when Calibre added it, but Calibre-Web's when published
 function OpdsFeed.parse(body)
     if type(body) ~= "string" then
         return nil
     end
-    -- the text in CDATA as it would be written without it, without comments, and without the prefixes before the
-    -- names of things (as in atom:entry, or dc:language)
+    -- without comments, CDATA (its text escaped instead) or prefixes before names (as in atom:entry or dc:language)
     body = body:gsub("<!%-%-.-%-%->", "")
     body = body:gsub("<!%[CDATA%[(.-)%]%]>", function(cdata)
         return (cdata:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
@@ -113,8 +107,7 @@ function OpdsFeed.parse(body)
     return feed
 end
 
--- the template of the search an OpenSearch description in body gives, for its results as a feed (Atom), e.g.
--- "/opds/search?query={searchTerms}", or nil where it has none
+-- the search template for Atom results that an OpenSearch description in body gives, or nil where it has none
 function OpdsFeed.searchTemplate(body)
     if type(body) ~= "string" then
         return nil

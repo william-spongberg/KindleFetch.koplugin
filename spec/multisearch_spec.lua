@@ -3,8 +3,7 @@ local helper = require("helper")
 describe("MultiSearch", function()
     local MultiSearch, sites, searches, results, statuses, done, can_cancel
 
-    -- a site whose searches wait, as curl's do (see Trapper:dismissablePopen), until answered (see answer) or called
-    -- off with the stand-in they wait with
+    -- a site whose searches wait as curl's do (see Trapper:dismissablePopen) until answered (see answer) or called off
     local function fakeSite(name, scopes)
         local site = { NAME = name, SCOPES = scopes }
         function site:search(query, page, scope)

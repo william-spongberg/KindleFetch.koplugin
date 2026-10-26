@@ -67,8 +67,7 @@ function StringUtil.removeParentheses(text)
     return text
 end
 
--- a title as it's written, for showing on screen, without what Library Genesis adds to it in brackets (such as
--- the series it's in)
+-- a title as it's written, for showing on screen, without what Library Genesis adds in brackets (such as its series)
 function StringUtil.cleanTitle(text)
     if not StringUtil.assertValidString(text) then
         return ""
@@ -82,15 +81,12 @@ function StringUtil.cleanTitle(text)
     return title
 end
 
--- whether text is a web address that can be passed on as it is. mirrors are looked up on a page anyone can edit,
--- so what a mirror sends can't be trusted: a line break or quote in an address written to curl's config file
--- would add options of the mirror's own, such as where on the device to save a file
+-- whether text is a safe web address: mirrors are on a page anyone edits, and a quote or line break adds curl options
 function StringUtil.isSafeUrl(text)
     return type(text) == "string" and text:find('^https?://[^%c%s"\\]+$') ~= nil
 end
 
--- a web address's scheme and host (in small letters), its port (whether or not it gives one) and the rest of it, its
--- path and query, leaving out who it logs into the site as, where it says. nil when it isn't a web address
+-- a web address's scheme, host (in small letters), port (even if not given) and path and query, without a login, or nil
 local function urlParts(url)
     if type(url) ~= "string" then
         return nil
@@ -115,9 +111,7 @@ local function urlParts(url)
     return scheme, (host:lower():gsub("%.$", "")), port, rest
 end
 
--- the site a web address is on, as its scheme, host and port, e.g. "http://192.168.1.10:8080" (in small letters, and
--- with the port, whether or not the address gives one), which two addresses are on the same site when they share. nil
--- when it isn't a web address
+-- the site a web address is on as its scheme, host and port (even if not given), shared by those on one site, or nil
 function StringUtil.siteOf(url)
     local scheme, host, port = urlParts(url)
     return scheme and string.format("%s://%s:%s", scheme, host, port) or nil
@@ -135,9 +129,7 @@ end
 -- the names a network's own DNS gives its devices, which the internet's can't look up
 local LOCAL_DOMAINS = { "local", "lan", "home", "home.arpa", "internal", "intranet", "localdomain", "localhost" }
 
--- whether a web address is on the device itself or the network it's on, rather than the internet: an address in the
--- ranges kept for those (e.g. 192.168.1.10, or Tailscale's 100.64.0.0/10), or a name the network's own DNS gives its
--- devices (e.g. nas.local, or just nas), which encrypted DNS can't look up, and a proxy on the internet can't reach
+-- whether a web address is local (private ranges, Tailscale's, local names), which encrypted DNS or proxies can't reach
 function StringUtil.isLocalUrl(url)
     local scheme, host = urlParts(url)
     if not scheme then
@@ -183,8 +175,7 @@ local function withoutDots(path)
     return (ends_folder and #parts > 0) and result .. "/" or result
 end
 
--- the web address href is, as a link on the page at base gives it, which can leave out what it shares with base: its
--- scheme (//host/path), its site (/path), or the folder it's in (path or ../path). nil when base isn't a web address
+-- the full web address of a link href on the page at base, which can leave out what it shares, or nil if base isn't one
 function StringUtil.absoluteUrl(base, href)
     if type(href) ~= "string" then
         return nil
@@ -222,9 +213,7 @@ local function safeFileName(text)
     return StringUtil.collapseWhitespace(StringUtil.collapseDashes(StringUtil.collapseDots(text)))
 end
 
--- a title as a book's file is named, without what Library Genesis adds to it in brackets (such as the series it's
--- in), unless that's all there is of it: a title such as "[Poems]" left the file named only for its file type, e.g.
--- ".epub", which hid it, and every such book shared. "" only when there's nothing to name it after at all
+-- a title as a file is named, without Library Genesis' brackets unless that's all, as "[Poems]" made a hidden ".epub"
 function StringUtil.cleanFileName(text)
     if not StringUtil.assertValidString(text) then
         return ""

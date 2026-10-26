@@ -1,15 +1,12 @@
 local H = require("helpers")
 
--- a library of the user's own: Calibre's content server, which e2e/run.sh starts on a library holding Pride and
--- Prejudice, where Calibre is installed, needing a login (the Digest way, as Calibre asks without HTTPS), given by
--- E2E_CALIBRE_URL, E2E_CALIBRE_USER and E2E_CALIBRE_PASSWORD
+-- Calibre's content server, started by e2e/run.sh where Calibre is installed, with a Digest login, as it has no HTTPS
 local address = os.getenv("E2E_CALIBRE_URL")
 local username, password = os.getenv("E2E_CALIBRE_USER"), os.getenv("E2E_CALIBRE_PASSWORD")
 
 describe("Your libraries", function()
     after_each(H.closeAll)
-    -- the book downloaded, which is removed once it has been read, as other tests find the book they download by
-    -- looking for one in the folder
+    -- the book downloaded, removed once read, as other tests find the book they download by looking in the folder
     local downloaded
     after_each(function()
         if downloaded then

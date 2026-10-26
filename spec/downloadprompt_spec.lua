@@ -14,8 +14,7 @@ describe("DownloadPrompt", function()
         fixtures.cacheCover(helper, book.id)
     end
 
-    -- the group with the book's title, authors and details, beside the cover if there is one
-    -- the book's details, as label and value pairs
+    -- the book's details, as label and value pairs, from the group with its title and authors (beside any cover)
     local function details(prompt)
         local rows = {}
         for _, row in ipairs(prompt.details_group) do
@@ -161,8 +160,7 @@ describe("DownloadPrompt", function()
         assert.are.same({ books .. "/Dune.epub" }, downloads)
     end)
 
-    -- a FAT card's file system can't have names with some of what others can, which the name kept for the folder before
-    -- could have
+    -- a FAT card can't have some names other file systems can, which the name kept for the folder before could have
     it("names the book safely for the folder chosen", function()
         local folders = {}
         require("util").getSafeFilename = function(name, folder)

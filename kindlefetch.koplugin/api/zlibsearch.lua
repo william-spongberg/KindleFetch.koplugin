@@ -12,8 +12,7 @@ local ZlibSearch = {
     NAME = "Z-Library",
     -- searching it needs an account, logged into before searching (see ZlibLogin)
     NEEDS_LOGIN = true,
-    -- its download links each go to one of its servers, some of which can fail for a while, and asking it for the
-    -- same book's link again the same day doesn't count as another download (see findDownloadLink)
+    -- its links each go to one of its servers, which can fail, and asking again the same day isn't another download
     NEW_LINK_WHEN_SERVER_FAILS = true,
     SOURCE = "zlib",
 }
@@ -21,21 +20,17 @@ local ZlibSearch = {
 -- constants
 local SOURCE = ZlibSearch.SOURCE
 local RESULTS_PER_PAGE = 50
--- how many times to ask for a link that goes to another server than one that failed, as each goes to one of them,
--- picked at random
+-- how many times to ask for a link to a server other than one that failed, as each goes to one picked at random
 local LINK_ASKS = 4
 
--- the books whose links Z-Library has given this session, and on which day (as Z-Library counts them, by UTC), as
--- asking for one again the same day doesn't count as another of the account's downloads, so it can be once it has
--- downloaded as many as it can that day, as when the download failed
+-- the books given links this session, by UTC day, as asking again that day doesn't count, even once at the limit
 local links_given = {}
 
 local function today()
     return os.date("!%Y-%m-%d")
 end
 
--- the search for the query, as the form Z-Library's API is sent: in the languages, by their names (which is how
--- Z-Library knows them, unless every one is chosen), and the file types, from the given page of its results
+-- the search as the form Z-Library's API is sent: the languages by name, as it knows them (unless all are chosen)
 function ZlibSearch.buildForm(query, page, languages, file_types)
     local form = { { "message", query } }
     local available = KindleFetchSettings:getAvailableLanguages()
@@ -90,8 +85,7 @@ local function parseBook(book, is_preferred)
         return nil
     end
 
-    -- without the other ways of writing the authors' names, in brackets, or what's left of a name that's missing
-    -- after them, e.g. "Austen, Jane &"
+    -- without the other ways of writing the authors' names, in brackets, or what's left of a missing name after them
     local authors = StringUtil.cleanTitle(text(book.author) or ""):gsub("[,;&%s]+$", "")
     local year = tonumber(book.year)
     local cover = text(book.cover)
@@ -113,8 +107,7 @@ local function parseBook(book, is_preferred)
     }
 end
 
--- the books in the preferred file types, from what Z-Library answers a search with, and how many of its books could
--- be read (which are the results read), or nil if it isn't that
+-- the books in the preferred file types from Z-Library's answer, and how many could be read (the results read), or nil
 function ZlibSearch.parseResults(data, file_types)
     if type(data) ~= "table" or type(data.books) ~= "table" then
         return nil
@@ -178,18 +171,14 @@ local function fetchResults(query, page, languages, file_types)
     return books, nil, next_page, read
 end
 
--- search the given page of Z-Library's results, returning the books found, the page to carry on from (or nil once
--- there are no more results), and how many results were read to find them (as LibgenSearch:search does)
+-- search a page of Z-Library's results, as LibgenSearch:search does
 function ZlibSearch:search(query, page)
     return SearchCache:search(self, query, page, nil, function(languages, file_types)
         return fetchResults(query, page, languages, file_types)
     end)
 end
 
--- the book's download link, which Z-Library only gives the account a few of a day, so it's only asked for while
--- the account has any left (each one it gives counts, whether or not the book downloads, but not the same book's
--- again the same day). when the book failed to download from failed_url, a link to another of its servers. otherwise
--- nil, and why not (HttpUtil.CANCELLED when called off)
+-- the book's link, only asked for with downloads left today, as each link counts; with failed_url, another server's
 function ZlibSearch.findDownloadLink(book, __, failed_url)
     local profile, err = ZlibAccount:request("/eapi/user/profile")
     if not profile then

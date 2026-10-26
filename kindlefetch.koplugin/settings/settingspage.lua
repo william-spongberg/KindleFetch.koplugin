@@ -56,8 +56,7 @@ function SettingsPage.shortenFolder(path)
     return "…" .. shortened
 end
 
--- the names of the choices that are chosen, as the settings list them (each choice with its text and the code it's
--- saved as), or All when every one is
+-- the names of the chosen choices (each with its text and the code it's saved as), or All when every one is
 local function describeChosen(choices, chosen)
     local is_chosen = {}
     for __, code in ipairs(chosen) do
@@ -129,8 +128,7 @@ function SettingsPage:newMenu(title, item_table, onClose)
         item_table = item_table,
         covers_fullscreen = true,
         is_borderless = true,
-        -- with square corners: rounded ones aren't painted, and show what was on screen before, such as the top
-        -- edge of KOReader's menu
+        -- with square corners: rounded ones aren't painted, and show what was on screen before
         is_popout = false,
         width = size.w,
         height = size.h,
@@ -289,9 +287,7 @@ function SettingsPage:showSettings()
     UIManager:show(self.menu)
 end
 
--- show the settings as they are now, in the menu that's open and on the page it's on. closing the menu and
--- opening another for every change flashes the whole screen twice. (nothing once it has been closed, e.g. where the
--- languages are changed from the results)
+-- update the open menu in place, on its page, as reopening it flashes the screen twice (nothing once it has closed)
 function SettingsPage:refresh()
     if self.menu and UIManager:isWidgetShown(self.menu) then
         self.menu:switchItemTable(nil, self:settingsItems(), -1)
@@ -323,8 +319,7 @@ function SettingsPage:changeCacheExpiry(title, current_days, save)
     UIManager:show(menu)
 end
 
--- set KOReader's HTTP proxy, as its network settings do, which Kindle Fetch goes through for everything, as KOReader
--- does (see ProxyUtil), or turn it off
+-- set or turn off KOReader's HTTP proxy, as its network settings do, which Kindle Fetch goes through (see ProxyUtil)
 function SettingsPage:changeProxy()
     local this = self
     local dialog
@@ -431,12 +426,7 @@ function SettingsPage:changeDownloadFolder()
     }:chooseDir()
 end
 
--- a menu of choices to tick, each with its text and the code it's saved as, or a heading to go above the choices
--- after it. the ticked codes are passed to save when the menu is closed, unless there are none, as nothing could
--- then be found, which none_text says, and it stays open where save returns false (e.g. for the books found, where
--- what's ticked would hide all of them). (a change isn't otherwise said, as the settings show it, and each
--- notification refreshes the screen twice.) once it has closed, on_closed is called, where given, with whether
--- what's ticked has changed
+-- a menu of choices to tick, saved on closing, kept open while none are or save returns false, then on_closed(changed)
 function SettingsPage:tickSeveral(title, choices, ticked, save, none_text, on_closed)
     local this = self
     local selected = {}
@@ -467,8 +457,7 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, none_text, on_cl
         return item_table
     end
 
-    -- whether KOReader's Home key is closing it, which it does every menu, then sends Home on, again until what's on
-    -- top has changed, which it never did while this stayed open with nothing ticked
+    -- whether KOReader's Home key is closing it, which repeats until what's on top changes, so this can't stay open
     local going_home = false
     menu = self:newMenu(title, items(), function()
         local result = {}
@@ -510,8 +499,7 @@ function SettingsPage:tickSeveral(title, choices, ticked, save, none_text, on_cl
     UIManager:show(menu)
 end
 
--- change the languages the books shown are in, from the settings or the results, calling on_closed, where given, with
--- whether they've changed once they're chosen (see tickSeveral)
+-- change the languages of the books shown, from the settings or the results, calling on_closed as tickSeveral does
 function SettingsPage:changeLanguages(on_closed)
     self:tickSeveral(
         _("Preferred Languages"),
@@ -555,8 +543,7 @@ function SettingsPage:changeBookTypes(on_closed)
     )
 end
 
--- forget the searches, mirrors and covers that are saved, e.g. when they no longer match what Library Genesis
--- has, rather than their files having to be found and deleted by hand
+-- forget the saved searches, mirrors and covers, rather than their files having to be found and deleted by hand
 function SettingsPage:clearCache()
     UIManager:show(ConfirmBox:new {
         text = _("Clear the searches, mirrors and book covers that Kindle Fetch has saved?"),

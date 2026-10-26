@@ -149,8 +149,6 @@ describe("HttpUtil", function()
         assert.is_nil(requests[1].proxy)
     end)
 
-    -- curl asks for pages compressed, which Library Genesis sends several times sooner, and doesn't hold KOReader
-    -- up while it waits
     -- the Digest way, as Calibre's content server asks unless it's set up with HTTPS (see HttpLogin)
     it("logs in to a library's site the way it asks, keeping only the page it sends once it has", function()
         require("util.librarysites").add("http://nas:8080/opds", { username = "will", password = "secret" })
@@ -289,8 +287,7 @@ describe("HttpUtil", function()
                 assert.are.equal("TLS/SSL connection failed", err)
             end)
 
-            -- rather than after the first, as one site's certificate can have expired, which KOReader's HTTP may not
-            -- check, so curl would be given up on when it works
+            -- rather than after the first, as one site's certificate can have expired, dropping curl though it works
             it("fetches pages with KOReader's own HTTP from then on, once curl couldn't 3 times in a row", function()
                 for i = 1, 3 do
                     respond({ "<html>page " .. i .. "</html>", 1, 200 })
@@ -302,8 +299,7 @@ describe("HttpUtil", function()
                 assert.are.equal(3, #fetches)
             end)
 
-            -- whose certificate isn't to be passed over, as KOReader's HTTP may not check it, nor to stop curl fetching
-            -- every site's pages
+            -- whose certificate KOReader's HTTP may not check, nor should it stop curl fetching every site's pages
             it("doesn't fetch a library's page with KOReader's own HTTP instead", function()
                 require("util.librarysites").add("https://books.example/opds")
                 for _ = 1, 3 do
@@ -333,6 +329,7 @@ describe("HttpUtil", function()
             end)
         end)
 
+        -- compressed, which Library Genesis sends several times sooner, without holding KOReader up while it waits
         it("fetches the page with curl rather than luasocket, within the same time limits", function()
             curlAnswers(function()
                 return "<html>results</html>\n", 200
@@ -445,8 +442,7 @@ describe("HttpUtil", function()
             assert.is_nil(fetches[1]:find("secret", 1, true))
         end)
 
-        -- so that curl keeps the cookie a site's check that it isn't a bot answers with, which it only does when not
-        -- given cookies of its own to send
+        -- so curl keeps the cookie a site's bot check answers with, which it only does when given none to send
         it("has curl keep cookies, even when there are none to send", function()
             local config
             curlAnswers(function(cmd)
@@ -512,9 +508,7 @@ describe("HttpUtil", function()
                 assert.are.equal(fetches[1], helper.state.trapped[1].cmd)
             end)
 
-            -- each search, download and login waits in a coroutine of its own: hiding one download while it looked up
-            -- its link, then starting another, had the second's Cancel call off the first, and once the first was
-            -- over, a tap anywhere call off the second
+            -- each search, download and login waits in a coroutine of its own, and one's Cancel called off another's
             it("calls off each coroutine's requests with its own widget", function()
                 local first_message, second_message = { text = "Finding a download link..." }, { text = "Searching..." }
                 local first = coroutine.create(function()

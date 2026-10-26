@@ -14,14 +14,12 @@ local Device = require("device")
 
 local CurlUtil = {}
 
--- the curl that's installed on Kindles, whose own is too old to connect to Library Genesis (see CurlUpdater): the
--- latest static build, which older ones are asked to be updated to, for the fixes for security problems found since
+-- the curl installed on Kindles, whose own is too old for Library Genesis: the latest static build, for security fixes
 CurlUtil.MIN_VERSION = "8.21.0"
 
 -- constants
 local TMP_DIR = DataStorage:getSettingsDir() .. "/tmp/"
--- how long a page can send nothing for before it's given up on, as a site can take the connection then never answer,
--- as Library Genesis' mirrors have, which otherwise waited out the whole time a page has to arrive in for each one
+-- how long a page can send nothing before it's given up on, as Library Genesis' mirrors can connect then never answer
 local FETCH_STALL_TIME = 20
 local CURL_ERRORS = {
     [1] = _("unsupported protocol"),
@@ -66,8 +64,7 @@ local function ensureTmpDir()
     end
 end
 
--- os.time() is in seconds, and downloads can start within the same second (a book's cover and the book itself),
--- so temporary files are numbered too, to keep each download's files its own
+-- temporary files are numbered too, as os.time() is in seconds and a book and its cover can start in one
 local tmp_files_created = 0
 local function tmpFile(name, extension)
     ensureTmpDir()
@@ -75,8 +72,7 @@ local function tmpFile(name, extension)
     return string.format("%s%s_%d_%d%s", TMP_DIR, name, os.time(), tmp_files_created, extension)
 end
 
--- remove the files left by downloads that were still running when KOReader last closed, which nothing else
--- would. only at the start of a session, while no downloads are using them
+-- remove the files left by downloads still running when KOReader last closed, only at the start, while none are in use
 function CurlUtil.removeLeftovers()
     if lfs.attributes(TMP_DIR, "mode") ~= "directory" then
         return
@@ -134,9 +130,7 @@ function CurlUtil.killPid(pid)
     os.execute(string.format("kill %d 2>/dev/null", pid))
 end
 
--- how the installed curl describes itself, e.g. "curl 8.17.0 (arm-unknown-linux-musleabihf) libcurl/8.17.0
--- OpenSSL/3.5.4 zlib/1.3.1", or nil if curl isn't there. looked up once per session (see forgetVersion), as it
--- means starting curl, and several things ask
+-- how the installed curl describes itself, or nil if it isn't there, looked up once a session as it means starting curl
 local curl_description, curl_protocols
 local function describeCurl()
     if curl_description == nil then
@@ -147,8 +141,7 @@ local function describeCurl()
         end
         -- false when curl isn't there, so it isn't looked for again
         curl_description = output:match("^[^\n]+") or false
-        -- the protocols it can use, e.g. "dict file ftp http https", where it says, which a curl built without TLS
-        -- leaves https out of
+        -- the protocols it can use, where it says, which leave https out for a curl built without TLS
         curl_protocols = output:match("\nProtocols:%s*([^\n]*)")
     end
     return curl_description or nil
@@ -167,13 +160,11 @@ local function curlIsAtLeast(min_version)
     return version ~= nil and VersionUtil.compareVersions(version, VersionUtil.parseVersion(min_version)) >= 0
 end
 
--- DNS over HTTPS, which curl can look the sites' names up with (see applyEncryptedDns): Cloudflare's, by its
--- address, so that it isn't looked up with the network's own DNS either
+-- DNS over HTTPS for curl to look sites' names up with: Cloudflare's, by its address, so the network's DNS isn't asked
 local DOH_URL = "https://1.1.1.1/dns-query"
 local DOH_MIN_VERSION = "7.62.0"
 
--- whether curl can fetch web pages (see fetchCommand), and ask for them compressed. worked out once per session,
--- as it means running curl
+-- whether curl can fetch web pages and ask for them compressed, worked out once per session as it means running curl
 local can_fetch, can_decompress
 local function checkCurl()
     if can_fetch ~= nil then
@@ -201,8 +192,7 @@ local function checkCurl()
     )
 end
 
--- fetch pages with KOReader's own HTTP for the rest of the session, rather than curl, as it has been found not to
--- connect where KOReader's HTTP can (see HttpUtil.requestBody)
+-- fetch pages with KOReader's own HTTP for the rest of the session, as curl has been found not to connect where it can
 function CurlUtil.stopFetching(why)
     checkCurl()
     if can_fetch then
@@ -222,8 +212,7 @@ function CurlUtil.forgetVersion()
     can_fetch, can_decompress = nil, nil
 end
 
--- what KOReader's own HTTP (luasocket, and LuaSec for TLS) says went wrong, in lower case, with the exit code curl
--- would have given up with for it, so it's said the same way whichever fetched it
+-- what KOReader's own HTTP says went wrong, in lower case, with curl's exit code for it, so it's said the same way
 local LUASOCKET_ERRORS = {
     { "host or service not provided, or not known", 6 },
     { "no address associated with hostname", 6 },
@@ -244,8 +233,7 @@ local LUASOCKET_ERRORS = {
     { "connection reset", 56 },
 }
 
--- the exit code curl would have given up with for what KOReader's own HTTP says went wrong, or nil for what curl has
--- no words of its own for
+-- the exit code curl would give for what KOReader's own HTTP says went wrong, or nil where curl has no words of its own
 function CurlUtil.exitCodeFor(luasocket_err)
     local lower = tostring(luasocket_err):lower()
     for __, known in ipairs(LUASOCKET_ERRORS) do
@@ -263,8 +251,7 @@ end
 local TLS_ERRORS = { [35] = true, [51] = true, [58] = true, [59] = true, [60] = true, [77] = true, [83] = true }
 CurlUtil.OUTDATED_ERROR = Errors.OUTDATED_CURL
 
--- whether what went wrong (as getErrorMeaning says it) was making a secure connection to the site, as happens when the
--- device's clock is wrong, and the site's certificate seems not to be valid yet, or no longer
+-- whether what went wrong was connecting securely, as when the device's clock is wrong and certificates seem invalid
 function CurlUtil.isTlsFailure(err)
     for exit_code in pairs(TLS_ERRORS) do
         if err == CurlUtil.getErrorMeaning(exit_code) then
@@ -279,8 +266,7 @@ function CurlUtil.isOutdated()
     return Device:isKindle() and CurlUtil.getVersion() ~= nil and not curlIsAtLeast(CurlUtil.MIN_VERSION)
 end
 
--- what went wrong for curl to exit with exit_code, for saying so: on a Kindle whose curl is too old to connect to
--- Library Genesis, that and how to update it, rather than that the TLS connection failed
+-- what went wrong for curl to exit with exit_code, or on a Kindle with too old a curl, that and how to update it
 function CurlUtil.explainExitCode(exit_code)
     if TLS_ERRORS[exit_code] and CurlUtil.isOutdated() then
         return CurlUtil.OUTDATED_ERROR
@@ -288,11 +274,9 @@ function CurlUtil.explainExitCode(exit_code)
     return CurlUtil.getErrorMeaning(exit_code)
 end
 
--- the size of the file a site is sending, from the headers of its responses (one after another when redirected,
--- or when curl has carried on from where a download stopped)
+-- the size of the file a site is sending, from its responses' headers (several when redirected or carried on)
 function CurlUtil.parseContentLength(headers)
-    -- from the last response that sent something, i.e. the file's, rather than a redirect's before it (or nil when
-    -- the file's doesn't say, rather than the redirect's size)
+    -- from the file's response, the last that sent something, not a redirect's before it, or nil if it doesn't say
     local file_size = nil
     for block in headers:gmatch("HTTP[/%d%.]+.-\r?\n\r?\n") do
         if block:match("^HTTP[/%d%.]+ 2%d%d") then
@@ -313,9 +297,7 @@ function CurlUtil.createHeadersFile()
     return headers_file
 end
 
--- how big the file being downloaded is, going by the headers curl has noted down, or nil if the site hasn't said.
--- they're complete by the time the file itself starts to arrive, so asking for the size separately first, and
--- waiting for the answer, isn't needed
+-- how big the download is by the headers curl noted, or nil; they're in before the file, so it needn't be asked first
 function CurlUtil.getDownloadSize(headers_file)
     local f = io.open(headers_file, "r")
     if not f then
@@ -327,8 +309,7 @@ function CurlUtil.getDownloadSize(headers_file)
     return CurlUtil.parseContentLength(headers or "")
 end
 
--- the HTTP status the site ended up answering a download with, going by the headers curl has noted down, e.g. 503
--- when curl gave up because of it, or nil if it hasn't answered
+-- the HTTP status the site ended up answering a download with, by the headers curl noted, or nil if it hasn't answered
 function CurlUtil.getDownloadStatus(headers_file)
     local f = io.open(headers_file, "r")
     if not f then
@@ -359,8 +340,7 @@ function CurlUtil.createExitFile()
     return exit_file
 end
 
--- curl's exit code once it has finished, or nil while it's running, including while the shell is still writing it
--- (see saveExitCode), when the file is there but empty
+-- curl's exit code once it has finished, or nil while it runs, or while the shell is still writing it to the empty file
 function CurlUtil.getExitCode(exit_file)
     local exit_code_str = FileUtil.readFile(exit_file)
     local exit_code = exit_code_str and tonumber(exit_code_str)
@@ -433,8 +413,7 @@ function CurlUtil.enableParallel(curl_cmd, max_parallel)
         return curl_cmd
     end
     local cmd = string.format("%s --parallel --parallel-max %d", curl_cmd, max_parallel)
-    -- open a connection for each file at once, rather than waiting to see whether they can share one, which
-    -- Library Genesis' sites never let them: a page of covers arrives in a third of the time
+    -- a connection per file at once, as Library Genesis never lets them share: covers arrive in a third of the time
     if curlIsAtLeast("7.68.0") then
         cmd = cmd .. " --parallel-immediate"
     end
@@ -446,9 +425,7 @@ function CurlUtil.canUseEncryptedDns()
     return CurlUtil.canFetch() and curlIsAtLeast(DOH_MIN_VERSION)
 end
 
--- curl_cmd, looking the sites' names up with DNS over HTTPS (see DOH_URL), where that's turned on in the settings and
--- curl can, as a network's own DNS can be what's blocking them (#55). but not for url, where given, when it's on the
--- network the device is on (see StringUtil.isLocalUrl), e.g. a library's, whose name only that network's DNS knows
+-- curl_cmd with DNS over HTTPS where set and curl can, as the network's DNS may block sites (#55), unless url is local
 function CurlUtil.applyEncryptedDns(curl_cmd, url)
     if url and StringUtil.isLocalUrl(url) then
         return curl_cmd
@@ -459,12 +436,7 @@ function CurlUtil.applyEncryptedDns(curl_cmd, url)
     return curl_cmd
 end
 
--- curl_cmd, going through KOReader's HTTP proxy, where it's on (see ProxyUtil), which is given to curl in a config
--- file (see createConfigFile), rather than on its command line, where any program on the device can read it, as it
--- can have a password in it. the config file is returned too, to remove once curl has read it. without a proxy (or
--- where the file can't be written, when curl goes without, saying so), it's curl_cmd as it was, as it is for url,
--- where given, when it's on the network the device is on, which a proxy on the internet can't reach (see
--- ProxyUtil.forUrl)
+-- curl_cmd through url's proxy, given in a config file (returned, to remove), as any program can read the command line
 function CurlUtil.applyProxy(curl_cmd, url)
     local proxy = ProxyUtil.forUrl(url)
     if not proxy then
@@ -478,10 +450,7 @@ function CurlUtil.applyProxy(curl_cmd, url)
     return string.format("%s -K %s", curl_cmd, CurlUtil.shellQuote(config_file)), config_file
 end
 
--- a file curl can read more options from (see fetchCommand), for what mustn't be on its command line, where any
--- program on the device can read it, such as a password: options is a list of each option's name and value, e.g.
--- { { "data", "password=..." } }, or its name alone, for one without a value, e.g. { "anyauth" }. nil when a value has
--- a line break in it, which would end the option early
+-- a file of curl options (each name and value, or name) kept off its command line; nil if a value has a line break
 function CurlUtil.createConfigFile(options)
     local lines = {}
     for __, option in ipairs(options) do
@@ -507,10 +476,7 @@ function CurlUtil.createConfigFile(options)
     return config_file
 end
 
--- the options that log curl in to the site of the library url is on (see LibrarySites), for its config file (see
--- createConfigFile), whichever way the site asks: the Basic way, or the Digest way, as Calibre's content server does
--- unless it's set up with HTTPS. curl asks without them first, then sends them only to that site, not on to wherever
--- it sends the request. nil where it needs no login
+-- the options logging curl in to url's library whichever way it asks, sent only to that site, or nil if none needed
 function CurlUtil.loginOptions(url)
     local login = LibrarySites.loginFor(url)
     if not login then
@@ -519,18 +485,10 @@ function CurlUtil.loginOptions(url)
     return { { "user", login.username .. ":" .. login.password }, { "anyauth" } }
 end
 
--- how long a site on the network the device is on (see StringUtil.isLocalUrl), e.g. a library's, can take to connect
--- to, in seconds, before it's given up on: as it does at once when it's there, rather than being one that's only
--- there at home, say
+-- how long a site on the local network can take to connect, in seconds: not long, as one that's there connects at once
 local LOCAL_CONNECT_TIMEOUT = 5
 
--- a command that has curl fetch a web page into page_file, then print the HTTP status it ended with (000 when the
--- site didn't answer) and curl's own exit code, e.g. "200 0". unlike a download, a page with an error status is
--- kept, as what it says is of use. answer_timeout and page_timeout are how long, in seconds, the site can take to
--- answer and then to send the whole page, which is given up on sooner once nothing has arrived for a while.
--- config_file optionally gives curl more options (see createConfigFile), and is removed once curl has read it and
--- finished, even if what's waiting for it has been called off. it goes through KOReader's HTTP proxy, where it's on
--- (see applyProxy)
+-- a command that fetches a page to page_file (kept on an error status, for what it says), printing status and exit code
 function CurlUtil.fetchCommand(url, page_file, answer_timeout, page_timeout, config_file)
     checkCurl()
 
@@ -599,9 +557,7 @@ function CurlUtil.isTransferComplete(results, filepath, exit_code)
     return exit_code == 0 and FileUtil.getSize(filepath) > 0
 end
 
--- run cmd in a shell that saves its exit code to exit_file once it has finished. the shell's pid is the one a
--- background download is followed and stopped by (see echoPid and killPid), so it passes being stopped on to cmd,
--- which would otherwise carry on by itself, writing to its file, and waits for cmd to stop before saving its exit code
+-- run cmd in a shell that saves its exit code to exit_file, passing a kill on to cmd, which would otherwise carry on
 function CurlUtil.saveExitCode(cmd, exit_file, config_files)
     -- (those curl was given its options in, once it has finished with them: one, or a list of them)
     local removed = {}
@@ -624,13 +580,7 @@ function CurlUtil.echoPid(cmd)
     return string.format("%s & echo $!", cmd)
 end
 
--- the command that has curl download url to filepath (see download), and the file it saves curl's exit code in.
--- max_time optionally limits how long each attempt (and retrying) can take, in seconds.
--- opts.headers_file optionally has curl note the headers it's sent down in that file (see getDownloadSize),
--- opts.stall_time gives up on a download once nothing has arrived for that many seconds, and opts.resume has curl
--- carry on from what's already in filepath, including when it tries again after a download stops partway (where
--- the site says it can), rather than starting again from the beginning. it goes through KOReader's HTTP proxy, where
--- it's on (see applyProxy)
+-- the command downloading url to filepath and its exit file; opts.resume carries on from what's there, also on retries
 local function downloadCommand(download_url, filepath, max_time, opts)
     opts = opts or {}
 
@@ -679,9 +629,7 @@ local function downloadCommand(download_url, filepath, max_time, opts)
     return cmd, exit_file
 end
 
--- download url to filepath in the background (see downloadCommand for the options), returning the pid to follow it
--- by (see isPidRunning and killPid) and the file its exit code is saved in once it has finished (see getExitCode), or
--- nil and why it couldn't be started
+-- download url to filepath in the background, returning its pid and the file its exit code is saved in, or nil and why
 function CurlUtil.startDownload(download_url, filepath, max_time, opts)
     local cmd, exit_file = downloadCommand(download_url, filepath, max_time, opts)
     local pid, err = CurlUtil.spawnCurlPid(CurlUtil.echoPid(cmd))
@@ -691,8 +639,7 @@ function CurlUtil.startDownload(download_url, filepath, max_time, opts)
     return pid, exit_file
 end
 
--- download url to filepath (see downloadCommand for the options), holding KOReader up until it has. returns true, or
--- nil and what went wrong, leaving nothing behind
+-- download url to filepath, holding KOReader up until it has: true, or nil and what went wrong, leaving nothing behind
 function CurlUtil.download(download_url, filepath, max_time, opts)
     local cmd, exit_file = downloadCommand(download_url, filepath, max_time, opts)
     os.execute(cmd)
@@ -741,8 +688,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
     local function quote(value)
         return (value:gsub("\\", "\\\\"):gsub('"', '\\"'))
     end
-    -- whether the files are all on the network the device is on (see StringUtil.isLocalUrl), e.g. a library's covers,
-    -- which go without the proxy and encrypted DNS, and whether they're all on the one site
+    -- whether the files are all on the local network, going without the proxy and encrypted DNS, and all on one site
     local all_local, site = #download_urls > 0, StringUtil.siteOf(download_urls[1])
     for __, download_url in ipairs(download_urls) do
         all_local = all_local and StringUtil.isLocalUrl(download_url)
@@ -751,15 +697,12 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
         end
     end
     local lines = {}
-    -- KOReader's HTTP proxy, where it's on (see ProxyUtil), with the files, rather than on curl's command line (see
-    -- applyProxy)
+    -- KOReader's HTTP proxy, where it's on, with the files rather than on curl's command line (see applyProxy)
     local proxy = not all_local and ProxyUtil.get()
     if proxy and not proxy:find("%c") then
         table.insert(lines, string.format('proxy = "%s"\n', quote(proxy)))
     end
-    -- and the login of the library the files are from, given to curl once for all of them, so only where they're all
-    -- on its site (as CoverCache downloads each library's covers apart from the rest), never where any isn't, which
-    -- would send it to that site too
+    -- and the library's login, given once for all, so only where all the files are on its site, or it'd go to others
     local login = CurlUtil.loginOptions(download_urls[1] or "")
     if login and not site then
         LogUtil.warn("downloading files from several sites, so without the login of the library one is on")
@@ -818,9 +761,7 @@ function CurlUtil.downloadMultiple(download_urls, filepaths, background, num_par
     if not all_local then
         cmd = CurlUtil.applyEncryptedDns(cmd)
     end
-    -- write each file's result, as some may download when others fail. where curl can, to its stderr, which isn't
-    -- buffered like its stdout, so each file's result is there as soon as it has downloaded (and been written out
-    -- in full), rather than once they all have
+    -- each file's result, as some may fail, to stderr where curl can, which is unbuffered, so each shows once done
     local write_out = "%{exitcode} %{filename_effective}\\n"
     if curlIsAtLeast("7.63.0") then
         cmd = string.format(

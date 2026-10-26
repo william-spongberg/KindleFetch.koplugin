@@ -235,8 +235,7 @@ describe("UrlApi", function()
             assert.is_nil(require("cache.urlcache"):get("libgen"))
         end)
 
-        -- rather than those on Tor or I2P, which need software of their own to reach, or ones that aren't Z-Library's,
-        -- as the page can be edited by anyone, and the account's password is sent to them when logging in
+        -- not Tor or I2P (needing extra software) nor others, as anyone can edit the page and logins send the password
         it(
             "are only the names of sites on the web, from the infobox's website row, named as Z-Library's are",
             function()

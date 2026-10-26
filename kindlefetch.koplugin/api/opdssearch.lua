@@ -10,20 +10,16 @@ local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- searches the OPDS catalogue of a library the user has added (see Libraries), such as Calibre's content server's or
--- Calibre-Web's, and finds its books' files (see Sites). each library is a site of its own (see new), searched with
--- the search its catalogue gives (see discover), for the languages and file types chosen in the settings
+-- searches the OPDS catalogue of a library the user has added (see Libraries) with its own search, and finds its files
 local OpdsSearch = {}
 OpdsSearch.__index = OpdsSearch
 
--- the kinds of catalogue, each searched and answering its own way (see kindOf): Calibre's content server's,
--- Calibre-Web's (as Calibre-Web Automated's is too), and any other's
+-- the kinds of catalogue, each searched its own way (see kindOf): Calibre's, Calibre-Web's (Automated's too), others
 OpdsSearch.CALIBRE = "calibre"
 OpdsSearch.CALIBRE_WEB = "calibre-web"
 OpdsSearch.OPDS = "opds"
 
--- constants
--- the file types of the files a catalogue links to, by their MIME types, as KOReader opens them
+-- constants: the file types of the files a catalogue links to, by their MIME types, as KOReader opens them
 local MIME_TYPES = {
     ["application/epub+zip"] = "epub",
     ["application/epub"] = "epub",
@@ -55,8 +51,7 @@ local MIME_TYPES = {
     ["application/vnd.palm"] = "pdb",
     ["application/x-palm-database"] = "pdb",
 }
--- the file types, as the settings name them, of the formats Calibre names otherwise: an AZW3 (KF8), which KOReader
--- opens saved as an AZW, as it takes their MIME type to be that (see CreDocument:register)
+-- the settings' file types for formats Calibre names otherwise: an AZW3 (KF8), which KOReader opens saved as an AZW
 local FILE_TYPE_NAMES = { azw3 = "azw" }
 -- and the formats each of those file types is to Calibre, for searching for books in them (see calibreSearch)
 local CALIBRE_FORMATS = { azw = { "AZW", "AZW3" } }
@@ -79,17 +74,14 @@ local IMAGES = {
 -- how big a thumbnail to ask Calibre's content server for (whose own are 60 by 80), for the covers in the results
 local CALIBRE_THUMBNAIL_SIZE = "200x300"
 
--- a library's site for searching and downloading from, as source (its name in Sites), from library: { name, url
--- (its catalogue's address), kind (see CALIBRE), search_url (the template of its search, see discover) }. Calibre's
--- can be narrowed down to the books' titles, authors or ISBNs, as its search takes its own search's syntax
+-- a library's site as source, from its name, url, kind and search_url (see discover); only Calibre's can be narrowed
 function OpdsSearch.new(source, library)
     local site = setmetatable({
         NAME = library.name,
         SOURCE = source,
         SCOPES = library.kind == OpdsSearch.CALIBRE and { "title", "author", "isbn" } or nil,
         library = library,
-        -- the address of each page of results after the first, by what was searched for (see searchKey), as a
-        -- catalogue links each page to the next
+        -- the addresses of later pages of results, by search (see searchKey), as each page links to the next
         next_urls = {},
     }, OpdsSearch)
     -- which is called by itself (see Downloader), rather than as the site's
@@ -115,9 +107,7 @@ local function calibreQuoted(word)
     return '"' .. word:gsub('[\\"]', "\\%0") .. '"'
 end
 
--- the search for query on Calibre's content server, in its own search's syntax: each word of it in the books' titles
--- or authors' names, where narrowed down to them (see SCOPES), or an ISBN, otherwise anywhere it searches, in the file
--- types and languages chosen (or whose language isn't known), or nil when there's nothing in the query to search for
+-- the Calibre search for query, narrowed to scope, in the file types and languages chosen (or unknown), or nil
 function OpdsSearch.calibreSearch(query, scope, languages, file_types)
     local search
     if scope == "isbn" then
@@ -159,8 +149,7 @@ function OpdsSearch.calibreSearch(query, scope, languages, file_types)
     return table.concat(clauses, " and ")
 end
 
--- the address of the search for query (see search_url in new): each of its OpenSearch parameters filled in, the
--- search's words and the first page, those it can do without left empty. nil when there's nothing to search for
+-- the search's address from its OpenSearch template: the words and first page filled in, the rest left empty, or nil
 function OpdsSearch:searchUrl(query, scope, languages, file_types)
     local terms
     if self.library.kind == OpdsSearch.CALIBRE then
@@ -207,8 +196,7 @@ local function formatSize(bytes)
     return string.format("%.1f MB", bytes / (1024 * 1024))
 end
 
--- the year a book was published, from when its entry says it was (its issued date, or for a catalogue other than
--- Calibre's, which says when it was added to the library there, its published date), where it's a year
+-- the year a book was published: its issued date, or published date (not Calibre's, which is when it was added)
 local function yearOf(kind, entry)
     local date = entry.issued or (kind ~= OpdsSearch.CALIBRE and entry.published) or ""
     local year = tonumber(date:match("^(%d%d%d%d)"))
@@ -216,8 +204,7 @@ local function yearOf(kind, entry)
     return year and year >= 1000 and tostring(year) or nil
 end
 
--- the book in an entry of the catalogue's feed at base_url, in the first of the file types chosen it's in, and the
--- languages chosen (in wanted), where it says what it's in. nil when it isn't, or isn't a book (e.g. a series)
+-- the book in a feed entry, in the first file type chosen it's in and a language wanted, where it says, or nil
 function OpdsSearch:parseBook(entry, base_url, wanted, file_types)
     local files, thumbnail, image = {}, nil, nil
     for __, link in ipairs(entry.links) do
@@ -246,8 +233,7 @@ function OpdsSearch:parseBook(entry, base_url, wanted, file_types)
         return nil
     end
 
-    -- leaving out a book in other languages only, where it says (as Calibre's doesn't, though its search does, see
-    -- calibreSearch)
+    -- leaving out a book only in other languages, where it says (Calibre's search does so, see calibreSearch)
     local languages, seen, in_chosen = {}, {}, false
     for __, value in ipairs(entry.languages) do
         local language = LanguageCodes.find(value)
@@ -291,8 +277,7 @@ function OpdsSearch:parseBook(entry, base_url, wanted, file_types)
     }
 end
 
--- the books in the feed at url in the file types and languages chosen, the number of entries on the page, and the
--- address of the next page, where there's one. nil when it isn't a feed
+-- the feed's books in the file types and languages chosen, its number of entries and next page's address, or nil
 function OpdsSearch:parseResults(body, url, languages, file_types)
     local feed = OpdsFeed.parse(body)
     if not feed then
@@ -318,8 +303,7 @@ function OpdsSearch:parseResults(body, url, languages, file_types)
     return books, #feed.entries, StringUtil.isSafeUrl(next_url) and next_url or nil
 end
 
--- whether err means the library's site couldn't be reached at all, as when the device isn't on its network: its name
--- couldn't be looked up, it couldn't be connected to, or it didn't answer, as curl says them
+-- whether curl's err means the library's site couldn't be reached at all, as when the device isn't on its network
 local function isUnreachable(err)
     for __, exit_code in ipairs({ 6, 7, 28 }) do
         if err == CurlUtil.getErrorMeaning(exit_code) then
@@ -356,9 +340,7 @@ local function searchKey(query, scope, page)
     return table.concat({ query, scope or "", tostring(page) }, "\n")
 end
 
--- search the given page of the library's results, returning the books found, the page to carry on from (or nil once
--- there are no more results), and how many results were read to find them, narrowed down by scope, where given (as
--- LibgenSearch:search does)
+-- search a page of the library's results, narrowed down by scope where given, as LibgenSearch:search does
 function OpdsSearch:search(query, page, scope)
     local languages = KindleFetchSettings:getPreferredLanguages()
     local file_types = KindleFetchSettings:getPreferredFileTypes()
@@ -432,8 +414,7 @@ function OpdsSearch:search(query, page, scope)
     return books, nil, next_page, results
 end
 
--- the book's download link, from its entry in the catalogue, then nil, nil and how many bytes the catalogue lists the
--- file as (which what arrives is checked against), as Sites says
+-- the book's download link from its catalogue entry, then nil, nil and its listed size, as Sites says
 function OpdsSearch:downloadLink(book)
     if not StringUtil.isSafeUrl(book.download_url) then
         return nil, T(_("%1 doesn't have this book as %2"), self.NAME, tostring(book.file_type):upper())
@@ -450,8 +431,7 @@ function OpdsSearch:downloadLink(book)
     return book.download_url, nil, nil, { bytes = book.bytes }
 end
 
--- the feed at url, and its address, or nil, and why not where it's known: that it needs logging in to, or that it
--- didn't answer. nil and nothing else when it answered with something other than a feed, such as a web page
+-- the feed at url, or nil and why not where known (a login needed, or no answer), or nil alone for e.g. a web page
 local function fetchFeed(url)
     local body, err, status = HttpUtil.getBody(url)
     if err == HttpUtil.CANCELLED then
@@ -471,8 +451,7 @@ local function fetchFeed(url)
     return feed
 end
 
--- the address of the catalogue's search, from its feed at url: the template its feed gives (e.g.
--- "/opds/search/{searchTerms}"), or failing that, the one its OpenSearch description does. nil where it has none
+-- the catalogue's search address: the template its feed gives, or failing that, its OpenSearch description's, or nil
 local function findSearch(feed, url)
     for __, link in ipairs(feed.links) do
         if
@@ -495,11 +474,7 @@ local function findSearch(feed, url)
     end
 end
 
--- the catalogue at url, an address the user gives, e.g. 192.168.1.10:8080 (as Calibre's and Calibre-Web's are at
--- /opds on their sites), as it's searched: { url = its feed's address, name = what it calls itself, kind (see
--- CALIBRE), search_url (see findSearch), libraries = Calibre's libraries, each { name, url } }. nil and why not when
--- there's none there, or it can't be searched. url is on a library's site, logged into where it needs to be (see
--- LibrarySites)
+-- the catalogue at url (or its /opds) as it's searched, or nil and why not, logging in as LibrarySites says
 function OpdsSearch.discover(url)
     local feed, err = fetchFeed(url)
     if not feed and not err and not url:find("/opds", 1, true) then
@@ -522,8 +497,7 @@ function OpdsSearch.discover(url)
         search_url = search_url,
         libraries = {},
     }
-    -- each of the libraries Calibre's content server has, which its feed lists, even when there's only the one, by
-    -- the name it's given there (as in "Library: Books")
+    -- each library Calibre's content server lists, even when there's only one, by the name it's given there
     if kind == OpdsSearch.CALIBRE then
         for __, entry in ipairs(feed.entries) do
             local library_id = entry.id and entry.id:match("^calibre%-library:(.+)$")

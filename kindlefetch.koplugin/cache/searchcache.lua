@@ -10,8 +10,7 @@ local SearchCache = KindleFetchCache:new {
     -- each search is around 25KB, and the whole cache is read and written at once
     max_entries = 100,
 
-    -- the site searched (see Sites), as each finds different books, and what the search was narrowed to, where it
-    -- was (e.g. only the books' authors), as searches that weren't were saved before
+    -- the site (see Sites), as each finds different books, and the scope where given, as keys saved before have none
     makeKey = function(...)
         LogUtil.debug("data for makeKey:", ...)
         local source, query, page, languages, file_types, book_types, scope = ...
@@ -31,8 +30,7 @@ local SearchCache = KindleFetchCache:new {
     end,
 }
 
--- what a search of site (see Sites) is narrowed down to, as chosen in the settings: the languages, file types and,
--- where the site has them, book types
+-- what a search of site is narrowed to in the settings: languages, file types and, where it has them, book types
 local function choices(site)
     return KindleFetchSettings:getPreferredLanguages(),
         KindleFetchSettings:getPreferredFileTypes(),
@@ -46,10 +44,7 @@ function SearchCache:hasPage(site, query, page, scope)
     return cached ~= nil and cached.books ~= nil
 end
 
--- search site from the given page of its results, narrowed down by scope, where given, returning what
--- fetch(languages, file_types, book_types) does: the books found, or nil and why not, then the page to carry on from
--- (or nil once there are no more results) and how many results were read to find them. that's the books saved from an
--- earlier search, where there are any (with how many were read unknown, so nil), otherwise they're saved
+-- search site from page, by scope where given: the books saved from before, or else what fetch returns, saving them
 function SearchCache:search(site, query, page, scope, fetch)
     local languages, file_types, book_types = choices(site)
     LogUtil.info(

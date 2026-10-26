@@ -44,9 +44,7 @@ if [[ -z "${koreader_dir}" ]] && ! flatpak info rocks.koreader.KOReader >/dev/nu
     exit 2
 fi
 
-# Calibre's content server, on a library holding Pride and Prejudice, for the tests of the libraries added
-# (e2e/library_e2e.lua), where Calibre is installed. it needs logging in to, as Calibre asks without HTTPS (the
-# Digest way). only one can run at a time, so it's left out while Calibre itself is open
+# serve a library holding Pride and Prejudice for e2e/library_e2e.lua, with a Digest login, unless Calibre is open
 calibre_vars=()
 if command -v calibre-server >/dev/null 2>&1 && command -v calibredb >/dev/null 2>&1; then
     calibre="${repo}/e2e/.tmp/calibre"

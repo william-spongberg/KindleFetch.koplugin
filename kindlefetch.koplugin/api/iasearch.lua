@@ -10,8 +10,7 @@ local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- searches the books on Internet Archive that anyone can download, rather than only borrow, and finds their files'
--- download links (see Sites)
+-- searches the books on Internet Archive that anyone can download, rather than only borrow, and finds their files
 local IaSearch = {
     NAME = "Internet Archive",
     SOURCE = "archive",
@@ -21,10 +20,7 @@ local IaSearch = {
 local SOURCE = IaSearch.SOURCE
 local SITE = "https://archive.org"
 local RESULTS_PER_PAGE = 50
--- Internet Archive's names for the formats it has each file type in, the best first: a PDF of a scan's text before
--- one of only its pictures, and a book's own text before the text read from a scan of it. they're matched exactly
--- (whatever their capitals), as a search for a format also finds those with its name in theirs, e.g. DjVu finds
--- Djvu XML, which every scan has
+-- Internet Archive's formats for each file type, best first, matched exactly, as a search for DjVu also finds Djvu XML
 local FORMATS = {
     epub = { "EPUB" },
     mobi = { "MOBI" },
@@ -37,8 +33,7 @@ local FORMATS = {
 -- Internet Archive's codes for each language the settings offer (see LanguageCodes), as it has most books' languages
 local LANGUAGE_CODES = LanguageCodes.CODES
 
--- what Internet Archive calls the languages with these codes in the settings, for searching for books in them, or
--- nil when every language is chosen
+-- what Internet Archive calls the languages with these codes in the settings, or nil when every language is chosen
 local function languageTerms(codes)
     if #codes >= #KindleFetchSettings:getAvailableLanguages() then
         return nil
@@ -75,8 +70,7 @@ local function formatTerms(file_types)
     return terms
 end
 
--- a term to search for exactly, which Internet Archive's search would otherwise read some characters of as more
--- than what they are
+-- a term to search for exactly, rather than Internet Archive reading some of its characters as more than they are
 local function quote(term)
     return '"' .. term:gsub('[\\"]', "\\%0") .. '"'
 end
@@ -88,9 +82,7 @@ local SCOPE_FIELDS = {
     author = "creator",
 }
 
--- each word of the query in a book's title or the name of its author (or the one of them the search is narrowed to,
--- see SCOPES), e.g. "1984 orwell" finding 1984 by George Orwell, rather than in all that's been written about it,
--- which finds too much else. an ISBN's the digits of the query, as it's saved without its hyphens
+-- each word in the title or author (or the one narrowed to), as searching all finds too much; ISBNs without hyphens
 local function wordClauses(query, scope)
     if scope == "isbn" then
         local isbn = query:upper():gsub("[^%dX]", "")
@@ -119,9 +111,7 @@ local function orTerms(terms)
     return "(" .. table.concat(quoted, " OR ") .. ")"
 end
 
--- the search for the query, in the formats the file types can be in and the languages, among the books that anyone
--- can download (Internet Archive lends most of its books instead, as files only its app can open), or nil if
--- there's nothing in the query to search for
+-- the search among the books anyone can download (most are only lent), or nil if there's nothing in the query to find
 function IaSearch.buildQuery(query, languages, file_types, scope)
     local clauses = wordClauses(query, scope)
     if #clauses == 0 then
@@ -141,8 +131,7 @@ function IaSearch.buildQuery(query, languages, file_types, scope)
     return table.concat(clauses, " AND ")
 end
 
--- the page of results for the search (see buildQuery), the most downloaded first, as most of what Internet Archive
--- has are scans of books few have read
+-- the page of results, most downloaded first, as most of what Internet Archive has are scans of books few have read
 function IaSearch.buildParams(search, page)
     local params = { "q=" .. util.urlEncode(search) }
     for __, field in ipairs({ "identifier", "title", "creator", "year", "language", "format" }) do
@@ -155,8 +144,7 @@ function IaSearch.buildParams(search, page)
     return table.concat(params, "&")
 end
 
--- the values of one of a book's fields, which Internet Archive gives as a list when there are several, as text.
--- anything else, such as JSON's null, is left out
+-- the values of a book's field, which can be one or a list, as text, leaving out anything else, e.g. JSON's null
 local function values(field)
     local list = {}
     for __, value in ipairs(type(field) == "table" and field or { field }) do
@@ -204,8 +192,7 @@ local ROLES = {
     comp = true,
 }
 
--- the names of the people who wrote a book, from its creators as a library writes them, e.g. "Austen, Jane,
--- 1775-1817" and "Thomson, Hugh, 1860-1920, ill." as Jane Austen, Hugh Thomson
+-- the names of a book's authors, from its creators as a library writes them (surname first, with dates and roles)
 local function authorNames(field)
     local names, seen = {}, {}
     for __, creator in ipairs(values(field)) do
@@ -283,8 +270,7 @@ local function parseBook(doc, file_types)
     }
 end
 
--- the books in the preferred file types (most of what Internet Archive has is in several), the number of results
--- on the page, and how many there are altogether, from the JSON it answers a search with. nil if it isn't that
+-- the books in the preferred file types, the number of results on the page and in all, from the search's JSON, or nil
 function IaSearch.parseResults(body, file_types)
     local ok, data = pcall(JSON.decode, body)
     local response = ok and type(data) == "table" and data.response
@@ -367,9 +353,7 @@ local function fetchResults(query, page, scope, languages, file_types)
     return books, nil, next_page, results
 end
 
--- search the given page of Internet Archive's results, returning the books found, the page to carry on from (or
--- nil once there are no more results), and how many results were read to find them, narrowed down by scope, where
--- given (as LibgenSearch:search does)
+-- search a page of Internet Archive's results, narrowed down by scope where given, as LibgenSearch:search does
 function IaSearch:search(query, page, scope)
     return SearchCache:search(self, query, page, scope, function(languages, file_types)
         return fetchResults(query, page, scope, languages, file_types)
@@ -385,8 +369,7 @@ local function encodePath(path)
     return table.concat(parts, "/")
 end
 
--- the file of the book in its file type, from the list of the files in its folder. the best of its formats (see
--- FORMATS), and the first file in that, when there are several (e.g. a book with and without its pictures)
+-- the book's file in its file type from those in its folder: the first in the best of its formats (see FORMATS)
 local function pickFile(files, file_type)
     for __, format in ipairs(FORMATS[file_type] or {}) do
         for __, file in ipairs(files) do
@@ -406,8 +389,7 @@ local function pickFile(files, file_type)
     end
 end
 
--- the book's download link, from the list of the files in its folder on Internet Archive, then nil, nil and what it
--- lists the file as (see Sites). otherwise nil, and why not (HttpUtil.CANCELLED when called off)
+-- the book's download link from its folder's list of files, and what it lists it as (see Sites), or nil and why not
 function IaSearch.findDownloadLink(book)
     local body, err, status = HttpUtil.getBody(string.format("%s/metadata/%s/files", SITE, book.identifier))
     if err == HttpUtil.CANCELLED then

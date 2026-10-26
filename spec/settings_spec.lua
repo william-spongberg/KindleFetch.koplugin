@@ -89,8 +89,7 @@ describe("KindleFetchSettings", function()
             assert.are.equal("/mnt/us/books", Settings:getDownloadDir())
         end)
 
-        -- e.g. once deleted, or on an SD card that has been taken out, which was downloaded to all the same, failing
-        -- once its link had been looked up
+        -- e.g. deleted, or on an SD card taken out, which was still downloaded to, failing once its link was looked up
         it("uses the default while the saved download folder can't be found, keeping it for when it's back", function()
             local home = helper.tmpdir("home")
             setReaderHomeDir(home)

@@ -6,12 +6,7 @@ local StringUtil = require("util.stringutil")
 local ProxyUtil = require("util.proxyutil")
 local LogUtil = require("util.logutil")
 
--- asks the sites of the libraries the user has added (see LibrarySites) with KOReader's own HTTP (luasocket), where
--- curl can't, logging in to them where they ask: the Basic way, which luasocket can do itself, or the Digest way,
--- which it can't, and which Calibre's content server asks for unless it's set up with HTTPS. a library is asked
--- without its login first, then answered the way it asks, as curl does (see CurlUtil.loginOptions), each time: rather
--- than with what it asked the last time, as Calibre's says a login the other way is a bad request, and counts one
--- answering what it asked long ago as a failed login, which it can lock the device out for
+-- asks libraries with luasocket, logging in Basic or Digest, as asked each time: Calibre's locks out stale answers
 local HttpLogin = {}
 
 -- how many times a library's site can send a request on elsewhere, as luasocket allows
@@ -39,8 +34,7 @@ local function parameterValue(header, pos)
     return table.concat(value), i + 1
 end
 
--- the ways a site says it can be logged in to, in a WWW-Authenticate header, e.g. 'Digest realm="calibre",
--- nonce="...", qop="auth"', each its scheme (in small letters) and parameters (by their names, in small letters)
+-- the ways a WWW-Authenticate header says to log in to a site: each scheme and parameters, their names in small letters
 function HttpLogin.challenges(header)
     local challenges, current = {}, nil
     local pos = 1
@@ -64,8 +58,7 @@ function HttpLogin.challenges(header)
     return challenges
 end
 
--- whether a Digest challenge can be answered: with MD5, as Calibre's content server asks, and the request alone
--- (qop auth), or nothing more (no qop, as RFC 2069 says)
+-- whether a Digest challenge can be answered: MD5, as Calibre's content server asks, with qop auth or none (RFC 2069)
 local function canAnswer(challenge)
     local algorithm = (challenge.params.algorithm or "MD5"):upper()
     if algorithm ~= "MD5" and algorithm ~= "MD5-SESS" then
@@ -75,8 +68,7 @@ local function canAnswer(challenge)
     return qop == nil or (" " .. qop:gsub(",", " ") .. " "):find(" auth ", 1, true) ~= nil
 end
 
--- the way to log in that's answered, of those in a WWW-Authenticate header (see challenges): the Digest way, where it
--- can be (see canAnswer), as it doesn't send the password, otherwise the Basic way. nil when it's neither
+-- the WWW-Authenticate challenge to answer: Digest where it can be, as it doesn't send the password, otherwise Basic
 function HttpLogin.bestChallenge(header)
     local basic
     for __, challenge in ipairs(HttpLogin.challenges(header)) do
@@ -94,9 +86,7 @@ local function quoted(text)
     return '"' .. tostring(text):gsub('[\\"]', "\\%0") .. '"'
 end
 
--- the Authorization header that answers a Digest challenge (see challenges) for a request of method for uri, its path
--- and query as it's asked for (see StringUtil.pathOf), logged in with login, as RFC 2617 says. cnonce is the nonce of
--- its own it's sent with, made up afresh for each request
+-- the Authorization header answering a Digest challenge for method on uri (path and query), as RFC 2617 says
 function HttpLogin.digest(login, challenge, method, uri, cnonce)
     local params = challenge.params
     local qop = params.qop and "auth" or nil
@@ -135,9 +125,7 @@ local function newCnonce()
     return string.format("%08x%08x", math.random(0, 0x7fffffff), os.time() % 0x7fffffff)
 end
 
--- luasocket's http.request, going through the proxy for url (see ProxyUtil.forUrl): none for an address on the
--- network the device is on, whereas luasocket goes through KOReader's whenever a request doesn't give one. what it
--- raises (e.g. from the TLS library) is returned, rather than raised, which KOReader would exit on
+-- http.request through url's proxy (none for local addresses), returning what it raises, which KOReader would exit on
 local function send(request)
     local saved = http.PROXY
     http.PROXY = ProxyUtil.forUrl(request.url)
@@ -150,11 +138,7 @@ local function send(request)
     return ok, code, headers, status
 end
 
--- ask for url on a library's site (see LibrarySites) with luasocket, with headers, into the sink new_sink makes,
--- logging in where it asks to, then wherever it sends the request on to, logging in there only on the site whose login
--- it is. new_sink is asked for a sink afresh each time it's asked, as what's sent when asking without the login, and
--- with a redirect, isn't what's asked for (and a file it's written to has to be started again). returns what
--- http.request does, or nil and what went wrong when it raised that
+-- ask a library's site for url, into a new sink each time, following redirects, logging in only on the login's own site
 function HttpLogin.request(url, headers, new_sink)
     for __ = 0, MAX_REDIRECTS do
         local login = LibrarySites.loginFor(url)

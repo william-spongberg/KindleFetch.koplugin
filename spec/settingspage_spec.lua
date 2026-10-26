@@ -467,8 +467,7 @@ describe("SettingsPage", function()
             end
         end)
 
-        -- which KOReader's Home key closes, then sends Home on again until what's on top has changed, which it
-        -- never did while the menu stayed open with nothing ticked
+        -- Home is sent on until what's on top changes, which it never did while the menu stayed open with none ticked
         it("are left as they were when KOReader's Home key closes their menu with none ticked", function()
             local Menu = require("ui/widget/menu")
             Menu.onHome = function(self)

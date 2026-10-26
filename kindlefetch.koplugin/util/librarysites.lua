@@ -1,19 +1,13 @@
 local StringUtil = require("util.stringutil")
 local LogUtil = require("util.logutil")
 
--- the sites of the libraries the user has added, by their sites (see StringUtil.siteOf), with the username and
--- password to log in to each with, where it needs them. what fetches pages and downloads books and covers looks a
--- site's login up here (see loginFor), so that it's only ever sent to its own site, rather than e.g. to the other
--- sites whose covers are on the same page of results, or wherever a library's site sends a request on to. the
--- passwords are never logged (see LogUtil.hide)
+-- the added libraries' sites and their logins, looked up by site so each is only sent to its own, and never logged
 local LibrarySites = {}
 
 -- each site's { login = { username = ..., password = ... } }, or { login = false } where it needs none
 local sites = {}
 
--- add the site of the library at url (any address on it), logging in to it with login ({ username = ..., password =
--- ... }), where given with a username, in place of what was added for its site before. returns false when url isn't
--- a web address
+-- add the site of the library at url, with login where it has a username, replacing any; false if not a web address
 function LibrarySites.add(url, login)
     local site = StringUtil.siteOf(url)
     if not site then
@@ -39,8 +33,7 @@ function LibrarySites.isLibrary(url)
     return site ~= nil and sites[site] ~= nil
 end
 
--- what to log in to the site url is on with, where it's a library's that needs it ({ username = ..., password = ...
--- }), otherwise nil
+-- the login for the site url is on, where it's a library's that needs one, otherwise nil
 function LibrarySites.loginFor(url)
     local site = StringUtil.siteOf(url)
     local entry = site and sites[site]

@@ -1,8 +1,6 @@
 local KindleFetchSettings = require("settings.settings")
 
--- the languages the settings offer, by the codes sites give books' languages in: the MARC codes (ISO 639-2) of each,
--- with the two some languages have, as Internet Archive, Calibre-Web and other OPDS catalogues give most books',
--- besides its name and its code in the settings, which some give instead
+-- the settings' languages by sites' codes for them: MARC (ISO 639-2, both where there are two), as OPDS catalogues give
 local LanguageCodes = {}
 
 -- the MARC codes of each language the settings offer, by its code in the settings
@@ -109,8 +107,7 @@ LanguageCodes.CODES = {
     ny = { "nya" },
 }
 
--- what sites call each language, as each of its codes, its name and its code in the settings (all in small letters),
--- with the language's name to show
+-- each language's name to show, by what sites call it: its codes, name and code in the settings, all in small letters
 local names
 function LanguageCodes.names()
     if not names then
@@ -126,8 +123,7 @@ function LanguageCodes.names()
     return names
 end
 
--- the language a site's code or name for it is, e.g. "eng", "en-GB" or "English", with its code in the settings and
--- its name, or nil when the settings don't offer it
+-- the settings' language a site's code or name for it is, or nil when the settings don't offer it
 function LanguageCodes.find(value)
     local lower = type(value) == "string" and value:lower():gsub("^%s+", ""):gsub("%s+$", "") or ""
     local name = LanguageCodes.names()[lower] or LanguageCodes.names()[lower:match("^(%a+)[-_]")]

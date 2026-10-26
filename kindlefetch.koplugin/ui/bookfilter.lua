@@ -4,11 +4,7 @@ local StringUtil = require("util.stringutil")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- what the books found can be shown by, without searching again: the site each was found on, its languages, file
--- type and book type, the decade it's from, how big it is, and whether it's in the download folder already. each
--- lists the values the books found have, to untick those whose books are hidden (see KindleFetch:chooseShown). what's
--- hidden is kept as the values unticked, by each filter's id (e.g. { language = { french = true } }), so the books that
--- come with other values, from a site that answers later or from loading more, are shown
+-- what the books found can be shown by (see KindleFetch:chooseShown), hiding values unticked, so new ones still show
 local BookFilter = {}
 
 -- the value of a book that doesn't say, e.g. one without a language
@@ -49,8 +45,7 @@ local function inOrder(first)
     end
 end
 
--- how many bytes a book is, from the size its site says it is, e.g. Z-Library's "2.06 MB" or Library Genesis'
--- "752 kB", or nil where it doesn't say
+-- how many bytes a book is, from the size its site says, e.g. "2.06 MB" or "752 kB", or nil where it doesn't say
 local UNITS = { [""] = 1, k = 1024, m = 1024 * 1024, g = 1024 * 1024 * 1024 }
 local function bytes(size)
     local number, unit = tostring(size or ""):lower():match("^%s*([%d%.]+)%s*([kmg]?)i?b%s*$")
@@ -66,8 +61,7 @@ local SIZES = {
     { code = "4", text = _("Over 100 MB") },
 }
 
--- the value of a field that's a name, as it's shown (each site's spelling of the same name, e.g. Z-Library's
--- "english", being the same value), or Unknown where the book doesn't say
+-- a name field's value as it's shown, each site's spelling of a name (e.g. "english") being one value, or Unknown
 local function named(text)
     text = text and StringUtil.trim(text)
     if not text or text == "" then
@@ -76,8 +70,7 @@ local function named(text)
     return { code = text:lower(), text = (text:gsub("^%l", string.upper)) }
 end
 
--- each with its id, its name, the values a book has for it (a book that has several, e.g. its languages, is shown
--- where any of them is), and the order they're listed in, where it isn't byCount
+-- each with its id, name, a book's values (one with several is shown where any is) and their order, where not byCount
 BookFilter.FILTERS = {
     {
         id = "site",
@@ -159,8 +152,7 @@ BookFilter.FILTERS = {
     {
         id = "downloaded",
         name = _("Downloaded"),
-        -- the values it always has, as it takes looking in the download folder for each book to know which it has,
-        -- which is only done once it's asked for (see values)
+        -- always both, as which each book has means looking in the download folder, only once asked (see values)
         fixed = { { code = "yes", text = _("Yes") }, { code = "no", text = _("No") } },
         valuesOf = function(book, is_downloaded)
             return { { code = is_downloaded(book) and "yes" or "no" } }
@@ -168,8 +160,7 @@ BookFilter.FILTERS = {
     },
 }
 
--- the values the books have for the filter, in the order they're listed in, each with its code, text, and how many
--- of the books have it. is_downloaded(book) says whether a book is in the download folder already
+-- the values the books have for the filter, in order, each with its code, text, and how many of the books have it
 function BookFilter.values(books, filter, is_downloaded)
     local values, by_code = {}, {}
     local function add(value)
@@ -197,14 +188,12 @@ function BookFilter.values(books, filter, is_downloaded)
     return values
 end
 
--- whether the filter is worth offering for the books' values (see values): where they don't all have the same one,
--- or always, where its values are fixed, as working out which each has means looking in the download folder
+-- whether to offer the filter: where values differ, or always if fixed, as those take looking in the download folder
 function BookFilter.isOffered(filter, values)
     return filter.fixed ~= nil or #values > 1
 end
 
--- what's hidden of the filter's values once those whose codes are in shown are all that's ticked, or nil where
--- nothing is
+-- what's hidden of the filter's values once only those whose codes are in shown are ticked, or nil where nothing is
 function BookFilter.hiding(values, shown)
     local ticked = {}
     for __, code in ipairs(shown) do

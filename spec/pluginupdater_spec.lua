@@ -64,8 +64,7 @@ for _, layout in ipairs(LAYOUTS) do
                 "curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0 OpenSSL/3.5.7 zlib/1.3.1\n"
             )
 
-            -- pretend to be curl, which looks up the latest release in the background and has finished by the
-            -- time it's checked on
+            -- pretend to be curl, looking up the latest release in the background, done by the time it's checked on
             release_response, release_lookups = nil, {}
             downloadRelease = function(url)
                 error("unexpected download of " .. url)

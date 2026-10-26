@@ -1,6 +1,4 @@
--- Stand-ins for the KOReader modules the plugin requires, plus filesystem helpers for specs.
--- Specs call helper.reset() in before_each to get fresh stubs and freshly loaded plugin modules,
--- and helper.cleanup() in after_each to remove any temporary files.
+-- stand-ins for KOReader's modules; specs call helper.reset() in before_each and helper.cleanup() in after_each
 
 local helper = {}
 
@@ -56,8 +54,7 @@ local function guardCommand(cmd)
     end
 end
 
--- KOReader runs on LuaJIT, where os.execute returns the raw exit status (0 on success) rather than
--- Lua 5.2+'s true/nil, so emulate that when needed to make `os.execute(cmd) ~= 0` checks behave as on device
+-- return the exit status (0 on success) as KOReader's LuaJIT does, not Lua 5.2+'s true/nil, so `~= 0` checks work
 os.execute = function(cmd)
     if cmd == nil then
         return real_execute()
@@ -430,9 +427,7 @@ local function createStubs(state)
                 end)
             )
         end,
-        -- KOReader runs what it's given in a process of its own; here it's run straight away, as if it had finished
-        -- by the time it's checked on, keeping each one's pid in state.subprocesses (or failing to start, as fork
-        -- does, when state.fork_fails is set)
+        -- run straight away rather than in a process of its own, as if it had finished by the time it's checked on
         runInSubProcess = function(fn)
             if state.fork_fails then
                 return false, "fork failed: Resource temporarily unavailable"
@@ -443,8 +438,7 @@ local function createStubs(state)
             fn(pid)
             return pid
         end,
-        -- whether a process has finished, collecting it, which they all have here, unless listed in
-        -- state.subprocesses_running
+        -- whether a process has finished, collecting it: they all have here, unless in state.subprocesses_running
         isSubProcessDone = function(pid)
             if state.subprocesses_running[pid] then
                 return false
@@ -633,9 +627,7 @@ local function createStubs(state)
             end,
         },
     }
-    -- KOReader's Trapper, which runs a function without holding up the rest of KOReader. here the function is just
-    -- run, and the commands it waits for are kept in state.trapped (and aren't finished if state.dismiss is set, as
-    -- when the widget that was given is tapped)
+    -- KOReader's Trapper, just running the function here; state.dismiss acts as if the widget given was tapped
     stubs.trapper = {
         wrapped = false,
         wrap = function(self, fn)
@@ -681,8 +673,7 @@ local function createStubs(state)
         table_sink = function(t)
             return stubs.ltn12.sink.table(t)
         end,
-        -- writes what arrives to the file, which, unlike KOReader's, isn't closed, as the stand-ins for luasocket
-        -- here don't say when the last of it has arrived
+        -- unlike KOReader's, leaves the file open, as the luasocket stand-ins here don't say when it's all arrived
         file_sink = function(handle)
             return function(chunk)
                 if chunk then
@@ -961,8 +952,7 @@ end
 -- responses to real requests, kept for the whole run so each live page is only downloaded once
 local live_responses = {}
 
--- use a stand-in for luasocket's http module that makes real requests with curl (luasocket's https
--- support needs luasec, which needs OpenSSL headers to build), so specs can scrape live pages
+-- use curl for luasocket's http so specs can scrape live pages (its https needs luasec, which needs OpenSSL to build)
 function helper.useLiveHttp()
     local http = {
         requests = {},
@@ -971,8 +961,7 @@ function helper.useLiveHttp()
         table.insert(http.requests, request.url)
         local form = request.source and request.source.text
         local cookie = request.headers and request.headers["Cookie"]
-        -- what other specs asking the same can share, unlike what a form or cookies were sent for, or a redirect
-        -- that wasn't followed
+        -- what other specs asking the same can share: not when sending a form or cookies, or not following a redirect
         local shared = not form and not cookie and request.redirect ~= false
         local response = shared and live_responses[request.url]
         if not response then
@@ -1006,9 +995,7 @@ function helper.useLiveHttp()
                 config:close()
                 cmd = cmd .. " -K " .. quote(config_file)
             end
-            -- asking once more when it times out (other than with a form, which mustn't be sent twice), as a site can
-            -- be slow for a moment, which isn't what the live tests are for, as Project Gutenberg was from GitHub's
-            -- servers when the canary asked it
+            -- ask once more on timing out (never sending a form twice), as live tests aren't for a site being slow
             local output
             for _ = 1, form and 1 or 2 do
                 local pipe = real_popen(cmd)

@@ -5,10 +5,7 @@ local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- KOReader doesn't catch errors in what it runs later: tasks it's asked to run in a while or on the next tick, the
--- functions Trapper wraps, and the event handlers of widgets other than the plugin's own (which PluginLoader's
--- HandlerSandbox catches), so a mistake in one of Kindle Fetch's exited KOReader, or was lost without a trace. these
--- run them catching any, logging it with where it happened, then cleaning up after what was going on
+-- KOReader catches no errors in scheduled tasks, Trapper or other widgets' handlers, so these catch, log and clean up
 local Guard = {}
 
 local function pack(...)
@@ -29,8 +26,7 @@ function Guard.pcall(what, fn, ...)
     return unpack(results, 1, results.n)
 end
 
--- call fn, returning what it returns. once it fails (see pcall), on_error is called with Errors.UNEXPECTED to clean up
--- after it and say so (Guard.say when not given), and nothing is returned
+-- call fn, returning what it returns, or once it fails, nothing, calling on_error (or Guard.say) with Errors.UNEXPECTED
 function Guard.call(what, fn, on_error, ...)
     local results = pack(Guard.pcall(what, fn, ...))
     if results[1] then

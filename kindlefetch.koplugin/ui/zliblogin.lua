@@ -18,8 +18,7 @@ local ZlibLogin = {}
 -- the email last typed in, to type it in again after a password that didn't work
 local last_email
 
--- log in with the email and password, turning wifi on first if need be (as KOReader is set up to), and saying so
--- until Z-Library has answered, with a button to call it off. calls on_logged_in once logged in
+-- log in, turning wifi on if need be, saying so until Z-Library answers, with a Cancel, then calling on_logged_in
 function ZlibLogin.login(email, password, on_logged_in)
     NetworkMgr:runWhenConnected(function()
         local message
@@ -30,8 +29,7 @@ function ZlibLogin.login(email, password, on_logged_in)
             end
         end
 
-        -- an error is passed on rather than left to Trapper, which would lose it and leave the message up, including
-        -- one in what's done once logged in
+        -- errors (on_logged_in's too) are passed on, as Trapper would lose them and leave the message up
         Trapper:wrap(Guard.wrap("logging in to Z-Library", function()
             message = WaitingMessage.new(_("Logging in to Z-Library..."))
             UIManager:show(message)

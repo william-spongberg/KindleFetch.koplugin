@@ -306,8 +306,7 @@ describe("Downloader", function()
             end)
         end)
 
-        -- which was only found out once its link had been looked up, which can count as one of the few downloads
-        -- Z-Library allows a day
+        -- which was only found out after looking up its link, which can use up one of Z-Library's few downloads a day
         it("doesn't look up the link when the folder chosen can't be found", function()
             Downloader:downloadBook(book, filepath, onResult)
             prompts[1].on_download(data_dir .. "/SD card/Dune.epub")
@@ -675,9 +674,7 @@ describe("Downloader", function()
             assert.are.equal("50% · 0.5 / 1.0 MB", progress().status_widget.text)
         end)
 
-        -- rather than looking as if KOReader is stuck, as curl only tries again once it has stalled for a while
-        -- once nothing has arrived for 10 seconds, the 20 checks on it since, however the clock has changed (it can be
-        -- put back, or jump forward once the time is looked up)
+        -- rather than seeming stuck till curl retries: once 20 checks (10 seconds) find nothing, as the clock can jump
         it("says when the download has stalled", function()
             helper.state.time = 1000
             download()
@@ -973,9 +970,7 @@ describe("Downloader", function()
             assert.are.equal(1, web.scrapes)
         end)
 
-        -- as every mirror did at once while this was written, their shared database refusing connections
-        -- which was taken to be a mirror without the book, so the broken mirror stayed first, and the mirrors were
-        -- never looked up again
+        -- as all mirrors did with their shared database down, taken as no book, so the broken one stayed first
         it("tries the next mirror when one answers with an error page, and forgets it", function()
             web.pages[adsUrl(mirrors[1])] = function()
                 return "<html>502 Bad Gateway</html>", nil, 502
@@ -1485,8 +1480,7 @@ describe("Downloader", function()
         end)
     end)
 
-    -- which failed the download as if the site had, removing what had arrived, and for Z-Library, asking for another
-    -- link, which can count as another download
+    -- which failed downloads as if the site had, removing what had arrived, and could cost another Z-Library download
     describe("when Wi-Fi goes off, or the device goes to sleep", function()
         local network
 

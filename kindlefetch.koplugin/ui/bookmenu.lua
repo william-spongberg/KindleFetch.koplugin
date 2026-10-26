@@ -67,12 +67,10 @@ function BookMenuItem:onTapSelect(arg, ges)
     return true
 end
 
--- is_downloaded is optionally called with each book shown, saying whether it's in the download folder already, and
--- source_name with the name of the site it was found on, to show among its details, where books from several are
+-- optional is_downloaded says if a book's downloaded already, and source_name its site, where books are from several
 local BookMenu = Menu:extend {}
 
--- whether KOReader's menu has what laying the books out with their covers builds on (see setupItemHeights and
--- updateItems), which it hasn't always: on older versions, the results were blank, and loading covers failed
+-- whether KOReader's menu has what laying out covers needs (see updateItems): older versions' results were blank
 function BookMenu.isSupported()
     return Menu.setupItemHeights ~= nil
         and Menu._recalculateDimen ~= nil
@@ -128,8 +126,7 @@ function BookMenu:createBookItemWidget(book)
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
-    -- book details (year, language, type, format, size), then whether it's in the download folder already (see
-    -- is_downloaded), in bold
+    -- book details (year, language, type, format, size), then Downloaded in bold where it is (see is_downloaded)
     local details = formatBookDetails(book, self.source_name and self.source_name(book))
     if self.is_downloaded and self.is_downloaded(book) then
         details = string.format(
@@ -200,10 +197,10 @@ function BookMenu:createBookItemWidget(book)
 end
 
 function BookMenu:onGotoPage(page)
-    -- Call parent implementation
+    -- call Menu's own
     local result = Menu.onGotoPage(self, page)
 
-    -- Trigger page change callback
+    -- and say the page changed
     if self.onPageChange then
         self.onPageChange(page)
     end
@@ -237,7 +234,7 @@ function BookMenu:setupItemHeights()
         end
     end
 
-    -- Add remaining items as final page
+    -- the items left over make the last page
     if #items > 0 then
         table.insert(self.page_items, items)
     end
@@ -368,12 +365,7 @@ function BookMenu:onCloseWidget()
     return Menu.onCloseWidget(self)
 end
 
--- redraw once any of the page's covers has downloaded, or been given up on, even if another search started
--- downloading it, but not for covers that are all for another page, such as the next one, as covers arrive
--- several times a page
--- (updateItems refreshes the screen itself, without the flash of a full refresh each time covers arrive). KOReader
--- doesn't catch errors in it, as it does in the plugin's own event handlers, and covers arrive several times a page,
--- so what goes wrong is only logged (see Guard)
+-- redraw as this page's covers arrive or are given up on, not for other pages'; errors are only logged (see Guard)
 BookMenu.onKindleFetchCoversDownloaded = Guard.wrap("showing the covers that arrived", function(self)
     for __, book in pairs(self.awaited_covers or {}) do
         if not CoverCache:isComing(book) then

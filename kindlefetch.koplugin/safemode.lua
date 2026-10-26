@@ -6,9 +6,7 @@ local Rollback = require("updater.rollback")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- what's left of Kindle Fetch when it can't be loaded or started (see main.lua): its menu, saying so and why, and
--- going back to the version installed before the last update, while one is kept (see Rollback). only KOReader itself
--- is used, as it may be Kindle Fetch's own modules that don't work
+-- what's left when Kindle Fetch can't load or start (see main.lua), using only KOReader, as its modules may not work
 local SafeMode = {}
 
 -- where the plugin is, from where this file was loaded, rather than asking PathUtil, which may be what doesn't work
@@ -81,8 +79,7 @@ function SafeMode.new(err)
     return Plugin
 end
 
--- show that menu in place of Kindle Fetch's own, when it couldn't start (registering it again, in case it went wrong
--- before it had, which, when it hadn't, only adds the same menu twice)
+-- show that menu instead when it couldn't start, registering again in case it failed first, at worst adding it twice
 function SafeMode.takeOver(plugin, err)
     plugin.addToMainMenu = function(__, menu_items)
         SafeMode.addToMainMenu(menu_items, err)

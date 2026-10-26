@@ -8,8 +8,7 @@ local Errors = require("util.errors")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- searches Project Gutenberg's free ebooks, which anyone can download, with its own catalogue's search (its OPDS
--- feed), and finds their files in the catalogue (see Sites)
+-- searches Project Gutenberg's free ebooks with its catalogue's search (its OPDS feed), and finds their files there
 local GutenbergSearch = {
     NAME = "Project Gutenberg",
     SOURCE = "gutenberg",
@@ -19,9 +18,7 @@ local GutenbergSearch = {
 local SOURCE = GutenbergSearch.SOURCE
 local SITE = "https://www.gutenberg.org"
 local RESULTS_PER_PAGE = 25
--- the files each file type a book can be downloaded as is in, as the catalogue lists them, the best first: an EPUB3
--- with its pictures, a MOBI as older Kindles read (rather than its KF8s, which KOReader can't open), and the text in
--- UTF-8. matched by the end of their addresses
+-- each file type's files, best first, by how their addresses end (the MOBIs, not the KF8s KOReader can't open)
 local FILES = {
     epub = { "%.epub3%.images$", "%.epub%.images$", "%.epub%.noimages$" },
     mobi = { "%.kindle%.images$", "%.kindle%.noimages$" },
@@ -38,8 +35,7 @@ function GutenbergSearch.hasFileTypes(file_types)
     return false
 end
 
--- the first of the file types Project Gutenberg has books in, which its books are taken to be in, as nearly all are
--- (those that aren't, such as its audiobooks, are said not to be once chosen, see findDownloadLink)
+-- the first file type chosen that Project Gutenberg has, which its books are taken to be in, as nearly all are
 local function preferredFileType(file_types)
     for __, file_type in ipairs(file_types) do
         if FILES[file_type] then
@@ -48,8 +44,7 @@ local function preferredFileType(file_types)
     end
 end
 
--- the language a title says a book is in, as the catalogue adds after the titles of those not in English, e.g.
--- "Oliver Twist (German)", with the title without it, or English and the title as it is
+-- the language the catalogue adds after titles not in English, and the title without it; else English and the title
 local function titleLanguage(title)
     local name, said = title:match("^(.-)%s*%(([^()]+)%)$")
     if name then
@@ -66,9 +61,7 @@ local function titleLanguage(title)
     end
 end
 
--- the search, as the address it's asked at: for the books with the words searched for in their titles or authors'
--- names, from the given page of results. in the one language chosen, where only one is, as the catalogue can't be
--- asked for several at once (and the books found are kept to those otherwise, see parseResults)
+-- the search's address, in the language chosen where only one is, as the catalogue can't be asked for several at once
 function GutenbergSearch.buildUrl(query, page, languages)
     local search = query
     if #languages == 1 and languages[1]:find("^%a%a%a?$") then
@@ -85,9 +78,7 @@ local function text(value)
     return value and StringUtil.trim(StringUtil.convertHtmlToText(value)) or ""
 end
 
--- the books in the languages chosen, in the first of the file types chosen it has (see preferredFileType), the
--- number of books on the page (rather than the entries for authors it lists too, for a search that names one), and
--- whether there are more pages of them, from the catalogue's search feed. nil if it isn't that
+-- the books in the languages and file type chosen, how many books (not authors) it lists, and if there are more
 function GutenbergSearch.parseResults(body, languages, file_types)
     if not body:find("<feed", 1, true) then
         return nil
@@ -185,17 +176,14 @@ local function fetchResults(query, page, languages, file_types)
     return books, nil, next_page, results
 end
 
--- search the given page of Project Gutenberg's results, returning the books found, the page to carry on from (or nil
--- once there are no more results), and how many results were read to find them (as LibgenSearch:search does). it can't
--- be narrowed down to the books' titles or authors, so searches both
+-- search a page of results, as LibgenSearch:search does, in both titles and authors, as it can't be narrowed to either
 function GutenbergSearch:search(query, page)
     return SearchCache:search(self, query, page, nil, function(languages, file_types)
         return fetchResults(query, page, languages, file_types)
     end)
 end
 
--- the address of the best of the book's files in its file type (see FILES), from its entry in the catalogue, which
--- lists them with how many bytes each is, or nil when it isn't in that file type
+-- the address and size of the best of the book's files in its file type (see FILES), from its catalogue entry, or nil
 function GutenbergSearch.findFile(body, file_type)
     local files = {}
     for link in body:gmatch("<link [^>]*>") do
@@ -215,9 +203,7 @@ function GutenbergSearch.findFile(body, file_type)
     end
 end
 
--- the book's download link, from its entry in the catalogue, then nil, nil and how many bytes the catalogue lists the
--- file as (which what arrives is checked against). otherwise nil, and why not (HttpUtil.CANCELLED when called off),
--- e.g. that it isn't in the book's file type, as Project Gutenberg's audiobooks aren't in any
+-- the book's download link and listed size (see Sites), or nil and why not, e.g. audiobooks aren't in any file type
 function GutenbergSearch.findDownloadLink(book)
     local body, err, status = HttpUtil.getBody(string.format("%s/ebooks/%d.opds", SITE, book.gutenberg_id))
     if err == HttpUtil.CANCELLED then

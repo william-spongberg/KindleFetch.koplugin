@@ -18,8 +18,7 @@ local Guard = require("util.guard")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- the libraries the user has added, in Kindle Fetch's settings (see Libraries): adding one at its address, and editing
--- and removing those added
+-- the libraries added in the settings (see Libraries): adding one at its address, and editing and removing them
 local LibrarySettings = {}
 
 -- text as it's written in a web address, e.g. "%40" as "@"
@@ -29,9 +28,7 @@ local function unescape(text)
     end))
 end
 
--- the address as it's asked at: with http:// where it has no scheme, as a home server's usually doesn't, without the
--- slashes at its end, and without who it logs in as, which is given as the username and password instead (so it's
--- never logged, nor on curl's command line). nil when it isn't a web address
+-- the address asked at: http:// if it has none, no end slashes, no login (kept out of logs and curl's command line)
 function LibrarySettings.normalise(address)
     address = StringUtil.trim(address)
     if address == "" then
@@ -62,8 +59,7 @@ local function kindName(kind)
     })[kind] or _("OPDS")
 end
 
--- one of Calibre's libraries (see OpdsSearch.discover), as it's searched: at its own feed's address, with its own
--- library_id in its search, which the one its content server gives has its first library's in
+-- one of Calibre's libraries, searched at its own feed and library_id, as the server's search has the first one's
 local function calibreLibrary(found, library)
     local id = library.url:match("[?&]library_id=([^&#]*)")
     local search_url = found.search_url
@@ -77,9 +73,7 @@ local function calibreLibrary(found, library)
     return { url = library.url, name = library.name, kind = found.kind, search_url = search_url }
 end
 
--- look for a library's catalogue at address, logging in with login, where given (see LibrarySites), turning wifi on
--- first if need be, and saying so until it has been found, with a button to call it off. on_found(found) is called
--- with what was found (see OpdsSearch.discover), or on_failed(err) with why not
+-- look for a catalogue at address with login (see LibrarySites), saying so with a Cancel, then on_found or on_failed
 local function find(address, login, on_found, on_failed)
     NetworkMgr:runWhenConnected(function()
         local message
@@ -188,8 +182,7 @@ local function loginOf(username, password)
     return { username = username, password = password or "" }
 end
 
--- ask for the address of a library to add, and its login, where it needs one, then find its catalogue there and add
--- it (see addFound), calling on_added once it has been. fields are what was typed in before, to try again with
+-- ask for a library's address and any login, then add its catalogue (see addFound); fields are what was typed before
 function LibrarySettings.add(on_added, fields)
     fields = fields or {}
     local dialog
@@ -240,8 +233,7 @@ function LibrarySettings.add(on_added, fields)
     dialog:onShowKeyboard()
 end
 
--- change the library's name, address or login, finding its catalogue again where its address or login has changed,
--- then calling on_changed
+-- change the library's name, address or login, finding its catalogue again if the address or login changed
 function LibrarySettings.edit(library, on_changed)
     local dialog
     dialog = MultiInputDialog:new {
@@ -341,8 +333,7 @@ function LibrarySettings.describe()
     return #names > 0 and table.concat(names, ", ") or _("None")
 end
 
--- the libraries added, each to edit or remove, and adding another, in a menu made with new_menu(title, items) (see
--- SettingsPage:newMenu). on_changed is called once they've changed
+-- the libraries added, to edit or remove, and adding another, in a menu from new_menu (see SettingsPage:newMenu)
 function LibrarySettings.show(new_menu, on_changed)
     local menu
     local function items()

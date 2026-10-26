@@ -290,8 +290,7 @@ describe("ZlibSearch", function()
             assert.is_truthy(helper.logged("info", "^the account can download 7 more of its 10 books today$"))
         end)
 
-        -- as each link it gives counts, whether or not the book downloads
-        -- which doesn't count again, as when its download failed, but was refused all the same
+        -- each link counts even if the book doesn't download, but the same book's again doesn't, yet that was refused
         it("asks for a book's link again the same day, once the account has downloaded as many as it can", function()
             assert.is_not_nil(ZlibSearch.findDownloadLink(zlib_book))
             profile(10, 10)
@@ -318,8 +317,7 @@ describe("ZlibSearch", function()
             end
         end)
 
-        -- as each link goes to one of its servers, picked at random, and asking for the same book's again doesn't
-        -- count again
+        -- as each link goes to one of its servers, picked at random, and asking for the same book's again doesn't count
         describe("once the server a link went to has failed", function()
             local hosts
 
@@ -403,9 +401,7 @@ describe("ZlibSearch", function()
         end)
     end)
 
-    -- catches Z-Library changing its search. needs an account, given by KINDLEFETCH_ZLIB_EMAIL and
-    -- KINDLEFETCH_ZLIB_PASSWORD, so it's skipped without them (as in CI). the download link isn't asked for, as each
-    -- one counts towards how many books the account can download a day
+    -- catches Z-Library changing its search, skipped without an account (as in CI). no download link, as each counts
     local email, password = os.getenv("KINDLEFETCH_ZLIB_EMAIL"), os.getenv("KINDLEFETCH_ZLIB_PASSWORD")
     -- (or empty, as the Canary workflow gives them where the repository has no secrets of those names)
     if email and email ~= "" and password and password ~= "" then

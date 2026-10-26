@@ -1,5 +1,4 @@
--- the proxy Kindle Fetch goes through: KOReader's HTTP proxy (see NetworkMgr:setHTTPProxy), where it's turned on, in
--- KOReader's network settings or Kindle Fetch's, for everything, as KOReader's own HTTP goes through it
+-- the proxy Kindle Fetch goes through: KOReader's HTTP proxy where it's on, for everything, as KOReader's HTTP uses it
 local ProxyUtil = {}
 
 -- KOReader's HTTP proxy, as it's in use (from its network settings, or its defaults), or nil when it's off
@@ -8,8 +7,7 @@ function ProxyUtil.get()
     return type(url) == "string" and url ~= "" and url or nil
 end
 
--- the proxy to go through for url: none for an address on the network the device is on (see StringUtil.isLocalUrl),
--- such as a library's, which a proxy on the internet can't reach, otherwise KOReader's (see get)
+-- the proxy for url: none on the local network, which a proxy on the internet can't reach, otherwise KOReader's
 function ProxyUtil.forUrl(url)
     if url and require("util.stringutil").isLocalUrl(url) then
         return nil

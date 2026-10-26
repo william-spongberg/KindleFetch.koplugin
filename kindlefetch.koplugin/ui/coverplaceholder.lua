@@ -4,7 +4,7 @@ local FrameContainer = require("ui/widget/container/framecontainer")
 local IconWidget = require("ui/widget/iconwidget")
 local Geom = require("ui/geometry")
 
--- A grey, book shaped box shown in place of a book's cover while it downloads.
+-- a grey, book-shaped box shown in place of a book's cover while it downloads
 local CoverPlaceholder = {}
 
 function CoverPlaceholder.new(width, height)

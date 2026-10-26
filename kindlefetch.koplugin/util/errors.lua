@@ -1,7 +1,6 @@
 local _ = require("gettext")
 
--- what went wrong, when it's something the code that's told acts on, rather than only saying it: compared by value
--- as it's passed up from module to module, and kept here so each is said one way wherever it comes from
+-- what went wrong where the code told acts on it, not just says it: compared by value, and said one way everywhere
 local Errors = {
     -- called off with a Cancel button, which isn't said, as it was asked for
     CANCELLED = _("request cancelled"),
@@ -11,8 +10,7 @@ local Errors = {
     UNEXPECTED = _("something went wrong, see crash.log"),
     -- neither the mirrors nor Wikipedia answered at all, as when the device isn't connected to the internet
     NO_CONNECTION = _("no internet connection"),
-    -- Z-Library no longer accepts the account's key, e.g. once it has been logged out of elsewhere, or there isn't
-    -- one, e.g. when a book found before logging out is downloaded
+    -- Z-Library no longer accepts the account's key, e.g. once logged out of elsewhere, or there isn't one
     LOGGED_OUT = _("Z-Library has logged Kindle Fetch out, so log in again"),
     -- a Kindle's own curl, which is too old to connect to Library Genesis
     OUTDATED_CURL = _(
@@ -38,8 +36,7 @@ local Errors = {
     ),
     -- a library the user has added (see Libraries) needs logging in to, or turned down the username and password
     LIBRARY_LOGIN = _("the library didn't accept the username and password, so check them in Kindle Fetch's settings"),
-    -- Calibre's content server has stopped letting the device log in for a while, after too many that failed, as it
-    -- can be set up to
+    -- Calibre's content server has stopped letting the device log in for a while after too many failures, if set up to
     LIBRARY_LOCKED_OUT = _(
         "the library has stopped letting this device log in for a while, after too many wrong passwords. Wait a few "
             .. "minutes, then try again"

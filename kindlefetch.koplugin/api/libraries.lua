@@ -5,9 +5,7 @@ local LibrarySites = require("util.librarysites")
 local LogUtil = require("util.logutil")
 local StringUtil = require("util.stringutil")
 
--- the libraries the user has added (see KindleFetchSettings:getLibraries), such as Calibre's content server's, each an
--- OPDS catalogue searched as a site of its own (see OpdsSearch), offered before the others (see MultiSearch.addSite),
--- logged into with its own login (see LibrarySites)
+-- the libraries the user has added, each an OPDS catalogue searched as its own site, offered first, with its own login
 local Libraries = {}
 
 -- the sites offered (see register), by their names in Sites, each with what it was made from (see signature)
@@ -30,9 +28,7 @@ local function signature(library)
     }, "\n")
 end
 
--- offer each library in the settings to search, logging in to its site with its login (see LibrarySites), and stop
--- offering those that have been removed: whenever the file manager or a book is opened, and once they've changed. a
--- library that hasn't changed keeps its site, with the pages of results it has linked to (see OpdsSearch.new)
+-- offer the libraries in the settings, not those removed, keeping an unchanged one's site, with the pages it linked to
 function Libraries.register()
     LibrarySites.clear()
     local current = {}
@@ -77,9 +73,7 @@ local function newId(libraries)
     return id
 end
 
--- add the library at found (as OpdsSearch.discover finds it), logged into with login ({ username = ..., password =
--- ... }), where given, and named name, where given, otherwise what it calls itself, ticking it in the search box, so
--- it's searched straight away. returns it, or nil and why not
+-- add the library OpdsSearch.discover found, with login and name where given, ticked so it's searched straight away
 function Libraries.add(found, login, name)
     local libraries = KindleFetchSettings:getLibraries()
     name = StringUtil.trim(name or "")

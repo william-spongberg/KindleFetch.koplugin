@@ -20,8 +20,7 @@ local DEFAULTS = {
     download_dir = nil,
     -- and every file type and book type, set below
     preferred_languages = { "en" },
-    -- the sites the search box searches (see Sites), until others are ticked in it: all of them, Z-Library once
-    -- logged into
+    -- the sites the search box searches (see Sites) until others are ticked: all of them, Z-Library once logged into
     search_sources = { "zlib", "libgen", "archive", "gutenberg" },
 }
 
@@ -521,8 +520,7 @@ local function sameSetting(a, b)
     return true
 end
 
--- fill in the settings that aren't saved yet, or were saved by an older version. this runs every time the file
--- manager or a book is opened, so the file is only written when something changed
+-- fill in missing or outdated settings, writing only on change, as this runs whenever the file manager or a book opens
 function KindleFetchSettings:load()
     local settings_file = getSettingsFile()
     local changed = false
@@ -573,9 +571,7 @@ local function strings(list)
     return kept
 end
 
--- util
--- a setting as it's saved, or its default when it isn't, or is saved as something it can't be (e.g. by hand), which
--- what reads it would fail on, possibly when KOReader starts, leaving the plugin out of the menu
+-- a setting as saved, or its default if unsaved or of the wrong type, as that could leave the plugin out of the menu
 function KindleFetchSettings:getSetting(name)
     local settings_file = getSettingsFile()
     local value = settings_file:readSetting(name)
@@ -596,9 +592,7 @@ function KindleFetchSettings:getSetting(name)
 
     return value
 end
--- write the settings, with name set to data, returning true, or nil and why not. LuaSettings doesn't say when it
--- couldn't write them (e.g. once the storage is full, or read-only), and they're read as they were before next time,
--- so they're read back to tell
+-- write the settings and read name back, as LuaSettings doesn't say when it can't, returning true, or nil and why
 local function flush(settings_file, name, data)
     settings_file:flush()
     if not sameSetting(LuaSettings:open(settingsPath()):readSetting(name), data) then
@@ -689,8 +683,7 @@ function KindleFetchSettings:setSkippedVersion(version)
     return KindleFetchSettings:setSetting("skipped_version", version)
 end
 
--- curl_update_declined (the version of curl that updating to was turned down, so it isn't offered again
--- automatically, until there's a newer one), or true, as older versions saved it, for whichever version it was
+-- curl_update_declined (the curl version turned down, not offered again unless asked), or true from older versions
 function KindleFetchSettings:getCurlUpdateDeclined()
     local declined = getSettingsFile():readSetting("curl_update_declined")
     if declined == true or type(declined) == "string" then
@@ -702,8 +695,7 @@ function KindleFetchSettings:setCurlUpdateDeclined(version)
     return KindleFetchSettings:setSetting("curl_update_declined", version or nil)
 end
 
--- search_sources (the sites the search box searches, by their names in Sites, e.g. { "libgen", "archive" }), of which
--- there's always at least one, in a list of its own
+-- search_sources (the sites the search box searches, by name in Sites), always at least one, in a list of its own
 function KindleFetchSettings:getSearchSources()
     local sources = {}
     for __, source in ipairs(KindleFetchSettings:getSetting("search_sources")) do
@@ -734,11 +726,7 @@ function KindleFetchSettings:clearRecentSearches()
     return KindleFetchSettings:setSetting("recent_searches", {})
 end
 
--- libraries (the OPDS catalogues the user has added, see Libraries), each { id, name, url, kind, search_url, username,
--- password }, of those saved as they should be: its id, which its site's name is made from, the name it's shown
--- with, its catalogue's address, what kind of catalogue it is and the template of its search (see OpdsSearch), and
--- the username and password to log in to it with ("" where it needs none), which are kept as they are, as a library
--- asks for them every time (see LibrarySites)
+-- libraries (OPDS catalogues added, see Libraries) saved as they should be, keeping the logins they ask for each time
 function KindleFetchSettings:getLibraries()
     local saved = getSettingsFile():readSetting("libraries")
     local libraries = {}
@@ -783,8 +771,7 @@ function KindleFetchSettings:setLibraries(libraries)
     return true
 end
 
--- zlib_account (the Z-Library account logged into: its email, and its user id and key, which log into it as the
--- password does, and are kept instead)
+-- zlib_account (the Z-Library account logged into: its email, and its user id and key, kept instead of the password)
 function KindleFetchSettings:getZlibAccount()
     local account = KindleFetchSettings:getSetting("zlib_account")
     if type(account) == "table" and account.user_id and account.user_key then
@@ -807,16 +794,14 @@ function KindleFetchSettings:setZlibAccount(account)
     if not ok then
         return nil, err
     end
-    -- the settings as they were before (KOReader keeps them in case they can't be read), which would still log into
-    -- the account, and be read in place of these, if they ever can't be
+    -- the settings from before (KOReader's backup), which would still log in, and be read if these ever can't be
     if not account then
         os.remove(settingsPath() .. ".old")
     end
     return true
 end
 
--- download_dir, or the default while the folder saved can't be found (e.g. once deleted, or on an SD card that has
--- been taken out), which is kept, as it may be back
+-- download_dir, or the default while the folder saved can't be found, which is kept, as it may be back
 function KindleFetchSettings:getDownloadDir()
     local settings_file = getSettingsFile()
     local download_dir = settings_file:readSetting("download_dir")
@@ -871,8 +856,7 @@ function KindleFetchSettings:getAvailableLanguages()
     return AVAILABLE_LANGUAGES
 end
 
--- preferred_file_types
--- only those still offered, e.g. dropping azw3 and the other types KOReader can't open
+-- preferred_file_types (only those still offered, dropping azw3 and the others KOReader can't open)
 function KindleFetchSettings:getPreferredFileTypes()
     local saved = KindleFetchSettings:getSetting("preferred_file_types")
     local file_types = {}

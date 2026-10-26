@@ -9,24 +9,18 @@ local LibrarySites = require("util.librarysites")
 local HttpLogin = require("util.httplogin")
 local _ = require("gettext")
 
--- downloads with KOReader's own HTTP, where curl can't (see CurlUtil.canFetch): a device without curl, such as a Kobo
--- (#63), or a Kindle whose own is too old. each runs in a process of its own, so KOReader isn't held up, and is
--- followed and stopped as curl's are (see CurlUtil.isPidRunning and killPid): it writes what arrives to its file as it
--- arrives, notes down the headers it was sent as curl does (see CurlUtil.getDownloadSize and getDownloadStatus), and
--- saves the exit code curl would have, so that what checks on curl's downloads checks on these just the same
+-- downloads with KOReader's own HTTP where curl can't (#63), in a process of its own, leaving the files curl's would
 local HttpDownload = {}
 
 -- how often a process that has finished is looked for again, to collect it (see collect)
 local COLLECT_INTERVAL = 1
 
--- the exit code curl would have given up with for what KOReader's HTTP said went wrong (what it is is logged where
--- it's found out, in case curl has no words of its own for it)
+-- the exit code curl would have given up with for what KOReader's HTTP said went wrong (which is logged where found)
 local function exitCode(err)
     return CurlUtil.exitCodeFor(err) or 56
 end
 
--- download url to path, in the process downloading it, returning the exit code curl would have. the headers it was
--- sent are noted down in headers_file, as curl does with -D (see CurlUtil.getDownloadStatus), where given
+-- download url to path in this process, returning the exit code curl would, noting the headers as curl -D does
 local function download(url, path, opts)
     local file, open_err = io.open(path, "wb")
     if not file then
@@ -43,8 +37,7 @@ local function download(url, path, opts)
     }
     local requested, ok, code, headers, status_line
     if LibrarySites.isLibrary(url) then
-        -- logging in to it where it asks to (see HttpLogin), into the file afresh each time it's asked, as what it
-        -- says when asked without the login isn't the book
+        -- logging in where it asks to, into the file afresh each time, as the answer without the login isn't the book
         local sinks = 0
         requested = true
         ok, code, headers, status_line = HttpLogin.request(url, request_headers, function()
@@ -94,8 +87,7 @@ local function download(url, path, opts)
     return 0
 end
 
--- run fn in a process of its own (see ffiutil.runInSubProcess), returning its pid, or nil and why not. it's given
--- the file to save its exit code to, which it returns, and which is saved even when something goes wrong in it
+-- run fn in its own process, returning the pid and the file its exit code goes to (even if it fails), or nil and why
 local function start(fn)
     local exit_file = CurlUtil.createExitFile()
     local pid, err = ffiutil.runInSubProcess(function()
@@ -113,9 +105,7 @@ local function start(fn)
     return pid, exit_file
 end
 
--- download url to filepath in the background, as CurlUtil.startDownload does (opts.headers_file, opts.stall_time and
--- opts.max_time as its, and opts.proxy the proxy to go through, if any), from the beginning, as KOReader's HTTP can't
--- carry on from what's there. returns the pid and the file its exit code is saved in, or nil and why not
+-- download in the background as CurlUtil.startDownload does, through opts.proxy, from the start as it can't carry on
 function HttpDownload.start(download_url, filepath, opts)
     opts = opts or {}
     LogUtil.debug("KOReader's HTTP downloading from", LogUtil.site(download_url), "to", filepath)
@@ -124,9 +114,7 @@ function HttpDownload.start(download_url, filepath, opts)
     end)
 end
 
--- download each url to the filepath at the same place in filepaths in the background, one after another, as
--- CurlUtil.downloadMultiple does: returning the pid, the file the exit code is saved in, and a file whose results
--- file (see CurlUtil.getResultsFile) has each one's exit code as it finishes, or nil, nil, nil and why not
+-- download each url to its filepath one after another in the background, returning what CurlUtil.downloadMultiple does
 function HttpDownload.startMultiple(download_urls, filepaths, opts)
     opts = opts or {}
     local config_file = CurlUtil.createExitFile() .. ".config"
@@ -153,8 +141,7 @@ function HttpDownload.startMultiple(download_urls, filepaths, opts)
     return pid, exit_file, config_file
 end
 
--- collect a download's process once it has finished or been stopped, which KOReader would otherwise keep as a zombie
--- until it closes. a curl download's process isn't KOReader's own to collect, which is said to be done straight away
+-- collect a download's process once done, or it's a zombie until KOReader closes (curl's are said to be done at once)
 function HttpDownload.collect(pid)
     if not pid or ffiutil.isSubProcessDone(pid) then
         return

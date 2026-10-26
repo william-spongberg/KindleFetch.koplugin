@@ -57,8 +57,7 @@ describe("LibgenSearch", function()
             )
         end)
 
-        -- the boxes ticked for which fields to search on its search page (as an archived copy of libgen.li's from
-        -- 2026-10-11 has them, when the site itself couldn't be reached)
+        -- the boxes ticked for which fields to search, as libgen.li's search page archived on 2026-10-11 has them
         it("searches the books' titles, authors and series, or the one field the search is narrowed to", function()
             local function columns(scope)
                 local found = {}
@@ -190,8 +189,7 @@ describe("LibgenSearch", function()
             assert.are.equal("https://covers.example/abc.jpg", LibgenSearch:search("dune", 1)[1].image_url)
         end)
 
-        -- covers are downloaded by writing their addresses to a file of options for curl. a mirror could send an
-        -- address with a line break in it, and add options of its own, such as where to save a file
+        -- cover addresses go in a file of curl options, where a line break in one could add options, e.g. where to save
         it("leaves out a cover whose address isn't just an address", function()
             results(mirrors[1], {
                 {
@@ -325,9 +323,7 @@ describe("LibgenSearch", function()
             assert.are.equal("Dune", books[1].title)
         end)
 
-        -- so books KOReader can't open are never found
-        -- which were said to be results in other languages or file types, offering the settings, when Library Genesis
-        -- had changed its page
+        -- which were said to be results in other languages or file types when Library Genesis had changed its page
         it("doesn't count rows it can't read as results", function()
             results(mirrors[1], {
                 { title = "No md5", file_type = "epub" },
@@ -438,8 +434,7 @@ describe("LibgenSearch", function()
                 assert.are.equal(2, #searches())
             end)
 
-            -- whatever's asked for, so a page of fewer than were asked for isn't the last one, as it was taken to be,
-            -- which left a single page of results and nothing to load more of (#56)
+            -- whatever's asked for, so a page of fewer than asked for isn't the last, as it was taken to be (#56)
             it("carries on while Library Genesis says there are more pages", function()
                 results(mirrors[1], fullPage(1, 10), 1, 80)
 
@@ -516,8 +511,7 @@ describe("LibgenSearch", function()
                 assert.are.equal(2, next_page)
             end)
 
-            -- which was said to have failed, though the pages before had results, only none to show, so Keep
-            -- searching can carry on from the page that failed
+            -- which was said to have failed, though earlier pages had results, so Keep searching can go on from there
             it("says how many results it read when a later page fails before any books to show were found", function()
                 results(mirrors[1], fullPage(1, 0), 1, 10)
 
@@ -699,8 +693,7 @@ describe("LibgenSearch", function()
             assert.matches("Under maintenance", helper.logged("warn", "^unexpected search page from"))
         end)
 
-        -- on what's waiting, e.g. the message saying a search is going on, so it doesn't look stuck while a mirror
-        -- that doesn't answer is waited for
+        -- on what's waiting, e.g. the message saying a search is going on, so it doesn't look stuck on a silent mirror
         describe("says which mirror it's trying", function()
             local statuses
             before_each(function()
@@ -768,8 +761,7 @@ describe("LibgenSearch", function()
         end)
 
         it("scrapes the mirrors again when every mirror fails, searching those that have moved", function()
-            -- every mirror is down, as Library Genesis has moved to another, which Wikipedia lists once it's scraped
-            -- again
+            -- every mirror is down, as Library Genesis has moved to another, which Wikipedia lists once scraped again
             local moved = "https://libgen.moved"
             web.pages[require("api.urlapi").LIBGEN_PAGE] = function()
                 local items = {}
@@ -797,8 +789,7 @@ describe("LibgenSearch", function()
             assert.are.equal(#mirrors, #searches())
         end)
 
-        -- which its mirrors all say at once, as they share it, rather than that each sent something unexpected, which
-        -- forgot every mirror
+        -- which all its mirrors say, as they share it, not that each sent something unexpected, which forgot them all
         describe("while Library Genesis' database is too busy", function()
             local function busy(mirror)
                 web.pages[searchUrl(mirror)] = function()
@@ -869,8 +860,7 @@ describe("LibgenSearch", function()
             assert.are.same(mirrors, require("api.urlapi"):getLibgenUrls())
         end)
 
-        -- rather than that the last one's name couldn't be looked up: Wikipedia answered, so the device is online, and
-        -- most likely the network is blocking them, as many internet providers do (#55)
+        -- not that the last mirror couldn't be looked up: Wikipedia answered, so the network may be blocking them (#55)
         it("says when none of the mirrors can be found on this network", function()
             for _, mirror in ipairs(mirrors) do
                 web.pages[searchUrl(mirror)] = function()
@@ -970,8 +960,7 @@ describe("LibgenSearch", function()
 
             assert.is_nil(err)
             assert.is_true(#books > 0, "no books found")
-            -- it has many pages of results, which there was no going on to once it sent fewer a page than were asked
-            -- for (#56)
+            -- it has many pages, which there was no going on to once it sent fewer a page than were asked for (#56)
             assert.is_not_nil(next_page, "no page of results to carry on from")
             for _, book in ipairs(books) do
                 assert.matches("^%x+$", book.id)

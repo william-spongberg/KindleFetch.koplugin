@@ -1,17 +1,13 @@
 local logger = require("logger")
 
--- KOReader writes info, warnings and errors to crash.log on every device, but debug messages only once debug logging
--- is turned on, so whatever is needed to work out what went wrong from someone's crash.log is logged at info or above
+-- KOReader only logs debug messages with debug logging on, so what's needed from crash.log is logged at info or above
 local LogUtil = {}
 
--- the last lines logged at info or above, oldest first, for the diagnostics (see Diagnostics), as crash.log can be
--- hard to get at on a device, and has every other plugin's lines in it too
+-- the last lines logged at info or above, for the diagnostics, as crash.log is hard to get at and has other plugins'
 local RECENT_LINES = 200
 local recent = {}
 
--- what's never logged, e.g. the passwords of the libraries added (see LibrarySites), each as the pattern that finds it,
--- with *** logged in its place. (each at least a few characters long, as one or two would be found in the words of
--- nearly everything logged)
+-- patterns of what's logged as ***, e.g. library passwords, each at least a few characters, or they'd be in most words
 local hidden = {}
 local MIN_HIDDEN_LENGTH = 4
 
@@ -22,8 +18,7 @@ function LogUtil.hide(secret)
     end
 end
 
--- what's to be logged, with what's hidden (see hide) replaced: in its text, rather than the tables (e.g. a book's)
--- that KOReader's logger writes out itself
+-- what's to be logged with what's hidden replaced, in its text only, not the tables KOReader's logger writes out itself
 local function masked(...)
     if next(hidden) == nil then
         return ...

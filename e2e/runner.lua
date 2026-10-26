@@ -1,11 +1,4 @@
--- Boots a real KOReader without a window, with KindleFetch installed, and runs the end-to-end tests in
--- e2e/*_e2e.lua against it. Started by e2e/run.sh from KOReader's own folder, which sets:
---   E2E_REPO     the repository's root
---   E2E_PROFILE  the device to emulate (see profiles.lua)
---   E2E_WORK     this run's folder, for downloaded books and screenshots
---   E2E_FILTER   only run tests whose name contains this, if set
---   KO_HOME      KOReader's data folder, with KindleFetch linked into its plugins folder
--- Lines starting with E2E| are results, everything else is KOReader's log.
+-- boots a real KOReader without a window to run e2e/*_e2e.lua in, started by e2e/run.sh. E2E| lines are results
 
 local ffi = require("ffi")
 ffi.cdef [[int setenv(const char *name, const char *value, int overwrite);]]
@@ -41,8 +34,7 @@ Device.input.dummy = true
 
 local H = require("helpers")
 
--- KOReader loads every copy of a plugin it finds, so leave out any copy of KindleFetch installed in KOReader
--- itself (e.g. rsynced into the Flatpak to try it out), and test only the one linked into KO_HOME
+-- KOReader loads every copy of a plugin it finds, so test only the one linked into KO_HOME, not one in KOReader itself
 local PluginLoader = require("pluginloader")
 local discover = PluginLoader._discover
 function PluginLoader:_discover()

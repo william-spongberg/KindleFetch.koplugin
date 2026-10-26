@@ -19,14 +19,12 @@ local Guard = require("util.guard")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
--- what's known about Kindle Fetch, KOReader, the device and its connection to the sites, with what Kindle Fetch logged
--- recently, to copy or save for whoever's helping with a problem
+-- what's known about Kindle Fetch, KOReader, the device and its connection, and what it logged, for whoever's helping
 local Diagnostics = {}
 
--- the file it's saved as (see save), in KOReader's own folder, where it can be copied from over USB without showing
--- up among the books
+-- the file it's saved as (see save), in KOReader's folder, to copy over USB without it showing up among the books
 local REPORT_NAME = "kindlefetch-diagnostics.txt"
--- Internet Archive's search, asked for a single book, to test connecting to it
+-- a book's entry in Project Gutenberg's catalogue, and Internet Archive's search for one book, to test connecting
 local GUTENBERG_TEST_URL = "https://www.gutenberg.org/ebooks/1342.opds"
 local ARCHIVE_TEST_URL =
     "https://archive.org/advancedsearch.php?q=identifier%3Aemma00aust&fl%5B%5D=identifier&rows=1&output=json"
@@ -62,9 +60,7 @@ function Diagnostics.summary()
     )
 end
 
--- the report: what's known about Kindle Fetch, KOReader and the device, the results of testing the connection, where
--- it has been (tested, see testConnection), then what Kindle Fetch has logged this session. it's in English, as it's
--- for whoever helps, and has nothing in it that would let them into the Z-Library account
+-- the report, with tested's results (see testConnection), in English for whoever helps, and no way into Z-Library
 function Diagnostics.report(tested)
     local lines = { Diagnostics.summary() }
     local function add(label, value)
@@ -183,10 +179,7 @@ end
 -- the names of the libraries whose catalogues are tested, by their addresses (see testUrls)
 local library_names = {}
 
--- what to test connecting to: Wikipedia, where the mirrors are looked up, Library Genesis' mirrors and Z-Library's
--- addresses as they are (without looking them up again, or changing them, see UrlApi.peekLibgenUrls), Internet Archive,
--- Project Gutenberg's catalogue and the libraries'. Z-Library's at its API, as Kindle Fetch asks it, which answers
--- without a cookie, where its home page sends what hasn't one back to it, again and again
+-- what to test: mirrors as they are (see UrlApi.peekLibgenUrls), and Z-Library's API, which answers without a cookie
 local function testUrls()
     local urls = { UrlApi.LIBGEN_PAGE }
     for __, url in ipairs(UrlApi:peekLibgenUrls()) do
@@ -217,9 +210,7 @@ local function result(url, body, err, status)
     return string.format("%s didn't answer: %s", site, tostring(err))
 end
 
--- test connecting to each of the sites Kindle Fetch uses (see testUrls), one after another, without holding KOReader
--- up while they answer, where that's possible (see HttpUtil), then show the report with how it went. Cancel calls it
--- off, showing how it went with those tested by then, as each that doesn't answer is waited on for a while
+-- test each site (see testUrls) without holding KOReader up, then report how it went, or on Cancel how it went so far
 function Diagnostics.testConnection()
     local message
     local function closeMessage()

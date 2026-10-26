@@ -1,5 +1,4 @@
--- Helpers for driving KOReader's UI in the end-to-end tests: waiting for things to happen, finding widgets
--- on screen, tapping them, and taking screenshots.
+-- helpers for driving KOReader's UI in the end-to-end tests: waiting, finding widgets on screen, tapping, screenshots
 
 local Device = require("device")
 local Event = require("ui/event")
@@ -213,8 +212,7 @@ H.SITES = {
     ["Z-Library"] = "zlib",
 }
 
--- the name a site is searched as (see Sites), by the name it's said with: one Kindle Fetch knows (see SITES), or a
--- library added in the settings
+-- the name a site is searched as (see Sites), by the name it's said with: one in SITES, or a library from the settings
 local function sourceOf(site)
     if H.SITES[site] then
         return H.SITES[site]
@@ -227,8 +225,7 @@ local function sourceOf(site)
     error("no site " .. tostring(site))
 end
 
--- tick the sites to search (by name: Library Genesis, unless given, or a list of them), as the search box's Sites menu
--- does
+-- tick the sites to search (a name or a list, Library Genesis unless given), as the search box's Sites menu does
 function H.tickSites(sites)
     sites = type(sites) == "table" and sites or { sites or "Library Genesis" }
     local sources = {}
@@ -238,8 +235,7 @@ function H.tickSites(sites)
     assert(require("settings.settings"):setSearchSources(sources))
 end
 
--- open the search dialog for the sites (see tickSites), type query and tap Search, returning KindleFetch and the
--- dialog
+-- open the search dialog for the sites (see tickSites), type query and tap Search, returning KindleFetch and the dialog
 function H.startSearch(query, sites)
     H.tickSites(sites)
     H.openMainMenu({ "Kindle Fetch", "Search" })
@@ -369,8 +365,7 @@ function H.clearCaches()
     require("cache.covercache"):clear()
 end
 
--- put mirrors that don't work before the real ones: one that doesn't exist, and one that answers without any books.
--- returns them
+-- put mirrors that don't work before the real ones: one that doesn't exist, one answering without books. returns them
 function H.breakMirrors()
     local mirrors = assert(require("api.urlapi"):getLibgenUrls(), "couldn't look up the mirrors on Wikipedia")
     local broken = { "https://libgen.invalid", "https://example.com" }

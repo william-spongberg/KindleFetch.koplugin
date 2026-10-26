@@ -81,8 +81,7 @@ jobs:
             printf '%s\n' "$commits"
           } > "$RUNNER_TEMP/notes.md"
 
-          # the plugin shows these notes in its update prompt, which (up to v0.3 at least)
-          # only understands \r\n line breaks and cuts the notes off at the first double quote
+          # the update prompt (to v0.3 at least) needs \r\n line breaks, and cuts the notes off at a double quote
           tr '"' "'" < "$RUNNER_TEMP/notes.md" | sed 's/$/\r/' > "$RUNNER_TEMP/release-notes.md"
           cat "$RUNNER_TEMP/notes.md"
 

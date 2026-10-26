@@ -17,19 +17,16 @@ describe("KindleFetch", function()
     local can_cancel, trap_widgets
     -- pages of results saved from earlier searches, as "query page"
     local saved
-    -- the settings' menus for choosing languages, file types and book types that were opened, and what each calls once
-    -- closed, and the lists of what the books found have to tick (see SettingsPage:tickSeveral)
+    -- the language, file and book type menus opened, and the tick lists of what the books found have (see tickSeveral)
     local choosers, tick_lists
     -- whether curl can look names up with encrypted DNS
     local can_use_encrypted_dns
 
     -- KOReader creates a new plugin instance for the file manager and for every book that is opened
     local opened
-    -- KOReader's file manager and reader, of which one is open at a time (the file manager here, until a spec
-    -- opens a book with readBook)
+    -- KOReader's file manager and reader, one open at a time: the file manager until a spec calls readBook
     local FileManager, ReaderUI
-    -- how many times the file manager was refreshed, and the files the buttons from KOReader's file browser were
-    -- tapped for: to show their folders, add to collections and show the information of
+    -- file manager refreshes, and the files the file browser's folder, collections and info buttons were tapped for
     local refreshes, folders_shown, collections_chosen, info_shown
 
     -- KOReader's collections for the file manager or a book, noting the files added to them in chosen
@@ -115,9 +112,7 @@ describe("KindleFetch", function()
         error("no button " .. id)
     end
 
-    -- do what starts a search (e.g. tapping Search or Load more), then let it run: each site's search starts once
-    -- KOReader has shown what's on screen (see MultiSearch), leaving what was waiting from before (e.g. checking for
-    -- updates) to wait
+    -- do what starts a search, then run only what it scheduled (sites search once the screen's shown, see MultiSearch)
     local function andSearch(fn, ...)
         local from = #helper.state.scheduled
         fn(...)
@@ -305,8 +300,7 @@ describe("KindleFetch", function()
             search = function(_, query, page, scope)
                 table.insert(searches, { query, page, scope })
                 table.insert(trap_widgets, require("util.httputil").getTrapWidget() or false)
-                -- books, error, the page to carry on from and how many results were read (or a function to run in
-                -- place of the search)
+                -- books, error, page to carry on from and how many results were read (or a function to run instead)
                 local result = search_results[page] or { {} }
                 if type(result) == "function" then
                     return result()
@@ -450,8 +444,7 @@ describe("KindleFetch", function()
                         self.close_callback()
                     end
                 end
-                -- like KOReader's menu, show other entries, turning to the page with the given one (2 to a page here)
-                -- (or staying on the page that's showing for a negative one)
+                -- like KOReader's, turn to the given entry's page (2 to a page here), or stay put for a negative one
                 function menu:switchItemTable(title, item_table, item_number)
                     self.title = title or self.title
                     self.item_table = item_table
@@ -525,8 +518,7 @@ describe("KindleFetch", function()
             assert.are.same({ "onSuspend", "onResume", "onNetworkDisconnected", "onNetworkConnected" }, told)
         end)
 
-        -- as when the device is powered off or restarted, or its storage is shared over USB, which curl carried on
-        -- writing to
+        -- as when the device powers off or restarts, or shares its storage over USB, which curl carried on writing to
         it("cancels downloads when KOReader closes without exiting", function()
             active_downloads = { { id = "dune", title = "Dune" } }
             assert.is_nil(openUI():onClose())
@@ -715,8 +707,7 @@ describe("KindleFetch", function()
             assert.are.same({ curl = 1, plugin = 1, user_requested = false }, checks)
         end)
 
-        -- even when the latest release couldn't be looked up, as on a Kindle whose curl is too old to, which offered to
-        -- update curl every time KOReader started (#57)
+        -- a Kindle whose curl was too old to look up releases offered to update curl every time KOReader started (#57)
         it("waits a day after checking for updates, whether or not they could be looked up", function()
             helper.state.time = 2000000
             openUI()
@@ -2329,8 +2320,7 @@ describe("KindleFetch", function()
             return texts
         end
 
-        -- show only the books with the codes of what the button's list has, as if they were all that was ticked once
-        -- it was closed, returning what saving it did: it's closed, with what's ticked changed, unless that's false
+        -- show only books with these codes, returning what saving the list did (it's closed unless that's false)
         local function show(start, codes)
             filterButton(start).callback()
             local list = tick_lists[#tick_lists]
@@ -2905,8 +2895,7 @@ describe("KindleFetch", function()
             assert.are.same({ "switchDocument", "/mnt/us/books/Dune.epub" }, opened)
         end)
 
-        -- the download may have been hidden, and finish after what it was started from has closed. opening the
-        -- book from there crashed KOReader when that was a book, as only the file manager can open files
+        -- hidden downloads can outlast what started them; opening the book from a closed reader crashed KOReader
         it("opens the book from what's open by then, rather than what the download was started from", function()
             selectBook("Dune")
             readBook()

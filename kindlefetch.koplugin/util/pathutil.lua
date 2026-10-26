@@ -6,8 +6,7 @@ local PathUtil = {}
 -- constants
 local DATA_DIR = DataStorage:getDataDir()
 local PLUGIN_NAME = "kindlefetch.koplugin"
--- plugins can live in several places (koreader/plugins, <data dir>/plugins, extra_plugin_paths),
--- so work out the plugin root from where this file was loaded, e.g. "@plugins/kindlefetch.koplugin/util/pathutil.lua"
+-- plugins can live in several places, so the plugin root is worked out from where this file was loaded
 local LOADED_PLUGIN_PATH = debug.getinfo(1, "S").source:match("^@(.+)/util/pathutil%.lua$")
 
 function PathUtil.getPluginPath()

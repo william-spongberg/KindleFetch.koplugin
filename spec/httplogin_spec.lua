@@ -11,8 +11,7 @@ describe("HttpLogin", function()
         responses = { ... }
     end
 
-    -- ask for url with a sink that keeps what arrives, returning what was asked's result and what arrived the last
-    -- time, as each answer is written to a sink of its own
+    -- ask for url, returning its results and what arrived the last time, as each answer gets a sink of its own
     local function ask(url)
         local arrived
         local ok, code, headers, status = HttpLogin.request(url, { ["User-Agent"] = "Mozilla/5.0" }, function()

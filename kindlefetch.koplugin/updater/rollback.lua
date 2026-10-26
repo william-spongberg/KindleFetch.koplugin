@@ -1,10 +1,7 @@
 local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
 
--- the version of Kindle Fetch that was installed before it was last updated, which is kept next to it (KOReader only
--- loads plugins from folders whose names end in .koplugin, so it's left alone), to go back to if the new version
--- doesn't work on this device. it only needs KOReader itself, as it's what's left when Kindle Fetch can't start (see
--- SafeMode)
+-- the version before the last update, kept beside it to go back to, needing only KOReader, as SafeMode uses it
 local Rollback = {}
 
 -- where the version before is kept
@@ -31,8 +28,7 @@ function Rollback.previousVersion(plugin_path)
     return readVersion(previous) or "?"
 end
 
--- swap the version installed now with the one kept from before, keeping the one installed now in its place, to go
--- forward to again. returns true, or nil and what went wrong, leaving them as they were
+-- swap the installed and kept versions, to go forward again. returns true, or nil and why, leaving them as they were
 function Rollback.goBack(plugin_path)
     local previous = Rollback.previousPath(plugin_path)
     local swap = plugin_path .. ".swap"

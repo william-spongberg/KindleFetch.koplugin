@@ -18,14 +18,11 @@ local CoverCache = {}
 -- constants
 local CACHE_DIR = DataStorage:getSettingsDir() .. "/kindlefetch_covers/"
 local POLL_INTERVAL = 0.5
--- covers are shown as they arrive, but at most once in this many polls (a second), as each time the screen is
--- refreshed
+-- covers are shown as they arrive, but at most once in this many polls (a second), as each refreshes the screen
 local PROGRESS_POLLS = 2
 -- the cover is fetched before the download prompt shows, so don't wait long for it
 local COVER_MAX_TIME = 10
--- a cover that nothing has arrived of for this many seconds is given up on, rather than keeping its placeholder
--- showing, and the next page's covers from being fetched ahead, for as long as it can take (and with a curl too old
--- to say as each cover arrives, keeping the rest of its page waiting)
+-- give up on a cover nothing has arrived of for this long, rather than keep its placeholder and hold up the next page
 local COVER_STALL_TIME = 10
 
 -- ids of the books whose covers are being downloaded, so they aren't downloaded twice at once
@@ -50,8 +47,7 @@ local function ensureCacheDir()
     lfs.mkdir(CACHE_DIR)
 end
 
--- remove the covers that older versions left behind, having forgotten them once the cache was full without
--- removing their files. once per session, as there are only more to find after an update
+-- remove covers older versions forgot without removing their files, once per session, as only an update leaves more
 local orphans_removed = false
 local function removeOrphans()
     if orphans_removed then
@@ -77,8 +73,7 @@ local function removeOrphans()
     end
 end
 
--- whether the cover that has downloaded to path is an image, rather than e.g. a web page a site sent in its place,
--- which would be kept for good, as covers are, removing it if it isn't
+-- whether the cover at path is an image, not a web page sent instead that would be kept for good, removing it if not
 local function isImage(id, path)
     local head = FileCheck.head(path) or ""
     if FileCheck.isImage(head) then
@@ -104,10 +99,7 @@ function CoverCache:cacheExists(id)
     return self:get(id) ~= nil
 end
 
--- the book's full-size cover, where a site gives it apart from its thumbnail (as a library's catalogue can, see
--- OpdsSearch), or Library Genesis' (which links to thumbnails ending in _small, with the full-size cover at the same
--- path without it). returns the full-size cover as a book of its own, stored alongside the thumbnail, or nil if there
--- isn't one
+-- the book's full-size cover as a book of its own, or nil: the site's, or Library Genesis' thumbnail without _small
 local function fullSizeCover(book)
     local url = book.full_image_url or book.image_url and book.image_url:gsub("_small(%.%w+)$", "%1")
     if not book.id or not url or url == book.image_url then
@@ -125,8 +117,7 @@ function CoverCache:getFullSize(book)
     return cover and self:get(cover.id)
 end
 
--- download the book's full-size cover in the background, for showing larger than in search results. returns
--- false when there's nothing to download
+-- download the book's full-size cover in the background, for showing larger than in results, or false if there's none
 function CoverCache:downloadFullSize(book)
     local cover = fullSizeCover(book)
     return cover ~= nil and self:downloadMultiple({ cover }, 1)
@@ -193,9 +184,7 @@ local function downloadedPaths(results, filepaths, exit_code)
     return downloaded
 end
 
--- wait for curl's background downloads to finish, calling on_progress with the paths that have downloaded so far
--- while it's still going (where curl says as each finishes, see CurlUtil.downloadMultiple), and on_done with the
--- paths that downloaded once it has finished
+-- wait for curl's downloads, calling on_progress with the paths downloaded so far, then on_done with those that did
 local function pollDownloads(pid, exit_file, config_file, filepaths, on_progress, on_done)
     local results_file = CurlUtil.getResultsFile(config_file)
     local exit_code = CurlUtil.getExitCode(exit_file)
@@ -246,8 +235,7 @@ local function pollDownloads(pid, exit_file, config_file, filepaths, on_progress
     on_done(downloaded)
 end
 
--- with curl, or where curl can't (see CurlUtil.canFetch), KOReader's own HTTP, one after another, as a device may have
--- no curl at all, as a Kobo can (#63), which left every cover a placeholder
+-- with curl, or KOReader's own HTTP where it can't (see CurlUtil.canFetch), as a Kobo may have no curl at all (#63)
 local function startDownloads(download_urls, filepaths, parallel_jobs, on_progress, on_done)
     local pid, exit_file, config_file, err
     if CurlUtil.canFetch() then
@@ -275,10 +263,7 @@ local function startDownloads(download_urls, filepaths, parallel_jobs, on_progre
     end)
 end
 
--- the covers' addresses and paths split up by the site they're on, for those on a library's site (see
--- LibrarySites), which are each downloaded apart from the rest, as curl is given a library's login once for all of a
--- download's files (see CurlUtil.downloadMultiple), and is told the site they're from. each { urls = ..., paths = ...
--- }, in the order they come
+-- the covers' urls and paths split up by library site (see LibrarySites), as curl is given one login per download
 local function bySite(download_urls, filepaths)
     local groups, by_site = {}, {}
     for i, url in ipairs(download_urls) do
@@ -293,11 +278,7 @@ local function bySite(download_urls, filepaths)
     return groups
 end
 
--- download missing covers in the background, calling on_done with the number downloaded once finished, and
--- letting open search results and download prompts know with a KindleFetchCoversDownloaded event, so they
--- can replace the placeholders: as covers arrive, rather than once the slowest has, and once they've all
--- finished. returns false when there was nothing to download, and on_done isn't called, otherwise true, though
--- on_done may have been called already, as when curl couldn't be started.
+-- download missing covers in the background, shown as they arrive, then on_done(count), or return false if none are
 function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
     ensureCacheDir()
     removeOrphans()
@@ -326,8 +307,7 @@ function CoverCache:downloadMultiple(books, parallel_jobs, on_done)
         id_of[path] = ids[i]
     end
 
-    -- the covers that have arrived, as they're added to the cache (in memory, until they've all finished), and those
-    -- that weren't images (false)
+    -- the covers that have arrived (false if not images), put in the cache in memory until they've all finished
     local kept = {}
     local count = 0
     local function keep(paths)

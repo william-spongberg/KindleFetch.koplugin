@@ -17,23 +17,18 @@ local HttpUtil = {}
 
 -- the error when a request was called off, by a tap on the trap widget (see setTrapWidget)
 HttpUtil.CANCELLED = Errors.CANCELLED
--- the error when a site's name couldn't be looked up, as when the network blocks the site: curl's, which what
--- KOReader's own HTTP says for it is turned into (see explainFailure)
+-- curl's error when a site's name couldn't be looked up, as when the network blocks it, which KOReader's is turned into
 HttpUtil.UNRESOLVED = CurlUtil.getErrorMeaning(6)
 
--- constants
--- how long a site can take to answer, and then to send the whole page, in seconds. pages of search results are
--- large and Library Genesis sends them slowly, so the second is generous
+-- how long a site can take to answer, then to send the whole page, in seconds (generous, as Library Genesis is slow)
 local ANSWER_TIMEOUT = 10
 local PAGE_TIMEOUT = 60
--- how long a file can take to download, in seconds: much longer than a page, as a file can be several megabytes, and
--- an e-reader's Wi-Fi slow
+-- how long a file can take to download, in seconds: much longer than a page, as files are big and e-readers' Wi-Fi slow
 local FILE_TIMEOUT = 300
 -- and with curl, how long it can go without any of it arriving before it's given up on
 local FILE_STALL_TIME = 30
 
--- what went wrong when KOReader's own HTTP had no answer, as curl says it (logging what it said itself, for
--- crash.log)
+-- what went wrong when KOReader's own HTTP had no answer, as curl says it, logging its own words for crash.log
 local function explainFailure(err)
     err = tostring(err or _("no response"))
     local exit_code = CurlUtil.exitCodeFor(err)
@@ -44,8 +39,7 @@ local function explainFailure(err)
     return explained
 end
 
--- luasocket's http.request, which returns what went wrong, but can raise it instead, e.g. from the TLS library, which
--- KOReader would exit on, without its timeouts being put back
+-- http.request, returning what it can raise (e.g. TLS errors), which KOReader would exit on, its timeouts not put back
 local function request(options)
     local requested, ok, status, headers = pcall(http.request, options)
     if not requested then
@@ -60,14 +54,11 @@ function HttpUtil.canCancel()
     return CurlUtil.canFetch()
 end
 
--- the widget on screen that calls off the requests being waited for when tapped, such as a message saying what's
--- being waited for, for each of the coroutines Trapper runs searches, downloads and logins in, as several can be
--- waiting at once: one search's Cancel called off another's download (keyed by the coroutine, or MAIN outside one)
+-- each coroutine's widget that calls off its requests when tapped, as one search's Cancel called off another's download
 local trap_widgets = setmetatable({}, { __mode = "k" })
 local MAIN = {}
 
--- set the widget that calls off the requests made from here on in the coroutine this is called from, or nil once
--- they're over. set by whoever made them from inside Trapper:wrap
+-- set the widget calling off this coroutine's requests from here on, or nil once they're over (in Trapper:wrap)
 function HttpUtil.setTrapWidget(widget)
     trap_widgets[coroutine.running() or MAIN] = widget
 end
@@ -77,9 +68,7 @@ function HttpUtil.getTrapWidget()
     return trap_widgets[coroutine.running() or MAIN]
 end
 
--- say what's being waited for now on that widget, where it says such things (see DownloadProgress:setStatus), e.g.
--- that a site's mirrors are being looked up, which takes a while, or with nil, what it said before. what's waiting
--- says so, rather than the module that knows, so only what's on screen shows anything
+-- say what's being waited for on that widget, where it says such things, or with nil what it said before
 function HttpUtil.sayStatus(text)
     local widget = HttpUtil.getTrapWidget()
     if widget and widget.setStatus then
@@ -96,17 +85,12 @@ local function formBody(form)
     return table.concat(fields, "&")
 end
 
--- fetch a page with curl, which asks for it compressed, and doesn't hold KOReader up while it waits when called
--- from inside Trapper:wrap. the form and cookies (see getBody), and the login of the library whose site it's on (see
--- CurlUtil.loginOptions), are passed to curl in a file, rather than on its command line, where any program on the
--- device can read them, as the proxy is (see CurlUtil.applyProxy)
+-- fetch a page with curl, giving it the form, cookies and login in a file, as any program can read its command line
 local function requestBodyWithCurl(request_url, opts)
     local config_file
     local options = {}
     if opts.form or opts.cookies then
-        -- with curl keeping the cookies it's sent, as a site's check that it isn't a bot can answer with a cookie,
-        -- and a redirect back to where it was, to be asked again with it. curl only keeps them when not given any
-        -- cookies of its own to send, so those are sent in a header (which curl only sends to the same site)
+        -- curl keeps cookies for bot checks that set one and redirect back, only if given none, so ours go in a header
         table.insert(options, { "cookie", "" })
         if opts.cookies and opts.cookies ~= "" then
             table.insert(options, { "header", "Cookie: " .. opts.cookies })
@@ -140,9 +124,7 @@ local function requestBodyWithCurl(request_url, opts)
         end
     end
     if not completed then
-        -- called off by a tap on the widget's Cancel, which marks it cancelled (see WaitingMessage and
-        -- DownloadProgress), or without one, a tap anywhere. curl carries on until it has finished or timed out, and
-        -- what it leaves behind is removed when KOReader next starts
+        -- called off by Cancel, or a tap anywhere without one; curl carries on, its leftovers removed at the next start
         if Trapper:isWrapped() and (not trap_widget or trap_widget.cancelled) then
             return nil, HttpUtil.CANCELLED
         end
@@ -179,8 +161,7 @@ local function setCookie(headers)
     return type(set_cookie) == "string" and set_cookie:match("^%s*([^;,%s]+=[^;,]*)") or nil
 end
 
--- the page's body and HTTP status from what luasocket's request returned (ok, status, and the sink's table of what
--- arrived), or nil and what went wrong
+-- the page's body and HTTP status from what luasocket's request and sink gave, or nil and what went wrong
 local function bodyFrom(ok, status, response_body)
     -- status is the HTTP status code, or what went wrong if there wasn't a response
     local body = table.concat(response_body)
@@ -194,8 +175,7 @@ local function bodyFrom(ok, status, response_body)
     return body, nil, status
 end
 
--- fetch a page on a library's site (see LibrarySites) with KOReader's own HTTP, logging in to it where it asks to
--- (see HttpLogin), going through no proxy where it's on the network the device is on (see ProxyUtil.forUrl)
+-- fetch a page on a library's site with KOReader's own HTTP, logging in where asked, with no proxy on the local network
 local function requestLibraryBody(request_url)
     socketutil:set_timeout(ANSWER_TIMEOUT, PAGE_TIMEOUT)
     local response_body = {}
@@ -210,8 +190,7 @@ local function requestLibraryBody(request_url)
     return bodyFrom(ok, status, response_body)
 end
 
--- fetch a page with KOReader's own HTTP, which holds KOReader up until it has, going through its HTTP proxy, where
--- it's on (see ProxyUtil)
+-- fetch a page with KOReader's own HTTP, which holds KOReader up until it has, through its HTTP proxy where it's on
 local function requestBodyWithKOReader(request_url, opts)
     if LibrarySites.isLibrary(request_url) and not (opts.form or opts.cookies) then
         return requestLibraryBody(request_url)
@@ -223,8 +202,7 @@ local function requestBodyWithKOReader(request_url, opts)
     local cookies = opts.cookies
     local url = request_url
     local response_body, ok, status, headers
-    -- and once more when the site answers with a cookie and a redirect back to where it was, as its check that it
-    -- isn't a bot can, which luasocket can't follow by itself, as it doesn't keep cookies (nor follow a form)
+    -- and again when a bot check sets a cookie and redirects back, which luasocket can't follow as it keeps no cookies
     for __ = 1, 2 do
         response_body = {}
         local request_headers = {
@@ -260,14 +238,11 @@ local function requestBodyWithKOReader(request_url, opts)
     return bodyFrom(ok, status, response_body)
 end
 
--- how many pages in a row curl couldn't connect to securely, where KOReader's own HTTP could, after which pages are
--- fetched with KOReader's own HTTP for the rest of the session (see CurlUtil.stopFetching): not after only one, as a
--- mirror's certificate can have expired, which KOReader's HTTP may not check
+-- pages in a row only KOReader's HTTP could fetch securely before it takes over, not one: it may not check certificates
 local TLS_FALLBACKS = 3
 local tls_fallbacks = 0
 
--- fetch a page with curl, or KOReader's own HTTP where curl can't, going through KOReader's HTTP proxy, where it's on
--- (see ProxyUtil)
+-- fetch a page with curl, or KOReader's own HTTP where curl can't, through KOReader's HTTP proxy where it's on
 function HttpUtil.requestBody(request_url, opts)
     opts = opts or {}
     if not CurlUtil.canFetch() then
@@ -275,16 +250,14 @@ function HttpUtil.requestBody(request_url, opts)
     end
 
     local body, err, status = requestBodyWithCurl(request_url, opts)
-    -- (other than on a library's site, whose certificate isn't to be passed over, as KOReader's HTTP may not check it,
-    -- nor to stop curl fetching every site's pages, see LibrarySites)
+    -- (not on a library's site, whose certificate KOReader's HTTP may not check, nor to stop curl for every site)
     if body or not CurlUtil.isTlsFailure(err) or LibrarySites.isLibrary(request_url) then
         if body then
             tls_fallbacks = 0
         end
         return body, err, status
     end
-    -- curl couldn't make a secure connection, which a curl built without TLS, or too old for the site's, can't, so
-    -- KOReader's own HTTP fetches it instead, where it can, which was never tried
+    -- curl couldn't connect securely, as when built without TLS or too old for the site's, so KOReader's own HTTP tries
     LogUtil.warn(
         "curl couldn't connect to",
         LogUtil.site(request_url),
@@ -304,9 +277,7 @@ function HttpUtil.requestBody(request_url, opts)
     return fetched, fetch_err, fetch_status
 end
 
--- a page's body and HTTP status, or nil and what went wrong. opts.form optionally gives the fields of a form to send
--- (which posts it), as a list of each one's name and value, and opts.cookies the cookies to send, e.g. "a=1; b=2".
--- neither is logged, as they can be a password and what logs into a site
+-- a page's body and HTTP status, or nil and why; opts.form (to post) and opts.cookies aren't logged: they can be logins
 function HttpUtil.getBody(url, opts)
     if opts and opts.form then
         local names = {}
@@ -340,8 +311,7 @@ local function downloadWithKOReader(url, path)
     socketutil:set_timeout(ANSWER_TIMEOUT, FILE_TIMEOUT)
     local ok, status
     if LibrarySites.isLibrary(url) then
-        -- logging in to it where it asks to (see HttpLogin), into the file afresh each time it's asked, as what it
-        -- says when asked without the login isn't the file
+        -- logging in where it asks to, into the file afresh each time, as the answer without the login isn't the file
         local sinks = 0
         ok, status = HttpLogin.request(url, { ["User-Agent"] = "Mozilla/5.0" }, function()
             sinks = sinks + 1
@@ -380,10 +350,7 @@ local function downloadWithKOReader(url, path)
     return nil, string.format("%s (%s)", CurlUtil.getErrorMeaning(22), tostring(status))
 end
 
--- download a file to path, with curl where it can fetch (see CurlUtil.canFetch), otherwise with KOReader's own HTTP,
--- as a Kindle's own curl is too old to connect to many sites, such as GitHub. either way, KOReader is held up until
--- it has downloaded, so only for so long (a stalled download froze KOReader, until the device was restarted, in the
--- middle of updating). returns true, or nil and what went wrong
+-- download to path with curl, or KOReader's HTTP where it can't, with time limits, as a stall froze KOReader mid-update
 function HttpUtil.downloadFile(url, path)
     LogUtil.debug("downloading", url, "to", path)
     if not CurlUtil.canFetch() then

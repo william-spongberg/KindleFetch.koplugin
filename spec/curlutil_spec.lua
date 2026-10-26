@@ -58,8 +58,7 @@ describe("CurlUtil", function()
         assert.are.equal("(curl exit code 99)", CurlUtil.getErrorMeaning(99))
     end)
 
-    -- a Kindle's own curl can't connect to Library Genesis, so says the TLS connection failed
-    -- which were said only as their numbers, including the TLS ones curl gives a Kindle's own curl's failing on
+    -- which were said only as numbers, like the TLS ones from a Kindle's own curl, which can't reach Library Genesis
     it("explains each exit code of curl's that can come up", function()
         for _, exit_code in ipairs({ 16, 51, 58, 59, 77, 83, 92 }) do
             assert.is_nil(CurlUtil.getErrorMeaning(exit_code):find("exit code", 1, true), tostring(exit_code))
@@ -192,8 +191,7 @@ describe("CurlUtil", function()
             assert.is_nil(cmd:find("--compressed", 1, true))
         end)
 
-        -- as KOReader's own HTTP does, in a file, rather than on its command line, where any program on the device can
-        -- read it, as it can have a password in it
+        -- as KOReader's own HTTP does, in a file, as it can have a password and any program can read a command line
         it("goes through KOReader's HTTP proxy, where it's on", function()
             helper.stubs.http.PROXY = "http://user:secret@proxy.example:8080"
             local cmd = CurlUtil.fetchCommand("https://libgen.example", "page", 10, 60)
@@ -246,8 +244,7 @@ describe("CurlUtil", function()
             assert.is_nil(cmd:find("--doh-url", 1, true))
         end)
 
-        -- e.g. a library's, whose name only that network's DNS knows, and which a proxy on the internet can't reach,
-        -- and is given up on soon, rather than when one that's only there at home isn't
+        -- e.g. a library's, which only that network's DNS knows and a proxy can't reach, given up on soon if not there
         it("goes without encrypted DNS and the proxy on the network the device is on", function()
             installedCurl("curl 8.21.0 (arm-unknown-linux-musleabihf) libcurl/8.21.0")
             require("settings.settings"):setEncryptedDns(true)
@@ -489,8 +486,7 @@ describe("CurlUtil", function()
             assert.is_false(helper.exists(exit_file))
         end)
 
-        -- a download that finished was said to have ended unexpectedly, when checked on between the shell creating
-        -- the file and writing curl's exit code in it
+        -- a finished download was said to have ended unexpectedly if checked on while its exit file was still empty
         it("waits for the exit code to be written, rather than losing it", function()
             local exit_file = CurlUtil.createExitFile()
             helper.writeFile(exit_file, "")

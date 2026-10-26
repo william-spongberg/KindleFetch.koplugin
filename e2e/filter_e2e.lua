@@ -4,8 +4,7 @@ local H = require("helpers")
 describe("Showing only some of the books found", function()
     after_each(H.closeAll)
 
-    -- tap the icon at the top left of the results, returning the button in the menu it opens whose text starts with
-    -- start
+    -- tap the icon at the results' top left, returning the button in the menu it opens whose text starts with start
     local function resultsMenuButton(menu, start)
         H.tap(assert(
             H.find(function(widget)
