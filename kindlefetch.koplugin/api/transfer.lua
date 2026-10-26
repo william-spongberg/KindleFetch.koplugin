@@ -3,10 +3,10 @@ local NetworkMgr = require("ui/network/manager")
 local LogUtil = require("util.logutil")
 local FileUtil = require("util.fileutil")
 local CurlUtil = require("util.curlutil")
-local HttpDownload = require("util.httpdownload")
 local BackgroundProcess = require("util.backgroundprocess")
 local FileCheck = require("util.filecheck")
-local ProxyUtil = require("util.proxyutil")
+local HttpUtil = require("util.httputil")
+local Request = require("util.request")
 local Errors = require("util.errors")
 local Guard = require("util.guard")
 local T = require("ffi/util").template
@@ -72,23 +72,13 @@ function Transfer:close(state)
 end
 
 -- start the download in the background with curl, or KOReader's HTTP where a device has none, as a Kobo can (#63)
-function Transfer:startCurl()
-    local pid, exit_file_or_err
-    if CurlUtil.canFetch() then
-        pid, exit_file_or_err = CurlUtil.startDownload(self.download_url, self.part_path, nil, {
-            headers_file = self.headers_file,
-            stall_time = DOWNLOAD_STALL_TIME,
-            resume = self.carry_on,
-        })
-    else
-        -- (from the beginning, as KOReader's HTTP can't carry on from what's there)
-        LogUtil.info("downloading with KOReader's own HTTP, as curl can't")
-        pid, exit_file_or_err = HttpDownload.start(self.download_url, self.part_path, {
-            headers_file = self.headers_file,
-            stall_time = DOWNLOAD_STALL_TIME,
-            proxy = ProxyUtil.get(),
-        })
-    end
+function Transfer:spawn()
+    local pid, exit_file_or_err = HttpUtil.transport().startDownload(Request.new(self.download_url), self.part_path, {
+        headers_file = self.headers_file,
+        stall_time = DOWNLOAD_STALL_TIME,
+        -- (which KOReader's HTTP can't, starting from the beginning)
+        resume = self.carry_on,
+    })
     if not pid then
         return false, exit_file_or_err
     end
@@ -108,7 +98,7 @@ function Transfer:download(url, listed)
     FileUtil.removeFile(self.part_path)
 
     -- start background curl downloader
-    local started, spawn_err = self:startCurl()
+    local started, spawn_err = self:spawn()
     if not started then
         LogUtil.warn("could not start curl to download:", spawn_err)
         FileUtil.removeFile(self.headers_file)
@@ -152,7 +142,7 @@ function Transfer:resume()
     self.carry_on = true
     self.quiet_polls = 0
     FileUtil.removeFile(self.process.exit_file)
-    local started, err = self:startCurl()
+    local started, err = self:spawn()
     if not started then
         LogUtil.warn("could not start curl to carry on with the download:", err)
         FileUtil.removeFile(self.part_path)
@@ -190,7 +180,7 @@ function Transfer:retry(exit_code, http_status, bad_book)
         LogUtil.info("downloading the book again from the beginning, as the site can't carry on from where it stopped")
         self.carry_on = false
         FileUtil.removeFile(self.part_path)
-        local started, spawn_err = self:startCurl()
+        local started, spawn_err = self:spawn()
         if not started then
             LogUtil.warn("could not start curl to try again:", spawn_err)
             FileUtil.removeFile(self.part_path)

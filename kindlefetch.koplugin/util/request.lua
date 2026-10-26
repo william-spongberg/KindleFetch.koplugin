@@ -1,3 +1,4 @@
+local util = require("util")
 local StringUtil = require("util.stringutil")
 local ProxyUtil = require("util.proxyutil")
 local LibrarySites = require("util.librarysites")
@@ -8,6 +9,13 @@ local KindleFetchSettings = require("settings.settings")
 local Request = {}
 Request.__index = Request
 
+-- how long a site can take to answer, then to send the whole page, in seconds (generous, as Library Genesis is slow)
+Request.ANSWER_TIMEOUT = 10
+Request.PAGE_TIMEOUT = 60
+-- how long a file can take to download, in seconds: much longer than a page, as files are big and e-readers' Wi-Fi slow
+Request.FILE_TIMEOUT = 300
+-- and with curl, how long it can go without any of it arriving before it's given up on
+Request.FILE_STALL_TIME = 30
 -- how long a site on the local network can take to connect, in seconds: not long, as one that's there connects at once
 Request.LOCAL_CONNECT_TIMEOUT = 5
 
@@ -56,6 +64,18 @@ end
 -- how long it can take to connect, in seconds: seconds, or not long on the local network
 function Request:connectTimeout(seconds)
     return self.is_local and math.min(Request.LOCAL_CONNECT_TIMEOUT, seconds) or seconds
+end
+
+-- the form posted, as it's sent, e.g. "message=dune&page=1", or nil where there's none
+function Request:formBody()
+    if not self.form then
+        return nil
+    end
+    local fields = {}
+    for __, field in ipairs(self.form) do
+        table.insert(fields, util.urlEncode(field[1]) .. "=" .. util.urlEncode(tostring(field[2])))
+    end
+    return table.concat(fields, "&")
 end
 
 return Request

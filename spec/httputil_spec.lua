@@ -649,7 +649,10 @@ describe("HttpUtil", function()
             assert.is_nil(ok)
             assert.are.equal("request timed out", err)
             -- for at most 5 minutes, and 30 seconds without anything arriving, as it holds KOReader up meanwhile
-            assert.are.same({ "https://github.example/curl-armhf", path, 300, { stall_time = 30 } }, download)
+            assert.are.same(
+                { "https://github.example/curl-armhf", path, 300, { max_time = 300, stall_time = 30 } },
+                download
+            )
             assert.are.equal(0, #requests)
         end)
     end)

@@ -262,7 +262,9 @@ kindlefetch.koplugin/
     ├── guard.lua              # Runs what KOReader runs later (scheduled tasks, Trapper's functions, event handlers), catching errors, logging where they happened and cleaning up
     ├── httpdownload.lua       # Downloads books and covers with KOReader's own HTTP in a process of its own, where curl can't, followed and stopped as curl's downloads are
     ├── request.lua            # How each site is asked for something, decided in one place from its address: through the proxy and with encrypted DNS where they're on, but not on the local network, logged in to a library's site, with shorter timeouts there
-    ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback; posts forms and sends cookies, giving them to curl in a file rather than on its command line; downloads files with curl, or KOReader's own HTTP where curl can't connect
+    ├── httputil.lua           # Fetches pages and downloads files by the transport that works on the device, falling back to KOReader's own HTTP where curl can't connect securely, and says what's being waited for
+    ├── curltransport.lua      # Fetches pages and downloads files with curl, without holding KOReader up, giving it forms, cookies and logins in a file rather than on its command line
+    ├── koreadertransport.lua  # Fetches pages and downloads files with KOReader's own HTTP where curl can't, logging in to libraries' sites, and following bot checks that set a cookie
     ├── httplogin.lua          # Logs in to your libraries' sites with KOReader's own HTTP, the Basic or the Digest way, following where they send requests itself, so the login only goes to its own site
     ├── librarysites.lua       # Your libraries' sites, with the logins for each, which are only sent to their own site, and never logged
     ├── opdsfeed.lua           # Reads OPDS catalogues' feeds, as each server writes them its own way

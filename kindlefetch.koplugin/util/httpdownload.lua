@@ -31,8 +31,9 @@ local function download(url, path, opts)
         -- as curl sends it, as Library Genesis sends empty covers without one
         ["Referer"] = site and site .. "/",
     }
+    local request = Request.new(url)
     local requested, ok, code, headers, status_line
-    if Request.new(url).library then
+    if request.library then
         -- logging in where it asks to, into the file afresh each time, as the answer without the login isn't the book
         local sinks = 0
         requested = true
@@ -52,7 +53,7 @@ local function download(url, path, opts)
             headers = request_headers,
             sink = socketutil.file_sink(file),
             redirect = true,
-            proxy = opts.proxy,
+            proxy = request.proxy,
         })
     end
     socketutil:reset_timeout()
@@ -93,7 +94,7 @@ local function start(fn)
     return pid, exit_file
 end
 
--- download in the background as CurlUtil.startDownload does, through opts.proxy, from the start as it can't carry on
+-- download in the background as CurlUtil.startDownload does, from the start as it can't carry on
 function HttpDownload.start(download_url, filepath, opts)
     opts = opts or {}
     LogUtil.debug("KOReader's HTTP downloading from", LogUtil.site(download_url), "to", filepath)

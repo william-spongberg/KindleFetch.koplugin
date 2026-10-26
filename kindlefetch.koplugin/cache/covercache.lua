@@ -5,10 +5,9 @@ local UIManager = require("ui/uimanager")
 local Event = require("ui/event")
 local KindleFetchCache = require("cache.cache")
 local CurlUtil = require("util.curlutil")
-local HttpDownload = require("util.httpdownload")
+local HttpUtil = require("util.httputil")
 local BackgroundProcess = require("util.backgroundprocess")
 local FileCheck = require("util.filecheck")
-local ProxyUtil = require("util.proxyutil")
 local LibrarySites = require("util.librarysites")
 local StringUtil = require("util.stringutil")
 local LogUtil = require("util.logutil")
@@ -232,21 +231,14 @@ local function pollDownloads(process, config_file, filepaths, on_progress, on_do
     on_done(downloaded)
 end
 
--- with curl, or KOReader's own HTTP where it can't (see CurlUtil.canFetch), as a Kobo may have no curl at all (#63)
+-- with curl, or KOReader's own HTTP where it can't (see HttpUtil.transport), as a Kobo may have no curl at all (#63)
 local function startDownloads(download_urls, filepaths, parallel_jobs, on_progress, on_done)
-    local pid, exit_file, config_file, err
-    if CurlUtil.canFetch() then
-        pid, exit_file, config_file, err =
-            CurlUtil.downloadMultiple(download_urls, filepaths, true, parallel_jobs, false, 15, {
-                stall_time = COVER_STALL_TIME,
-            })
-    else
-        pid, exit_file, config_file, err = HttpDownload.startMultiple(download_urls, filepaths, {
-            stall_time = COVER_STALL_TIME,
-            max_time = COVER_MAX_TIME,
-            proxy = ProxyUtil.get(),
-        })
-    end
+    local pid, exit_file, config_file, err = HttpUtil.transport().startDownloadMany(download_urls, filepaths, {
+        parallel_jobs = parallel_jobs,
+        connect_timeout = 15,
+        stall_time = COVER_STALL_TIME,
+        max_time = COVER_MAX_TIME,
+    })
     if not pid then
         LogUtil.warn("could not start curl to download", #download_urls, "covers:", err)
         on_done({})
