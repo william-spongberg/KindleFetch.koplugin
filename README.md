@@ -240,6 +240,7 @@ kindlefetch.koplugin/
 │   ├── downloadprompt.lua     # Dialog showing a book's details and cover (full size when tapped), where to save it, and a Download button
 │   ├── diagnostics.lua        # What's known about Kindle Fetch, KOReader and the device, with a test of the connection to the sites and the recent log, to copy or save
 │   ├── waitingmessage.lua     # Message saying what's being waited for, with a Cancel button that calls the wait off
+│   ├── errorfixes.lua         # The buttons offered with an error for what fixes it, such as logging in again or turning on Wi-Fi
 │   ├── backgroundtask.lua     # Runs what waits on the sites without holding KOReader up, with a message and Cancel where it's shown, saying what went wrong
 │   ├── zliblogin.lua          # Dialog asking for the email and password of a Z-Library account, and logging in with them
 │   ├── librarysettings.lua    # Your Libraries, in the settings: adding a library at its address, and changing or removing those added
@@ -255,7 +256,7 @@ kindlefetch.koplugin/
 │   └── pluginupdater.lua      # Checks for plugin updates from GitHub releases and prompts user with release notes, unzipping the update with KOReader's own archiver (or unzip, where it has none) next to the plugin, and keeping the installed version until the new one is in place
 └── util/
     ├── curlutil.lua           # Manages curl downloads, background processes and parallel downloads
-    ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from
+    ├── errors.lua             # What went wrong, when the code told acts on it rather than only saying it, said one way wherever it comes from, with the kind of fix each has
     ├── guard.lua              # Runs what KOReader runs later (scheduled tasks, Trapper's functions, event handlers), catching errors, logging where they happened and cleaning up
     ├── httpdownload.lua       # Downloads books and covers with KOReader's own HTTP in a process of its own, where curl can't, followed and stopped as curl's downloads are
     ├── httputil.lua           # Fetches web pages with curl (compressed, in the background) or KOReader's own HTTP, with timeouts, proxy support, and automatic fallback; posts forms and sends cookies, giving them to curl in a file rather than on its command line; downloads files with curl, or KOReader's own HTTP where curl can't connect

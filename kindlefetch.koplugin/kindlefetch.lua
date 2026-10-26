@@ -25,6 +25,7 @@ local BookFilter = require("ui.bookfilter")
 local Menu = require("ui/widget/menu")
 local WaitingMessage = require("ui.waitingmessage")
 local ZlibLogin = require("ui.zliblogin")
+local ErrorFixes = require("ui.errorfixes")
 local ZlibAccount = require("api.zlibaccount")
 local Libraries = require("api.libraries")
 local SearchCache = require("cache.searchcache")
@@ -897,79 +898,10 @@ function KindleFetch:rememberSearch(query)
     end
 end
 
--- buttons for what fixes err, then calling retry (with Wi-Fi on, trying again, as the internet may only have dropped)
-function KindleFetch:fixes(err, retry)
-    if err == Errors.LOGGED_OUT then
-        return {
-            {
-                text = _("Log in"),
-                callback = function()
-                    ZlibLogin.show(retry)
-                end,
-            },
-        }
-    elseif err == Errors.OUTDATED_CURL then
-        return {
-            {
-                text = _("Update curl"),
-                callback = function()
-                    CurlUpdater.checkVersion(true)
-                end,
-            },
-        }
-    elseif
-        (err == Errors.UNFOUND or err == Errors.ZLIB_UNFOUND)
-        and not KindleFetchSettings:getEncryptedDns()
-        and CurlUtil.canUseEncryptedDns()
-    then
-        -- the network's own DNS may be what's blocking them (#55)
-        return {
-            {
-                text = _("Use encrypted DNS"),
-                callback = function()
-                    local ok, save_err = KindleFetchSettings:setEncryptedDns(true)
-                    if not ok then
-                        NotifyUtil.error(save_err)
-                        return
-                    end
-                    LogUtil.info("turned encrypted DNS on, as the network couldn't find the sites")
-                    if retry then
-                        retry()
-                    end
-                end,
-            },
-        }
-    elseif err == Errors.LIBRARY_LOGIN then
-        return {
-            {
-                text = _("Your Libraries…"),
-                callback = function()
-                    SettingsPage:changeLibraries()
-                end,
-            },
-        }
-    elseif err == Errors.LIBRARY_UNREACHABLE and retry then
-        return { { text = _("Try again"), callback = retry } }
-    elseif err == Errors.NO_CONNECTION and retry then
-        if not NetworkMgr:isWifiOn() then
-            return {
-                {
-                    text = _("Turn on Wi-Fi"),
-                    callback = function()
-                        NetworkMgr:runWhenConnected(retry)
-                    end,
-                },
-            }
-        end
-        return { { text = _("Try again"), callback = retry } }
-    end
-    return {}
-end
-
--- say text with what fixes err (see fixes) and other_rows, in a message that stays, or as an error if there's nothing
+-- say text with what fixes err (see ErrorFixes) and other_rows, in a message that stays, or else as an error
 function KindleFetch:showFailure(text, err, retry, other_rows)
     local rows = {}
-    local fixes = self:fixes(err, retry)
+    local fixes = ErrorFixes.buttons(err, retry)
     if #fixes > 0 then
         table.insert(rows, fixes)
     end
@@ -995,7 +927,7 @@ end
 function KindleFetch:explainFailure(query, pages, failures)
     local err = failures[1].err
     for __, failure in ipairs(failures) do
-        if #self:fixes(failure.err, function() end) > 0 then
+        if #ErrorFixes.buttons(failure.err, function() end) > 0 then
             err = failure.err
             break
         end
@@ -1822,7 +1754,7 @@ function KindleFetch:downloadBook(book)
             NotifyUtil.info(_("Download cancelled"))
         else
             LogUtil.warn("download failed for", book.title, err)
-            -- offering what fixes it, then downloading it again (see fixes)
+            -- offering what fixes it, then downloading it again (see ErrorFixes)
             self:showFailure(err and T(_("Download failed: %1"), err) or _("Download failed"), err, function()
                 self:downloadBook(book)
             end)
